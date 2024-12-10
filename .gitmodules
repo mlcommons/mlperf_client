@@ -1,0 +1,15 @@
+[submodule "deps/cpp-httplib"]
+    path = deps/cpp-httplib
+    url = https://github.com/yhirose/cpp-httplib.git
+[submodule "deps/JSON"]
+	path = deps/JSON
+	url = https://github.com/nlohmann/json.git
+[submodule "deps/JSONSchema"]
+	path = deps/JSONSchema
+	url = https://github.com/pboettch/json-schema-validator.git
+[submodule "deps/infoware"]
+	path = deps/infoware
+	url = https://github.com/ThePhD/infoware.git
+[submodule "deps/minizip-ng"]
+	path = deps/minizip-ng
+	url = https://github.com/zlib-ng/minizip-ng.git

@@ -1,0 +1,14 @@
+<ie>
+  <plugins>
+    <plugin name="CPU" location="openvino_intel_cpu_plugin.dll">
+    </plugin>
+    <plugin name="GPU" location="openvino_intel_gpu_plugin.dll">
+    </plugin>
+    <plugin name="NPU" location="openvino_intel_npu_plugin.dll">
+    </plugin>
+    <plugin name="AUTO" location="openvino_auto_plugin.dll">
+    </plugin>
+    <plugin name="HETERO" location="openvino_hetero_plugin.dll">
+    </plugin>
+  </plugins>
+</ie>

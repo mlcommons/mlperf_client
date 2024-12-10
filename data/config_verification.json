@@ -1,0 +1,6 @@
+{
+ "AMD_ORTGenAI-DML_GPU.json": "1644f1aea8ab80c4a10784f3062a8ad9d6b6970115d8222e80f3dcf13aa220ea",
+ "Intel_ORTGenAI-DML_GPU.json": "662ddb11fc0d353728b2f443c16948e2fc71dd35c5efc277acb4d047b6e9fd27",
+ "Intel_OpenVINO_GPU_Default.json": "2c1e84a87f80fbc05bb138adb3ef65d68a6a19922f79bbec987b05b0a9e4a0a5",
+ "NVIDIA_ORTGenAI-DML_GPU.json": "e3b2ae0b68e17f8d26eefd965a549998aa46ded2e9bc65efc193358836af9041"
+}

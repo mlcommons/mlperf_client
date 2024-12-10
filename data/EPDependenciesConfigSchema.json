@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "EPDependencies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "Name": {
+            "type": "string"
+          },
+          "Files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "Name": {
+                    "type": "string"
+                },
+                "Path": {
+                    "type": "string",
+                    "pattern": "^(file:\\/\\/|http:\\/\\/|https:\\/\\/)"
+                }
+              },
+              "required": ["Name", "Path"],
+              "additionalProperties": false
+            }
+          },
+          "Dependencies": {
+            "type": "array",
+             "items":{
+              "type": "string"
+             }
+          }
+        },
+        "required": ["Name", "Files"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["EPDependencies"],
+  "additionalProperties": false
+}

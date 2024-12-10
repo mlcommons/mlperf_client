@@ -1,0 +1,27 @@
+#!/bin/bash
+
+
+COMPILE_COMMANDS_FILE="out/build/x64-Debug/compile_commands.json"
+
+if [ ! -f "$COMPILE_COMMANDS_FILE" ]; then
+    echo "Error: '$COMPILE_COMMANDS_FILE' not found."
+    exit 1
+fi
+
+files=$(git diff --cached --name-only --diff-filter=ACMR | grep -E "\.(c|cpp|h|hpp)$")
+if [ -n "$files" ]; then
+    echo "Checking staged cpp files with Clang-Tidy..."
+
+    tidy_output=$(clang-tidy --quiet -p="$COMPILE_COMMANDS_FILE" $files --header-filter=".*\\.hxx" 2>&1)
+    result=$?
+
+    if [ $result -ne 0 ]; then
+        echo "$tidy_output" | grep -E 'error:'
+        echo "Clang-Tidy found issues. Aborting commit."
+        exit 1
+    fi
+
+    echo "Clang-Tidy checks passed successfully"
+fi
+
+exit 0

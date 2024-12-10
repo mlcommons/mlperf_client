@@ -1,0 +1,287 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "SystemConfig": {
+      "type": "object",
+      "propertyNames": {
+        "enum": [
+          "Comment",
+          "TempPath",
+          "EPDependenciesConfigPath",
+          "BaseDir",
+          "DownloadBehavior"
+        ]
+      },
+      "properties": {
+        "Comment": {
+          "type": "string"
+        },
+        "TempPath": {
+          "type": "string"
+        },
+        "EPDependenciesConfigPath": {
+          "type": "string"
+        },
+        "BaseDir": {
+          "type": "string"
+        },
+        "DownloadBehavior": {
+          "type": "string",
+          "enum": [
+            "forced",
+            "prompt",
+            "skip_all",
+            "deps_only",
+            "normal"
+          ]
+        }
+      },
+      "required": [
+        "TempPath"
+      ]
+    },
+    "Scenarios": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "propertyNames": {
+          "enum": [
+            "Name",
+            "Models",
+            "InputFilePath",
+            "AssetsPath",
+            "ResultsVerificationFile",
+            "DataVerificationFile",
+            "Iterations",
+            "WarmUp",
+            "Delay",
+            "ExecutionProviders"
+          ]
+        },
+        "properties": {
+          "Name": {
+            "type": "string"
+          },
+          "Comment": {
+            "type": "string"
+          },
+          "Models": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "ModelName": {
+                  "type": "string"
+                },
+                "FilePath": {
+                  "type": "string",
+                  "pattern": "^(file:\\/\\/|http:\\/\\/|https:\\/\\/)"
+                },
+                "DataFilePath": {
+                  "type": "string",
+                  "pattern": "^(file:\\/\\/|http:\\/\\/|https:\\/\\/)"
+                },
+                "TokenizerPath": {
+                  "type": "string",
+                  "pattern": "^(file:\\/\\/|http:\\/\\/|https:\\/\\/)"
+                }
+              },
+              "required": [
+                "ModelName",
+                "FilePath"
+              ],
+              "additionalProperties": {
+                "type": "string",
+                "pattern": "^(file:\\/\\/|http:\\/\\/|https:\\/\\/)"
+              }
+            },
+            "minItems": 1
+          },
+          "DataPath": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^(file:\\/\\/|http:\\/\\/|https:\\/\\/)"
+            },
+            "minItems": 1
+          },
+          "AssetsPath": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^(file:\\/\\/|http:\\/\\/|https:\\/\\/)"
+            },
+            "minItems": 0
+          },
+          "ResultsVerificationFile": {
+            "type": "string"
+          },
+          "DataVerificationFile": {
+            "type": "string"
+          },
+          "Iterations": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "WarmUp": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "Delay": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 5
+          },
+          "ExecutionProviders": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "Name": {
+                  "type": "string",
+                  "enum": [
+                    "NativeOpenVINO",
+                    "OrtGenAI"
+                  ]
+                },
+                "Config": {
+                  "type": "object",
+                  "properties": {},
+                  "additionalProperties": true
+                },
+                "Models": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "propertyNames": {
+                      "enum": [
+                        "ModelName",
+                        "FilePath",
+                        "DataFilePath",
+                        "TokenizerPath"
+                      ]
+                    },
+                    "properties": {
+                      "ModelName": {
+                        "type": "string"
+                      },
+                      "FilePath": {
+                        "type": "string",
+                        "pattern": "^(file:\\/\\/|http:\\/\\/|https:\\/\\/)"
+                      },
+                      "DataFilePath": {
+                        "type": "string",
+                        "pattern": "^(file:\\/\\/|http:\\/\\/|https:\\/\\/)"
+                      },
+                      "TokenizerPath": {
+                        "type": "string",
+                        "pattern": "^(file:\\/\\/|http:\\/\\/|https:\\/\\/)"
+                      }
+                    },
+                    "required": [
+                      "ModelName"
+                    ]
+                  },
+                  "minItems": 0
+                },
+                "additionalProperties": false
+              },
+              "required": [
+                "Name",
+                "Config"
+              ],
+              "allOf": [
+                {
+                  "if": {
+                    "properties": {
+                      "Name": {
+                        "const": "NativeOpenVINO"
+                      }
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "Config": {
+                        "type": "object",
+                        "properties": {
+                          "device_type": {
+                            "type": "string",
+                            "enum": [
+                              "GPU"
+                            ]
+                          },
+                          "num_of_threads": {
+                            "type": "integer",
+                            "minimum": -1
+                          },
+                          "num_streams": {
+                            "type": "integer",
+                            "minimum": 1
+                          }
+                        },
+                        "required": [ "device_type" ]
+                      }
+                    },
+                    "LibraryPath": {
+                      "type": "string"
+                    },
+                    "required": [
+                      "Config"
+                    ]
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "Name": {
+                        "const": "OrtGenAI"
+                      }
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "Config": {
+                        "type": "object",
+                        "properties": {
+                          "device_type": {
+                            "type": "string",
+                            "enum": [
+                              "GPU"
+                            ]
+                          }
+                        },
+                        "required": [ "device_type" ]
+                      }
+                    },
+                    "LibraryPath": {
+                      "type": "string"
+                    },
+                    "required": [
+                      "Config"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "required": [
+          "Name",
+          "Models",
+          "InputFilePath",
+          "AssetsPath",
+          "DataVerificationFile",
+          "ResultsVerificationFile",
+          "Iterations",
+          "ExecutionProviders"
+        ]
+      }
+    }
+  },
+  "required": [
+    "SystemConfig",
+    "Scenarios"
+  ],
+  "additionalProperties": false
+}

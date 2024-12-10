@@ -1,0 +1,2 @@
+deps/ONNXRuntime/Windows/MSVC/ARM/lib/onnxruntime.lib filter=lfs diff=lfs merge=lfs -text
+deps/ONNXRuntime/Windows/MSVC/x64/lib/onnxruntime.lib filter=lfs diff=lfs merge=lfs -text

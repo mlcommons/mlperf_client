@@ -1,0 +1,26 @@
+cmake_minimum_required(VERSION 3.26)
+
+if(WIN32 AND MSVC)
+    if(CMAKE_GENERATOR_PLATFORM MATCHES "ARM64")
+        set(LOG4CXX_ROOT_DIR "${CMAKE_CURRENT_LIST_DIR}/Windows/MSVC/ARM")
+    else()
+        set(LOG4CXX_ROOT_DIR "${CMAKE_CURRENT_LIST_DIR}/Windows/MSVC/x64")
+    endif()
+elseif(APPLE)
+    # Check the processor architecture
+    if(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "arm" OR CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "aarch64")
+        set(LOG4CXX_ROOT_DIR "${CMAKE_CURRENT_LIST_DIR}/MacOS/ARM")
+    elseif(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "x86_64")
+        set(LOG4CXX_ROOT_DIR "${CMAKE_CURRENT_LIST_DIR}/MacOS/x86_64")
+    else()
+        message(FATAL_ERROR "Unsupported macOS processor architecture.")
+    endif()
+else()
+    message(FATAL_ERROR "Unsupported platform.")
+endif()
+
+set(LOG4CXX_INCLUDE_DIR "${LOG4CXX_ROOT_DIR}/include")
+set(LOG4CXX_LIB_DIR "${LOG4CXX_ROOT_DIR}/lib")
+
+set(LOG4CXX_DIR ${LOG4CXX_ROOT_DIR})
+set(LOG4CXX_FOUND TRUE)

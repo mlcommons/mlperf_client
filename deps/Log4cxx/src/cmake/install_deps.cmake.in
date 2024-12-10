@@ -1,0 +1,80 @@
+install(CODE [[
+function(has_allowed_path PATH PATHS_VAR RESULT_VAR)
+    foreach(ALLOWED_PATH ${PATHS_VAR})
+        if("${PATH}" MATCHES "^${ALLOWED_PATH}")
+            set(${RESULT_VAR} TRUE PARENT_SCOPE)
+            return()
+        endif()
+    endforeach()
+	set(${RESULT_VAR} FALSE PARENT_SCOPE)
+endfunction()
+
+function(install_library_deps LIBRARY ALLOWED_PATHS_VAR POSSIBLE_DEP_LOCATIONS_VAR)
+	has_allowed_path("${LIBRARY}" "${ALLOWED_PATHS_VAR}" HAS_PATH)
+	if(NOT HAS_PATH)
+		return()
+	endif()
+
+    file(INSTALL
+        DESTINATION "${CMAKE_INSTALL_PREFIX}/bin"
+        TYPE SHARED_LIBRARY
+        FOLLOW_SYMLINK_CHAIN
+        FILES "${LIBRARY}"
+    )
+    file(GET_RUNTIME_DEPENDENCIES
+        LIBRARIES ${LIBRARY}
+        RESOLVED_DEPENDENCIES_VAR RESOLVED_DEPS
+        UNRESOLVED_DEPENDENCIES_VAR UNRESOLVED_DEPS
+        DIRECTORIES ${${POSSIBLE_DEP_LOCATIONS_VAR}}
+    )
+    foreach(FILE ${RESOLVED_DEPS})
+        if(NOT IS_SYMLINK ${FILE})
+            install_library_deps(${FILE} ${ALLOWED_PATHS_VAR} ${POSSIBLE_DEP_LOCATIONS_VAR})
+        endif()
+    endforeach()
+    foreach(FILE ${UNRESOLVED_DEPS})
+        has_allowed_path("${FILE}" ${ALLOWED_PATHS_VAR} HAS_PATH)
+        if(HAS_PATH)
+            install_library_deps(${FILE} ${ALLOWED_PATHS_VAR} ${POSSIBLE_DEP_LOCATIONS_VAR})
+        endif()
+    endforeach()
+endfunction()
+
+set(ALLOWED_PATHS "@ALLOWED_PATHS@")
+set(POSSIBLE_DEP_LOCATIONS "@POSSIBLE_DEP_LOCATIONS@")
+set(POSSIBLE_EXTRA_DEPS "@POSSIBLE_EXTRA_DEPS@")
+set(TARGET_NAME "@TARGET_FILE@")
+set(TARGET_FILE_NAME $<TARGET_FILE:@TARGET_FILE@>)
+
+message(STATUS "Finding dependencies for ${TARGET_NAME} (${TARGET_FILE_NAME})")
+
+file(GET_RUNTIME_DEPENDENCIES
+    LIBRARIES ${TARGET_FILE_NAME}
+    RESOLVED_DEPENDENCIES_VAR RESOLVED_DEPS
+    UNRESOLVED_DEPENDENCIES_VAR UNRESOLVED_DEPS
+    DIRECTORIES ${POSSIBLE_DEP_LOCATIONS}
+)
+
+foreach(FILE ${RESOLVED_DEPS})
+    install_library_deps(${FILE} "${ALLOWED_PATHS}" "${POSSIBLE_DEP_LOCATIONS}")
+endforeach()
+
+foreach(extra_dep ${POSSIBLE_EXTRA_DEPS})
+	foreach(possible_dep_loc ${POSSIBLE_DEP_LOCATIONS})
+		set(extra_dep_possible_loc ${possible_dep_loc}/${extra_dep})
+		if(EXISTS ${extra_dep_possible_loc})
+			install_library_deps(${extra_dep_possible_loc} "${ALLOWED_PATHS}" "${POSSIBLE_DEP_LOCATIONS}")
+			break()
+		endif()
+	endforeach()
+endforeach()
+
+
+
+foreach(FILE ${UNRESOLVED_DEPS})
+	has_allowed_path("${FILE}" "${ALLOWED_PATHS}" HAS_PATH)
+	if(HAS_PATH)
+    message(STATUS "Unresolved: ${FILE}")
+	endif()
+endforeach()
+]])

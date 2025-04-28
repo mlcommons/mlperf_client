@@ -50,9 +50,16 @@ file(GLOB_RECURSE SOURCES "*.cpp")
 file(GLOB_RECURSE HEADERS "*.h")
 
 if(APPLE)
+    file(GLOB_RECURSE MM_SOURCES "*.m" "*.mm")
+    list(APPEND SOURCES ${MM_SOURCES})
+endif()
+
+if(APPLE)
 	list(FILTER HEADERS EXCLUDE REGEX "system_info_provider_windows.h")
 	list(FILTER SOURCES EXCLUDE REGEX "system_info_provider_windows.cpp")
-else()
+endif()
+	
+if(WIN32)
 	list(FILTER HEADERS EXCLUDE REGEX "system_info_provider_macos.h")
 	list(FILTER SOURCES EXCLUDE REGEX "system_info_provider_macos.cpp")
 endif()
@@ -72,7 +79,7 @@ foreach(SOURCE_FILE ${SOURCES})
     endif()
 endforeach()
 endif()
-if(NOT MLPERF_IHV_ORT_GENAI)
+if(NOT (MLPERF_IHV_ORT_GENAI))
 list(FILTER SOURCES EXCLUDE REGEX "IHV/OrtGenAI")
 list(FILTER HEADERS EXCLUDE REGEX "IHV/OrtGenAI")
 else()
@@ -111,18 +118,19 @@ add_custom_target(
 )
 
 
-# Use separatw config file for the EP dependencies depending on platform
+# Use separate config file for the EP dependencies depending on platform
 # Windows x64, Windows ARM64, MacOS
 if(WIN32)
 # Check if x64
     if(CMAKE_GENERATOR_PLATFORM MATCHES "x64")
-        set(EP_DEPENDENCIES_CONFIG_JSON "${CMAKE_SOURCE_DIR}/data/ep_dependencies_config_windows_x64.json")
+        set(EP_DEPENDENCIES_CONFIG_JSON_FILENAME "ep_dependencies_config_windows_x64.json")
     else()
-		set(EP_DEPENDENCIES_CONFIG_JSON "${CMAKE_SOURCE_DIR}/data/ep_dependencies_config_windows_ARM.json")
+		set(EP_DEPENDENCIES_CONFIG_JSON_FILENAME "ep_dependencies_config_windows_ARM.json")
 	endif()
 elseif(APPLE)
-    set(EP_DEPENDENCIES_CONFIG_JSON "${CMAKE_SOURCE_DIR}/data/ep_dependencies_config_macOS.json")
+    set(EP_DEPENDENCIES_CONFIG_JSON_FILENAME "ep_dependencies_config_macOS.json")
 endif()
+set(EP_DEPENDENCIES_CONFIG_JSON "${CMAKE_SOURCE_DIR}/data/${EP_DEPENDENCIES_CONFIG_JSON_FILENAME}")
 set(EP_DEPENDENCIES_CONFIG_SCHEMA_JSON "${CMAKE_SOURCE_DIR}/data/EPDependenciesConfigSchema.json")
 set(EP_IHVS_NATIVE_OPENVINO_LIB "${CMAKE_BINARY_DIR}/IHV/NativeOpenVINO/bin/$<CONFIG>/IHV_NativeOpenVINO.dll")
 set(EP_IHVS_ORT_GENAI_LIB "${CMAKE_BINARY_DIR}/IHV/OrtGenAI/bin/$<CONFIG>/IHV_OrtGenAI.dll")
@@ -148,14 +156,16 @@ include(minizip.cmake)
 if(MLPERF_IHV_NATIVE_OPENVINO)
 	if(NOT MLPERF_ENABLE_COLLECT_DEPENDENCIES)
 		list(APPEND ASSETS_LIST ${EP_IHVS_NATIVE_OPENVINO_LIB})
-	#else()
-	#	list(APPEND IHV_FILES_TO_SIGN ${EP_IHVS_NATIVE_OPENVINO_LIB})
+	else()
+		list(APPEND IHV_FILES_TO_SIGN ${EP_IHVS_NATIVE_OPENVINO_LIB})
 	endif()
 endif()
 
 if(MLPERF_IHV_ORT_GENAI)
 	if(NOT MLPERF_ENABLE_COLLECT_DEPENDENCIES)
 		list(APPEND ASSETS_LIST ${EP_IHVS_ORT_GENAI_LIB})
+	else()
+		list(APPEND IHV_FILES_TO_SIGN ${EP_IHVS_ORT_GENAI_LIB})
 	endif()
 endif()
 
@@ -212,14 +222,12 @@ target_include_directories(${PROJECT_NAME} PRIVATE ${HTTPLIB_INCLUDE_DIR})
 if(APPLE)
 option(USE_OPENCL "Use Open Compute Language (OpenCL) for GPU information retrieval."  ON)
 endif()
-
 if(USE_OPENCL)
 	target_link_libraries(${PROJECT_NAME} "-framework OpenCL")
 	target_compile_definitions(${PROJECT_NAME} PUBLIC USE_OPENCL)
 endif()
-
-FetchContent_Declare(dylib GIT_REPOSITORY "https://github.com/martin-olivier/dylib" GIT_TAG "v2.2.1")
-FetchContent_MakeAvailable(dylib)
+ 
+include(${CMAKE_CURRENT_SOURCE_DIR}/common/dylib.cmake)
 target_link_libraries(${PROJECT_NAME} dylib)
 
 add_dependencies(${PROJECT_NAME} IHVs)
@@ -232,6 +240,7 @@ add_custom_command(TARGET ${PROJECT_NAME}
 	POST_BUILD
 	COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/deps
 	COMMAND ${CMAKE_COMMAND} -E copy ${ASSETS_LIST} ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/deps
+	COMMAND ${CMAKE_COMMAND} -E rename ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/deps/${EP_DEPENDENCIES_CONFIG_JSON_FILENAME} ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/deps/ep_dependencies_config.json
 )
 endif()
 
@@ -249,7 +258,9 @@ set(EXTRA_LIBRARIES Ws2_32.lib Rpcrt4.lib wbemuuid.lib)
 
 else()
 find_package(Iconv REQUIRED)
-set(EXTRA_LIBRARIES "-framework CoreFoundation" "-framework Foundation" infoware ${Iconv_LIBRARIES})
+set(EXTRA_LIBRARIES "-framework CoreFoundation" "-framework Foundation" ${Iconv_LIBRARIES})
+
+list(APPEND EXTRA_LIBRARIES infoware)
 endif()
 
 # Force enable exceptions for extern C functions

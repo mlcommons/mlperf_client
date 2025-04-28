@@ -33,7 +33,8 @@ class Storage {
 
   std::string CheckIfLocalFileExists(const std::string& file_name,
                                      const std::string& sub_dir,
-                                     bool ignore_cache);
+                                     bool ignore_cache,
+                                     bool cache_local_files);
   void StopDownload();
   bool IsForceDownloadEnabled() const { return force_download_; }
 

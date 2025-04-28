@@ -47,16 +47,16 @@ ONNXRuntime GenAI and its implementation in MLperf require the entire model fold
       "Models": [
         {
           "ModelName": "Llama2 llama-2-7b-chat-dml",
-          "FilePath": "https://client.mlcommons-storage.org/deps/0.5/scenario_files/llm/llama2/models/OrtGenAI/llama-2-7b-chat-dml/model.onnx",
-          "DataFilePath": "https://client.mlcommons-storage.org/deps/0.5/scenario_files/llm/llama2/models/OrtGenAI/llama-2-7b-chat-dml/model.onnx.data.zip",
-          "TokenizerPath": "https://client.mlcommons-storage.org/deps/0.5/scenario_files/llm/llama2/models/OrtGenAI/llama-2-7b-chat-dml/tokenizer.zip"
+          "FilePath": "https://client.mlcommons-storage.org/deps/0.6/scenario_files/llm/llama2/models/OrtGenAI/llama-2-7b-chat-dml/model.onnx",
+          "DataFilePath": "https://client.mlcommons-storage.org/deps/0.6/scenario_files/llm/llama2/models/OrtGenAI/llama-2-7b-chat-dml/model.onnx.data.zip",
+          "TokenizerPath": "https://client.mlcommons-storage.org/deps/0.6/scenario_files/llm/llama2/models/OrtGenAI/llama-2-7b-chat-dml/tokenizer.zip"
         }
       ],
        "InputFilePath": [
-        "https://client.mlcommons-storage.org/deps/0.5/scenario_files/llm/llama2/data/content_generation/greedy-prompt_cot.39329.json"
+        "https://client.mlcommons-storage.org/deps/0.6/scenario_files/llm/llama2/data/content_generation/greedy-prompt_cot.39329.json"
       ],
       "AssetsPath": [],
-      "ResultsVerificationFile": "https://client.mlcommons-storage.org/deps/0.5/scenario_files/llm/llama2/data/generation-test-greedy-expected-results.json",
+      "ResultsVerificationFile": "https://client.mlcommons-storage.org/deps/0.6/scenario_files/llm/llama2/data/generation-test-greedy-expected-results.json",
       "DataVerificationFile": "",
       "Iterations": 5,
       "ExecutionProviders": [
@@ -83,5 +83,4 @@ Debugger is still going to work with it. However, if you prefer to use the Libra
 
 ## Version
 
-The repository contains prebuilt OGA library compatible with ONNX Runtime 1.19.0 release, using the main commit 7998f13e25f31caaba803db4197f737df99a0bb9.
-It includes a custom patch from deps/ONNXRuntimeGenAI/oga_directml_adapters_choice.patch which allows to use LUUID for DirectML, forcing to run on a specific adapter
+The repository contains the prebuilt OGA library 0.6.0 release, which is compatible with the ONNX Runtime 1.20.1 release.

@@ -57,13 +57,9 @@ Llama2Inference::Llama2Inference(
       generation_duration_ms_{0},
       first_token_latency_ms_{0} {}
 
-void Llama2Inference::Init(const nlohmann::json& model_config) {
+void Llama2Inference::Init(const nlohmann::json& model_config,
+                           std::optional<API_IHV_DeviceID_t> device_id) {
   if (error_message_ != "") {
-    return;
-  }
-  if (core_ == nullptr) {
-    logger_(LogLevel::kInfo,
-            "IHV NativeOpenVINO Init: OpenVINO Core not initialized");
     return;
   }
   if (!config_.LoadFromJson(model_config)) {
@@ -74,11 +70,22 @@ void Llama2Inference::Init(const nlohmann::json& model_config) {
   std::filesystem::path file_path(model_path_);
   std::filesystem::path directory_path = file_path.parent_path();
 
+  std::string device = device_id.has_value() ? devices_[device_id.value()] :
+    default_device_;
+
   ov::AnyMap pipeline_config;
+  if (device.find("NPU") != std::string::npos) {
+    pipeline_config["GENERATE_HINT"] = "BEST_PERF";
+    pipeline_config["MAX_PROMPT_LEN"] = static_cast<int>(
+        config_.search.max_total_length - config_.search.max_length);
+  }
 
   try {
+    logger_(LogLevel::kInfo,
+        std::format("Creating pipeline on {} device", device));
+    pipeline_.reset();  // Destroy old pipeline and free memory
     pipeline_.reset(new ov::genai::LLMPipeline(directory_path.string(),
-                                               ep_settings_.GetDeviceType(),
+                                               device,
                                                pipeline_config));
   } catch (const std::exception& e) {
     logger_(LogLevel::kError,

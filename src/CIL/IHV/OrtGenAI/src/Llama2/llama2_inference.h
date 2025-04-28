@@ -1,5 +1,6 @@
 #pragma once
 #include <nlohmann/json.hpp>
+#include <optional>
 
 #include "../base_inference.h"
 #include "llama2/llama_config.h"
@@ -16,7 +17,8 @@ class Llama2Inference : public BaseInference {
                   const OrtGenAIExecutionProviderSettings& ep_settings,
                   cil::Logger logger);
   ~Llama2Inference() override;
-  void Init(const nlohmann::json& model_config);
+  void Init(const nlohmann::json& model_config,
+            std::optional<API_IHV_DeviceID_t> device_id);
   const std::vector<int32_t>& Run(const int32_t* const token_ptr,
                                   uint32_t token_count,
                                   std::function<void(uint32_t)> token_callback);

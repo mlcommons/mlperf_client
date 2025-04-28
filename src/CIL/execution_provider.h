@@ -4,7 +4,11 @@
 
 namespace cil {
 
-enum class EP { kIHVNativeOpenVINO, kIHVOrtGenAI, kUnknown };
+enum class EP {
+  kIHVNativeOpenVINO,
+  kIHVOrtGenAI,
+  kUnknown
+};
 
 inline std::string EPToString(EP ep) {
   switch (ep) {
@@ -25,10 +29,32 @@ inline EP NameToEP(const std::string& ep_name) {
   return EP::kUnknown;
 }
 
-inline bool IsEPFromKnownIHV(EP ep) { return ep != EP::kUnknown; }
+inline bool IsEPFromKnownIHV(EP ep) {
+  switch (ep) {
+    case EP::kUnknown:
+      return false;
+    default:
+      return true;
+  }
+}
 
 inline bool IsEPFromKnownIHV(const std::string& ep_name) {
   return IsEPFromKnownIHV(NameToEP(ep_name));
+}
+
+inline std::string GetEPDependencySubdirPath(EP ep) {
+  switch (ep) {
+    case EP::kIHVNativeOpenVINO:
+      return "IHV/NativeOpenVINO";
+    case EP::kIHVOrtGenAI:
+      return "IHV/OrtGenAI";
+    default:
+      return "";
+  }
+}
+
+inline std::string GetEPDependencySubdirPath(std::string ep_name) {
+  return GetEPDependencySubdirPath(NameToEP(ep_name));
 }
 
 }  // namespace cil

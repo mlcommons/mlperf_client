@@ -134,16 +134,24 @@ bool Downloader::download_remote_file(const std::string& host_name,
     return false;
   }
 
-  // Small file optimization, for files smaller than 1MB
-  // If threads num is 1, or the file size is less than 1MB, download the file
-  // without splitting it
-  if (num_threads == 1 || num_threads > 1 && file_size < 1024 * 1024) {
+  // Small file optimization or fallback for unsupported range requests:
+  // If the server does not support range requests, or if threads num is 1, or
+  // the file size is less than 1MB, download the file without splitting it
+
+  auto accept_range_it = res->headers.find("Accept-Ranges");
+  bool accepts_range = accept_range_it != res->headers.end() &&
+                       accept_range_it->second == "bytes";
+
+  if (!accepts_range || num_threads == 1 ||
+      num_threads > 1 && file_size < 1024 * 1024) {
     std::ofstream output_file(destination_file_path, std::ios::binary);
+    uint64_t downloaded_size = 0;
     auto res =
         client.Get(host_file_path.c_str(),
                    [&](const char* data, size_t data_length) -> bool {
                      output_file.write(data, data_length);
-                     progress_notifier((int)(data_length * 100 / file_size),
+                     downloaded_size += data_length;
+                     progress_notifier((int)(downloaded_size * 100 / file_size),
                                        progress_callback);
                      return true;
                    });

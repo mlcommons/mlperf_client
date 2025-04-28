@@ -17,6 +17,10 @@
      * explicit resource management. */                                       \
     ~IHV_HANDLER_CLASS_NAME() = default;                                      \
                                                                               \
+    /* Enumerates available devices with device id and full name              \
+     * Returns true on success, false otherwise. */                           \
+    bool EnumerateDevices(struct API_IHV_DeviceEnumeration_t& api);           \
+                                                                              \
     /* Initializes the inference engine, loads models, allocates resources,   \
      * etc. Returns true if initialization is successful, false otherwise */  \
     bool Init(const struct API_IHV_Init_t& api);                              \
@@ -74,6 +78,13 @@
     return ihv_struct;                                                    \
   }
 
+#define DEFINE_API_IHV_ENUMERATE_DEVICES_BASIC_IMPL(IHV_HANDLER_CLASS_NAME)  \
+  int API_IHV_EnumerateDevices(struct API_IHV_DeviceEnumeration_t* api) {    \
+    auto ihv_handler =                                                       \
+        static_cast<IHV_HANDLER_CLASS_NAME*>(api->ihv_struct->ihv_data);     \
+    return ihv_handler->EnumerateDevices(*api) ? API_IHV_RETURN_SUCCESS : 1; \
+  }
+
 #define DEFINE_API_IHV_INIT_BASIC_IMPL(IHV_HANDLER_CLASS_NAME)           \
   int API_IHV_Init(const API_IHV_Init_t* api) {                          \
     auto ihv_handler =                                                   \
@@ -120,13 +131,40 @@
     delete api->ihv_struct;                                              \
   }
 
-#define DEFINE_API_IHV_BASIC_IMPL(IHV_HANDLER_CLASS_NAME, IHV_NAME, \
-                                  IHV_VERSION)                      \
-  DEFINE_API_IHV_SETUP_BASIC_IMPL(IHV_HANDLER_CLASS_NAME, IHV_NAME, \
-                                  IHV_VERSION)                      \
-  DEFINE_API_IHV_INIT_BASIC_IMPL(IHV_HANDLER_CLASS_NAME)            \
-  DEFINE_API_IHV_PREPARE_BASIC_IMPL(IHV_HANDLER_CLASS_NAME)         \
-  DEFINE_API_IHV_INFER_BASIC_IMPL(IHV_HANDLER_CLASS_NAME)           \
-  DEFINE_API_IHV_RESET_BASIC_IMPL(IHV_HANDLER_CLASS_NAME)           \
-  DEFINE_API_IHV_DEINIT_BASIC_IMPL(IHV_HANDLER_CLASS_NAME)          \
+#define DEFINE_API_IHV_BASIC_IMPL(IHV_HANDLER_CLASS_NAME, IHV_NAME,   \
+                                  IHV_VERSION)                        \
+  DEFINE_API_IHV_SETUP_BASIC_IMPL(IHV_HANDLER_CLASS_NAME, IHV_NAME,   \
+                                  IHV_VERSION)                        \
+  DEFINE_API_IHV_ENUMERATE_DEVICES_BASIC_IMPL(IHV_HANDLER_CLASS_NAME) \
+  DEFINE_API_IHV_INIT_BASIC_IMPL(IHV_HANDLER_CLASS_NAME)              \
+  DEFINE_API_IHV_PREPARE_BASIC_IMPL(IHV_HANDLER_CLASS_NAME)           \
+  DEFINE_API_IHV_INFER_BASIC_IMPL(IHV_HANDLER_CLASS_NAME)             \
+  DEFINE_API_IHV_RESET_BASIC_IMPL(IHV_HANDLER_CLASS_NAME)             \
+  DEFINE_API_IHV_DEINIT_BASIC_IMPL(IHV_HANDLER_CLASS_NAME)            \
   DEFINE_API_IHV_RELEASE_BASIC_IMPL(IHV_HANDLER_CLASS_NAME)
+
+#define DEFINE_IHV_CLASS_ENUMERATE_DEVICES_IMPL(CLASS_NAME)             \
+  bool CLASS_NAME::EnumerateDevices(API_IHV_DeviceEnumeration_t& api) { \
+    if (inference_ == nullptr) {                                        \
+      api.logger(api.context, API_IHV_LogLevel::API_IHV_FATAL,          \
+                 "EnumerateDevices: Inference object is nullptr!");     \
+      return false;                                                     \
+    }                                                                   \
+                                                                        \
+    api.device_list = inference_->EnumerateDevices();                   \
+                                                                        \
+    if (nullptr == api.device_list) {                                   \
+      api.logger(api.context, API_IHV_LogLevel::API_IHV_FATAL,          \
+                 "EnumerateDevices: No devices found.");                \
+      return false;                                                     \
+    }                                                                   \
+                                                                        \
+    if (auto error_message = inference_->GetErrorMessage();             \
+        !error_message.empty()) {                                       \
+      api.logger(api.context, API_IHV_LogLevel::API_IHV_ERROR,          \
+                 error_message.c_str());                                \
+      return false;                                                     \
+    }                                                                   \
+                                                                        \
+    return true;                                                        \
+  }

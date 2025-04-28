@@ -26,8 +26,6 @@ LoggerPtr llama2_executor_logger(Logger::getLogger("Llama2Executor"));
 
 namespace {
 
-const std::string kOverallCategory = "Overall";
-
 // Helper functions
 using Result = cil::infer::Llama2Inference::Result;
 using ResultSpan = std::span<Result const>;
@@ -35,14 +33,14 @@ using ResultIter = ResultSpan::iterator;
 
 template <typename Acc = double, typename Iter>
 Acc arithmean(Iter begin, Iter end, auto Op) {
-    if (begin == end) {
-        return Acc{0.0};
-    }
-    size_t cnt = std::distance(begin, end);
-    Acc sum = std::accumulate(begin, end, Acc{0.0}, [&](Acc l, const auto& r) -> Acc {
-        return l + Op(r);
-    });
-    return sum / static_cast<Acc>(cnt);
+  if (begin == end) {
+    return Acc{0.0};
+  }
+  size_t cnt = std::distance(begin, end);
+  Acc sum =
+      std::accumulate(begin, end, Acc{0.0},
+                      [&](Acc l, const auto& r) -> Acc { return l + Op(r); });
+  return sum / static_cast<Acc>(cnt);
 }
 
 template <typename Acc = double, typename Iter>
@@ -82,14 +80,12 @@ struct PromptPerformanceResult {
 
     total_runs_count = prompt_results.size();
 
-    average_input_tokens = arithmean<double>(prompt_results.begin() + warmup_count, prompt_results.end(),
-                                             [](const auto& r) {
-                                              return r.input_tokens_count;
-                                             });
-    average_generated_tokens = arithmean<double>(prompt_results.begin() + warmup_count, prompt_results.end(),
-                                                 [](const auto& r) {
-                                                  return r.tokens.size();
-                                                 });
+    average_input_tokens = arithmean<double>(
+        prompt_results.begin() + warmup_count, prompt_results.end(),
+        [](const auto& r) { return r.input_tokens_count; });
+    average_generated_tokens = arithmean<double>(
+        prompt_results.begin() + warmup_count, prompt_results.end(),
+        [](const auto& r) { return r.tokens.size(); });
 
     // Calculate prompt metrics
     const auto sum_duration = std::accumulate(
@@ -380,12 +376,20 @@ int CountPromptsInFile(const std::string& file_path) {
 void Llama2Executor::RunLlama2Task(EP ep, const nlohmann::json& settings) {
   std::string model_file_path = fs::path(model_path_).string();
 
-  std::shared_ptr<Llama2Inference> inference;
+  std::unique_ptr<Llama2Inference> inference;
   try {
-    inference = std::make_shared<Llama2Inference>(model_file_path, deps_dir_,
+    inference = std::make_unique<Llama2Inference>(model_file_path, deps_dir_,
                                                   ep, settings, library_path_);
   } catch (const std::exception& e) {
     benchmark_result_.error_message = e.what();
+    status_ = Status::kFailed;
+    return;
+  }
+
+  auto error_message = inference->GetErrorMessage();
+  if (!error_message.empty()) {
+    benchmark_result_.error_message = inference->GetErrorMessage(false);
+    benchmark_result_.ep_error_messages = inference->GetEPErrorMessages();
     status_ = Status::kFailed;
     return;
   }
@@ -424,7 +428,8 @@ void Llama2Executor::RunLlama2Task(EP ep, const nlohmann::json& settings) {
                  << " with " << iterations_ << " iterations."
                  << " The first iteration will be used to warm up the log.");
 
-  std::unordered_map<std::string, std::vector<PromptPerformanceResult>> prompt_perf_results;
+  std::unordered_map<std::string, std::vector<PromptPerformanceResult>>
+      prompt_perf_results;
   for (const std::string& input_path : input_paths_) {
     if (status_ == Status::kCanceled) return;
 
@@ -455,9 +460,10 @@ void Llama2Executor::RunLlama2Task(EP ep, const nlohmann::json& settings) {
       last_model_config = model_config;
     }
 
-    auto error_message = inference->GetErrorMessage();
+    error_message = inference->GetErrorMessage();
     if (!error_message.empty()) {
-      benchmark_result_.error_message = error_message;
+      benchmark_result_.error_message = inference->GetErrorMessage(false);
+      benchmark_result_.ep_error_messages = inference->GetEPErrorMessages();
       status_ = Status::kFailed;
       return;
     }
@@ -489,7 +495,8 @@ void Llama2Executor::RunLlama2Task(EP ep, const nlohmann::json& settings) {
         if (const auto& infer_error_message = inference->GetErrorMessage();
             !infer_error_message.empty()) {
           status_ = Status::kFailed;
-          benchmark_result_.error_message = infer_error_message;
+          benchmark_result_.error_message = inference->GetErrorMessage(false);
+          benchmark_result_.ep_error_messages = inference->GetEPErrorMessages();
           is_success = false;
           return true;
         }
@@ -582,8 +589,8 @@ void Llama2Executor::RunLlama2Task(EP ep, const nlohmann::json& settings) {
                        "/" + std::to_string(expected_tokens_.size()));
 
       if (expected_tokens_.size() <= prompt_index) {
-        LOG4CXX_ERROR(llama2_executor_logger,
-                      "Prompt results are not provided.");
+        LOG4CXX_WARN(llama2_executor_logger,
+                     "Prompt results are not provided.");
       } else {
         std::vector<uint32_t>& expected_output_ids =
             expected_tokens_[prompt_index];
@@ -630,10 +637,11 @@ void Llama2Executor::RunLlama2Task(EP ep, const nlohmann::json& settings) {
         return;
       }
 
-      prompt_perf_results[category].emplace_back(prompt_results, iterations_warmup_);
-      LOG4CXX_DEBUG(
-          llama2_executor_logger,
-          "Prompt timing results: " + prompt_perf_results[category].back().ToString());
+      prompt_perf_results[category].emplace_back(prompt_results,
+                                                 iterations_warmup_);
+      LOG4CXX_DEBUG(llama2_executor_logger,
+                    "Prompt timing results: " +
+                        prompt_perf_results[category].back().ToString());
     }  // prompts
 
     all_prompt_index = prompt_index;
@@ -655,27 +663,24 @@ void Llama2Executor::RunLlama2Task(EP ep, const nlohmann::json& settings) {
   constexpr double kMsToSecRatio = 1e3;
 
   CategoryPerformanceResult per_category_perf_results{};
-  PerformanceResult overall_performance_results{};
+
   PromptPerformanceResult::MillisecDuration avg_duration_sum{0.0};
   size_t avg_duration_cnt{0};
-  for (const auto& [category, perf_results]: prompt_perf_results) {
-    avg_duration_sum += 
-          std::accumulate(perf_results.begin(), perf_results.end(),
-                          PromptPerformanceResult::MillisecDuration{0.0},
-                          [](auto a, const auto& r) { return a + r.avg_duration; });
+  for (const auto& [category, perf_results] : prompt_perf_results) {
+    avg_duration_sum += std::accumulate(
+        perf_results.begin(), perf_results.end(),
+        PromptPerformanceResult::MillisecDuration{0.0},
+        [](auto a, const auto& r) { return a + r.avg_duration; });
     avg_duration_cnt += perf_results.size();
 
-    per_category_perf_results[category].average_generated_tokens = 
-          arithmean<double>(perf_results.begin(), perf_results.end(), 
-                            [](const auto& r) {
-                              return r.average_generated_tokens;
-                            });
+    per_category_perf_results[category].average_generated_tokens =
+        arithmean<double>(
+            perf_results.begin(), perf_results.end(),
+            [](const auto& r) { return r.average_generated_tokens; });
 
-    per_category_perf_results[category].average_input_tokens = 
-          arithmean<double>(perf_results.begin(), perf_results.end(),
-                            [](const auto& r) {
-                              return r.average_input_tokens;
-                            });
+    per_category_perf_results[category].average_input_tokens =
+        arithmean<double>(perf_results.begin(), perf_results.end(),
+                          [](const auto& r) { return r.average_input_tokens; });
 
     if (!low_tokens_count) {
       // 2nd+ token generation rate (token/sec)
@@ -687,29 +692,58 @@ void Llama2Executor::RunLlama2Task(EP ep, const nlohmann::json& settings) {
     }
 
     // Average the time to first token duration in sec
-    per_category_perf_results[category].time_to_first_token_duration = arithmean<double>(
-        perf_results.begin(), perf_results.end(),
-        [](const auto& r) { return r.avg_ttft.count() / kMsToSecRatio; });
+    per_category_perf_results[category].time_to_first_token_duration =
+        arithmean<double>(
+            perf_results.begin(), perf_results.end(),
+            [](const auto& r) { return r.avg_ttft.count() / kMsToSecRatio; });
   }
 
-  overall_performance_results.average_generated_tokens = arithmean<double>(
-      per_category_perf_results.begin(), per_category_perf_results.end(),
-      [](const auto& r) { return r.second.average_generated_tokens; });
-  overall_performance_results.average_input_tokens = arithmean<double>(
-      per_category_perf_results.begin(), per_category_perf_results.end(),
-      [](const auto& r) { return r.second.average_input_tokens; });
-  overall_performance_results.time_to_first_token_duration = geomean<double>(
-      per_category_perf_results.begin(), per_category_perf_results.end(),
-      [](const auto& r) { return r.second.time_to_first_token_duration; });
-  overall_performance_results.token_generation_rate = geomean<double>(
-      per_category_perf_results.begin(), per_category_perf_results.end(),
-      [](const auto& r) { return r.second.token_generation_rate; });
+  const auto& requiredCategories = BenchmarkResult::kLLMRequiredCategories;
 
-  if (!per_category_perf_results.try_emplace(kOverallCategory, overall_performance_results).second) {
-      LOG4CXX_ERROR(
-          llama2_executor_logger,
-          "'Overall' category already present in the list. Prompts shall not have it.");
+  bool haves_all_required_categories =
+      per_category_perf_results.size() == requiredCategories.size();
+
+  if (haves_all_required_categories) {
+    for (const auto& category : per_category_perf_results) {
+      if (requiredCategories.find(category.first) == requiredCategories.end()) {
+        haves_all_required_categories = false;
+        LOG4CXX_WARN(llama2_executor_logger,
+                     "Some required categories are missing. Overall "
+                     "performance results will not be calculated.");
+        break;
+      }
+    }
+  } else if (per_category_perf_results.size() > requiredCategories.size()) {
+    LOG4CXX_WARN(llama2_executor_logger,
+                 "Some categories are not required. Overall performance "
+                 "results will not be calculated.");
+  }
+
+  if (haves_all_required_categories) {
+    PerformanceResult overall_performance_results{};
+
+    overall_performance_results.average_generated_tokens = arithmean<double>(
+        per_category_perf_results.begin(), per_category_perf_results.end(),
+        [](const auto& r) { return r.second.average_generated_tokens; });
+    overall_performance_results.average_input_tokens = arithmean<double>(
+        per_category_perf_results.begin(), per_category_perf_results.end(),
+        [](const auto& r) { return r.second.average_input_tokens; });
+    overall_performance_results.time_to_first_token_duration = geomean<double>(
+        per_category_perf_results.begin(), per_category_perf_results.end(),
+        [](const auto& r) { return r.second.time_to_first_token_duration; });
+    overall_performance_results.token_generation_rate = geomean<double>(
+        per_category_perf_results.begin(), per_category_perf_results.end(),
+        [](const auto& r) { return r.second.token_generation_rate; });
+
+    if (!per_category_perf_results
+             .try_emplace(BenchmarkResult::kLLMOverallCategory,
+                          overall_performance_results)
+             .second) {
+      LOG4CXX_ERROR(llama2_executor_logger,
+                    "'Overall' category already present in the list. Prompts "
+                    "shall not have it.");
       status_ = Status::kFailed;
+    }
   }
 
   benchmark_result_.duration =

@@ -109,7 +109,22 @@ class BpeEncoder {
   TfmStatus LoadMerges(simdjson::dom::element merges_node) {
     auto lines = merges_node.get_array();
     for (auto each_line : lines) {
-      std::string_view line = each_line.get_string();
+
+      std::string_view line;
+      std::string words;
+      if (each_line.is_array()) {
+        std::string_view n1 = each_line.get_array().at(0).get_string();
+
+        std::string_view n2 = each_line.get_array().at(1).get_string();
+        words.reserve(n1.length() + n2.length() + 1);
+        words.append(n1);
+        words.append(" ");
+        words.append(n2);
+        line = words;
+      }
+      else {
+        line = each_line.get_string();
+      }
       if (line.empty()) continue;
       auto pos = line.find(' ');
       if (pos == std::string::npos) {
@@ -199,7 +214,7 @@ class BpeEncoder {
     std::vector<std::string_view> decoder;
     decoder.resize(static_cast<size_t>(max_token_id_) + 1);
     for (const auto& [str, id] : vocab_map_) {
-      assert(id <= max_token_id_);
+      assert(id <= max_token_id_ + 1);
       decoder[id] = str.c_str();
     }
     return decoder;

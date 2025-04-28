@@ -10,7 +10,8 @@
           "TempPath",
           "EPDependenciesConfigPath",
           "BaseDir",
-          "DownloadBehavior"
+          "DownloadBehavior",
+          "CacheLocalFiles"
         ]
       },
       "properties": {
@@ -35,6 +36,9 @@
             "deps_only",
             "normal"
           ]
+        },
+        "CacheLocalFiles": {
+          "type": "boolean"
         }
       },
       "required": [
@@ -208,7 +212,8 @@
                           "device_type": {
                             "type": "string",
                             "enum": [
-                              "GPU"
+                              "GPU",
+                              "NPU"
                             ]
                           },
                           "num_of_threads": {
@@ -247,11 +252,11 @@
                           "device_type": {
                             "type": "string",
                             "enum": [
-                              "GPU"
+                              "GPU",
+                              "NPU"
                             ]
                           }
-                        },
-                        "required": [ "device_type" ]
+                        }
                       }
                     },
                     "LibraryPath": {

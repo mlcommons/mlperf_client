@@ -23,9 +23,6 @@ class ProgressTracker {
   void StopTracking();
 
   void AddTask(std::shared_ptr<ProgressableTask> task);
-  void Update();
-  void UpdateUntilCompletion();
-  bool RequestInterrupt();
   bool Finished() const;
   const std::vector<std::shared_ptr<ProgressableTask>>& GetTasks() const {
     return tasks_;
@@ -41,25 +38,48 @@ class ProgressTracker {
   }
   int GetTaskCount() const { return tasks_.size(); }
 
+  std::chrono::milliseconds GetUpdateInterval() const {
+    return update_interval_;
+  }
+
+  const std::string& GetTaskDescription() const { return task_description_; }
+
+  size_t GetExpectedTaskCount() const { return expected_task_count_; }
+
+  class HandlerBase {
+   public:
+    HandlerBase() = default;
+
+    virtual ~HandlerBase() = default;
+    HandlerBase(const HandlerBase&) = delete;
+
+    HandlerBase& operator=(const HandlerBase&) = delete;
+
+    virtual void StartTracking(ProgressTracker& tracker) {
+      tracker.StartTracking();
+    }
+    virtual void StopTracking(ProgressTracker& tracker) {
+      tracker.StopTracking();
+    }
+
+    virtual void Update(ProgressTracker& tracker) = 0;
+    virtual bool RequestInterrupt(ProgressTracker& tracker) = 0;
+
+    virtual std::atomic<bool>& GetInterrupt() = 0;
+
+    size_t& GetCurrentTaskIndex(ProgressTracker& tracker) {
+      return tracker.current_task_index_;
+    }
+  };
+
  private:
   std::string task_description_;
   std::vector<std::shared_ptr<ProgressableTask>> tasks_;
   size_t expected_task_count_;
   size_t current_task_index_;
   std::chrono::milliseconds update_interval_;
-  const char rotating_cursor_[4];
-  size_t rotating_cursor_position_;
-  const std::string description_template_;
 
-  bool interactive_console_mode_;
-  int console_width_;
-
-  void DisplayCurrentTaskAndOverallProgress();
-
-  std::string FormatToConsoleWidth(const std::string& stream_string,
-                                   const std::string& description) const;
-  std::string ReplaceDescriptionSubString(const std::string& stream_string,
-                                          const std::string& description) const;
+  friend class HandlerBase;
 };
 
 }  // namespace cil

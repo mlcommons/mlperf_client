@@ -1,19 +1,67 @@
-#include "utils_directml.h"
-
-#include "utils.h"
+#include "adapter_enumeration.h"
 
 #ifdef WIN32
 
+#define NOMINMAX
 #include <directml.h>
 #include <dxcore.h>
 #include <dxgi1_6.h>
 #include <wrl/client.h>
 
-#include "scope_exit.h"
+#include <algorithm>
+#include <codecvt>
+#include <filesystem>
+#include <locale>
+
+#include "../scope_exit.h"
+
+namespace fs = std::filesystem;
 
 namespace cil {
-namespace utils {
+namespace common {
 namespace DirectML {
+
+using ScopeExit = cil::utils::ScopeExit;
+
+/**
+ * A handle returned by AddLibraryPath function and used to remove the
+ * directory from the search path.
+ */
+struct LibraryPathHandle {
+#ifdef _WIN32
+  DLL_DIRECTORY_COOKIE cookie_;
+  bool IsValid() const { return cookie_ != nullptr; }
+#else
+  fs::path path_;
+  bool IsValid() const { return !path_.empty(); }
+#endif
+};
+
+LibraryPathHandle AddLibraryPath(const fs::path& path) {
+  auto cookie = AddDllDirectory(path.c_str());
+  SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+  return {cookie};
+}
+bool RemoveLibraryPath(const LibraryPathHandle& handle) {
+  return !!RemoveDllDirectory(handle.cookie_);
+}
+
+std::string CleanAndTrimString(std::string str) {
+  std::replace(str.begin(), str.end(), '\0', ' ');
+  static auto is_space = [](auto ch) { return std::isspace(ch); };
+  str.erase(str.begin(), std::find_if_not(str.begin(), str.end(), is_space));
+  str.erase(std::find_if_not(str.rbegin(), str.rend(), is_space).base(),
+            str.end());
+  return str;
+}
+
+std::string StringToLowerCase(const std::string& input_string) {
+  std::string lower_case_str;
+  std::transform(input_string.begin(), input_string.end(),
+                 std::back_inserter(lower_case_str),
+                 [](unsigned char c) { return std::tolower(c); });
+  return lower_case_str;
+}
 
 template <typename T>
 T GetFunctionPointer(HMODULE hModule, const char* functionName) {
@@ -52,15 +100,15 @@ std::string GetDXCoreAdapterType(
 
 std::vector<AdapterInfo> EnumerateDirectMLAdapters(
     const std::string& directml_directory) {
-  cil::utils::LibraryPathHandle path_handle;
+  LibraryPathHandle path_handle;
 
   if (!directml_directory.empty()) {
-    path_handle = cil::utils::AddLibraryPath(directml_directory);
+    path_handle = AddLibraryPath(directml_directory);
     if (!path_handle.IsValid()) return {};
   };
 
   ScopeExit library_path_cleanup([path_handle]() {
-    if (path_handle.IsValid()) cil::utils::RemoveLibraryPath(path_handle);
+    if (path_handle.IsValid()) RemoveLibraryPath(path_handle);
   });
 
   decltype(&DMLCreateDevice1) DMLCreateDevice_ptr = nullptr;
@@ -112,8 +160,11 @@ std::vector<AdapterInfo> EnumerateDirectMLAdapters(
     DXGI_ADAPTER_DESC1 desc;
     pAdapter->GetDesc1(&desc);
 
-    std::wstring wname(desc.Description, std::char_traits<WCHAR>::length(desc.Description));
-    std::string adapterName(wname.begin(), wname.end());
+    std::wstring wname(desc.Description,
+                       std::char_traits<WCHAR>::length(desc.Description));
+
+    std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
+    std::string adapterName = converter.to_bytes(wname);
     adapterName = CleanAndTrimString(adapterName);
 
     auto is_basic_render_driver_vendor_id = desc.VendorId == 0x1414;
@@ -171,20 +222,30 @@ std::vector<AdapterInfo> EnumerateDirectMLAdapters(
     }
   }
 
+  // Enumerating the adapters doesn't always give th same order, so we should
+  // sort them to keep the order consistent
+  // DXCore adapters are sorted by preference, so we don't need to sort them.
+
+  std::sort(adapters.begin(), adapters.end(),
+            [](const AdapterInfo& a, const AdapterInfo& b) {
+              return std::tie(a.luid_low_part, a.luid_low_part) <
+                     std::tie(b.luid_high_part, b.luid_high_part);
+            });
+
   return adapters;
 }
 
 std::vector<AdapterInfo> EnumerateDXCoreAdapters(
     const std::string& dxcore_directory) {
-  cil::utils::LibraryPathHandle path_handle;
+  LibraryPathHandle path_handle;
 
   if (!dxcore_directory.empty()) {
-    path_handle = cil::utils::AddLibraryPath(dxcore_directory);
+    path_handle = AddLibraryPath(dxcore_directory);
     if (!path_handle.IsValid()) return {};
   };
 
   ScopeExit library_path_cleanup([path_handle]() {
-    if (path_handle.IsValid()) cil::utils::RemoveLibraryPath(path_handle);
+    if (path_handle.IsValid()) RemoveLibraryPath(path_handle);
   });
 
   HMODULE hDXCore = LoadLibraryA("DXCore.dll");
@@ -211,6 +272,12 @@ std::vector<AdapterInfo> EnumerateDXCoreAdapters(
   hr = factory->CreateAdapterList(_countof(attributes), attributes,
                                   IID_PPV_ARGS(&adapter_list));
   if (FAILED(hr)) return {};
+
+  DXCoreAdapterPreference sortPreferences[]{
+      DXCoreAdapterPreference::Hardware,
+      DXCoreAdapterPreference::HighPerformance};
+
+  hr = adapter_list->Sort(_countof(sortPreferences), sortPreferences);
 
   size_t adapter_count = adapter_list->GetAdapterCount();
 
@@ -248,7 +315,7 @@ std::vector<AdapterInfo> EnumerateDXCoreAdapters(
     DWORD AdapterLuidHighPart = luid.HighPart;
 
     AdapterInfo info = {adapterName, adapterType, AdapterLuidLowPart,
-                        AdapterLuidHighPart};
+                        (long)AdapterLuidHighPart};
 
     adapters.push_back(info);
   }
@@ -259,14 +326,45 @@ std::vector<AdapterInfo> EnumerateDXCoreAdapters(
 std::vector<AdapterInfo> EnumerateAdapters(const std::string& dlls_directory) {
   DLL_DIRECTORY_COOKIE dll_cookie;
 
-  auto dxcore_adapters = EnumerateDXCoreAdapters(dlls_directory);
-  if (!dxcore_adapters.empty()) return dxcore_adapters;
+  auto adapters = EnumerateDXCoreAdapters(dlls_directory);
+  if (!adapters.empty()) return adapters;
 
   return EnumerateDirectMLAdapters(dlls_directory);
 }
 
+const DeviceEnumeration::DeviceList& DeviceEnumeration::EnumerateDevices(
+    const std::string& dlls_directory, const std::string& device_type,
+    const std::string& device_vendor) {
+  auto adapters = EnumerateAdapters(dlls_directory);
+
+  static auto lower_case = [](const std::string& input_string) {
+    std::string lower_case_str;
+    std::transform(input_string.begin(), input_string.end(),
+                   std::back_inserter(lower_case_str),
+                   [](unsigned char c) { return std::tolower(c); });
+    return lower_case_str;
+  };
+
+  auto lower_device_vendor = lower_case(device_vendor);
+
+  // filter out, type is empty, or type is not empty and matches
+  devices_.clear();
+  for (const auto& adapter : adapters) {
+    if (adapter.type.empty()) continue;
+    if (!device_type.empty() &&
+        adapter.type.find(device_type) == std::string::npos)
+      continue;
+    // check if the device vendor is empty or matches
+    if (!device_vendor.empty() &&
+        lower_case(adapter.name).find(lower_device_vendor) == std::string::npos)
+      continue;
+    devices_.push_back(adapter);
+  }
+  return devices_;
+}
+
 }  // namespace DirectML
-}  // namespace utils
+}  // namespace common
 }  // namespace cil
 
 #endif

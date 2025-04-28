@@ -90,20 +90,26 @@ class Unpacker {
    *
    * @return The size of all the unpacked files.
    */
-
   size_t GetAllDataSize() const;
   /**
-   * @brief Unpack files from a ZIP file.
+   * @brief Unpack files from a ZIP file with a timeout.
    *
    * This method will extract all the files from the ZIP file to the destination
-   * directory.
+   * directory with a timeout if not 0
+   * The timeout will be calculated based on the size of the ZIP file.
    *
    * @param zip_file The path to the ZIP file.
    * @param dest_dir The destination directory.
+   * @param timeout_ms Timeout duration in milliseconds for the unpacking
+   * process.
+   *                  - (<0):  Default timeout based on file size
+   *                  - (=0):  No timeout
+   *                  - (>0): Custom timeout in milliseconds
    * @return A vector of strings that contains the paths of the unpacked files.
    */
   static std::vector<std::string> UnpackFilesFromZIP(
-      const std::string& zip_file, const std::string& dest_dir);
+      const std::string& zip_file, const std::string& dest_dir,
+      int64_t timeout_ms = -1);
 
  private:
   bool ExtractFileFromMemory(const unsigned char* data[], size_t data_size,

@@ -51,7 +51,7 @@ extern "C" {
  *
  * @brief API version defined using Year, Month, Day format.
  */
-#define API_IHV_VERSION 240426
+#define API_IHV_VERSION 250205
 
 /**
  * @enum API_IHV_LogLevel
@@ -192,6 +192,11 @@ struct API_IHV_Setup_t {
 };
 
 /**
+ * @brief Device ID.
+ */
+typedef int API_IHV_DeviceID_t;
+
+/**
  * @struct API_IHV_Init_t
  *
  * @brief Structure for initializing the IHV library and setting up the
@@ -222,6 +227,11 @@ struct API_IHV_Init_t {
    * @brief Model configuration parameters for the llama2.
    */
   const char *model_config;
+
+  /**
+   * @brief Optional device ID. NULL for default device.
+   */
+  const API_IHV_DeviceID_t *device_id;
 };
 
 /**
@@ -392,6 +402,54 @@ struct API_IHV_Simple_t {
   const struct API_IHV_Struct_t *const ihv_struct;
 };
 
+#define API_IHV_MAX_DEVICE_NAME_LENGTH 256
+
+struct API_IHV_DeviceInfo_t {
+  /**
+   * @brief Device ID.
+   */
+  API_IHV_DeviceID_t device_id;
+
+  /**
+   * @brief Full device name.
+   */
+  char device_name[API_IHV_MAX_DEVICE_NAME_LENGTH];
+};
+
+struct API_IHV_DeviceList_t {
+  /**
+   * @brief Number of available devices.
+   */
+  size_t count;
+
+  /**
+   * @brief Device info data.
+   */
+  API_IHV_DeviceInfo_t device_info_data[];
+};
+
+struct API_IHV_DeviceEnumeration_t {
+  /**
+   * @brief Context for the logger function. Read-only.
+   */
+  void *context;
+  /**
+   * @brief  Function pointer to the logger function.
+   */
+  API_IHV_Logger_func logger;
+  /**
+   * @brief Pointer to IHV configuration.
+   */
+  const struct API_IHV_Struct_t *const ihv_struct;
+  /**
+   * @brief Pointer to the list with available devices. Read-only.
+   *
+   * @details buffer will be allocated on the first call to device
+   * enumeration function and kept alive until Deinit() is called.
+   */
+  const struct API_IHV_DeviceList_t *device_list;
+};
+
 /**
  * @def API_IHV_RETURN_SUCCESS
  *
@@ -413,13 +471,14 @@ struct API_IHV_Simple_t {
  *
  * The benchmarking tool will call the functions in the following order:
  * 1. API_IHV_Setup()
- * 2. API_IHV_Init()
- * 3. loop:
- *   3.1 API_IHV_Prepare()
- *   3.2 API_IHV_Infer()
- *   3.3 API_IHV_Reset()
- * 4. API_IHV_Deinit()
- * 5. API_IHV_Release()
+ * 2. API_IHV_EnumerateDevices()
+ * 3. API_IHV_Init()
+ * 4. loop:
+ *   4.1 API_IHV_Prepare()
+ *   4.2 API_IHV_Infer()
+ *   4.3 API_IHV_Reset()
+ * 5. API_IHV_Deinit()
+ * 6. API_IHV_Release()
  */
 /**
  * @typedef API_IHV_Setup_func
@@ -444,6 +503,17 @@ struct API_IHV_Simple_t {
  */
 typedef const struct API_IHV_Struct_t *(*API_IHV_Setup_func)(
     const struct API_IHV_Setup_t *api);
+
+/**
+ * @typedef API_IHV_EnumerateDevices_func
+ *
+ * @brief Function pointer type for the EnumerateDevices function.
+ *
+ * @details Enumerates available devices for provided model. Returns a list of
+ * DeviceInfo structures containing device ID and additional information.
+ */
+typedef int (*API_IHV_EnumerateDevices_func)(
+    struct API_IHV_DeviceEnumeration_t *api);
 
 /**
  * @typedef API_IHV_Init_func
@@ -533,6 +603,8 @@ typedef void (*API_IHV_Release_func)(const struct API_IHV_Release_t *api);
 #define EXPORT_API_IHV                                                \
   EXPORT_API const struct API_IHV_Struct_t *API_IHV_Setup(            \
       const struct API_IHV_Setup_t *api);                             \
+  EXPORT_API int API_IHV_EnumerateDevices(                            \
+      struct API_IHV_DeviceEnumeration_t *api);                       \
   EXPORT_API int API_IHV_Init(const struct API_IHV_Init_t *api);      \
   EXPORT_API int API_IHV_Prepare(const struct API_IHV_Simple_t *api); \
   EXPORT_API int API_IHV_Infer(struct API_IHV_Infer_t *api);          \

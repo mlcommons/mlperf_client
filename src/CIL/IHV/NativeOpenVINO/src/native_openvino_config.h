@@ -8,18 +8,20 @@
 #undef max
 
 namespace cil {
-
 namespace IHV {
 
 class NativeOpenVINOExecutionProviderSettings {
  public:
   NativeOpenVINOExecutionProviderSettings() = default;
+
   inline NativeOpenVINOExecutionProviderSettings(const nlohmann::json& j) {
     FromJson(j);
   }
+
   ~NativeOpenVINOExecutionProviderSettings() = default;
 
   const std::string& GetDeviceType() const { return device_type_; }
+  std::optional<size_t> GetDeviceId() const { return device_id_; }
   const std::optional<int>& GetNumOfThreads() const { return num_of_threads_; }
   const std::optional<int>& GetNumStreams() const { return num_streams_; }
 
@@ -30,6 +32,10 @@ class NativeOpenVINOExecutionProviderSettings {
 
     if (j.contains("device_type")) {
       j.at("device_type").get_to(obj.device_type_);
+    }
+
+    if (j.contains("device_id")) {
+      obj.device_id_ = j.value("device_id", 0);
     }
 
     if (j.contains("num_of_threads")) {
@@ -49,9 +55,10 @@ class NativeOpenVINOExecutionProviderSettings {
 
  private:
   std::string device_type_;
+  std::optional<size_t> device_id_{std::nullopt};
   std::optional<int> num_of_threads_;
   std::optional<int> num_streams_;
 };
-}  // namespace IHV
 
+}  // namespace IHV
 }  // namespace cil

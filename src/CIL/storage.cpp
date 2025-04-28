@@ -107,7 +107,14 @@ bool Storage::FindFile(const std::string& file_name, const std::string& sub_dir,
  */
 std::string Storage::CheckIfLocalFileExists(const std::string& file_name,
                                             const std::string& sub_dir,
-                                            bool ignore_cache) {
+                                            bool ignore_cache,
+                                            bool cache_local_files) {
+  if (!cache_local_files && file_name.rfind("file://", 0) == 0) {
+    auto file_path = std::filesystem::path(file_name.substr(7));
+    if (fs::exists(file_path)) {
+      return file_path.string();
+    }
+  }
   std::string actual_file_name = ExtractFilenameFromURI(file_name);
   if (actual_file_name.empty()) {
     return actual_file_name;

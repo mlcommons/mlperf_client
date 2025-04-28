@@ -13,12 +13,12 @@ set(OPENVINO_INSTALL_DIR "" CACHE PATH "Path to the OpenVINO installation direct
 include(FetchContent)
 
 if(NOT OPENVINO_INSTALL_DIR)
-    message(STATUS "OPENVINO_INSTALL_DIR is not set. Using 2024.5 RC4 OpenVINO GenAI from official source")
+    message(STATUS "OPENVINO_INSTALL_DIR is not set. Using 2025.0.1 OpenVINO GenAI from official source")
 	
 # Download and unpack the ZIP file
 FetchContent_Declare(
   OPENVINO_GENAI
-  URL https://storage.openvinotoolkit.org/repositories/openvino_genai/packages/pre-release/2024.5.0.0rc4/openvino_genai_windows_2024.5.0.0rc4_x86_64.zip  # URL to the ZIP file
+  URL https://storage.openvinotoolkit.org/repositories/openvino_genai/packages/2025.0.1/windows/openvino_genai_windows_2025.0.1.0_x86_64.zip # URL to the ZIP file
 )
 
 FetchContent_MakeAvailable(OPENVINO_GENAI)

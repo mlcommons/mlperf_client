@@ -140,7 +140,17 @@ class BaseInference {
    *
    * @return The error message.
    */
-  std::string GetErrorMessage() const;
+  std::string GetErrorMessage(bool include_ep_errors = true) const;
+
+  /**
+   * @brief Gets the EP error messages.
+  * 
+  * * This method returns the EP error messages if any error occurred during
+   * the calls to IHV implementations
+   *
+   * @return The IHV error messages.
+  */
+  std::string GetEPErrorMessages() const;
 
   /**
    * @brief Sets the benchmark time in seconds.
@@ -213,9 +223,6 @@ class BaseInference {
   const std::string library_path_;
   std::unique_ptr<API_Handler> api_handler_;
 
-  // Results
-  std::string device_type_;
-  std::string error_message_;
   double benchmark_time_;
 
   // Metadata
@@ -223,6 +230,11 @@ class BaseInference {
 
   // Logger
   log4cxx::LoggerPtr logger_;
+
+  private:
+
+  std::string device_type_;
+  std::string error_message_;
 };
 }  // namespace infer
 }  // namespace cil

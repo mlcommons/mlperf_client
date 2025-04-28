@@ -27,12 +27,22 @@ cil::IHV::OrtGenAI::OrtGenAI(const API_IHV_Setup_t& api) {
   if (!model_name.compare("llama2")) {
     inference_ = std::make_shared<infer::Llama2Inference>(
         model_path, ep_name, deps_dir, ep_settings, logger);
+
+    auto error_message = inference_->GetErrorMessage();
+    if (!error_message.empty()) {
+      api.logger(api.context, API_IHV_LogLevel::API_IHV_ERROR,
+                 error_message.c_str());
+      inference_.reset();
+    }
+    
     return;
   }
 
   api.logger(api.context, API_IHV_LogLevel::API_IHV_FATAL,
              std::format("Model {} is not supported", model_name).c_str());
 }
+
+DEFINE_IHV_CLASS_ENUMERATE_DEVICES_IMPL(cil::IHV::OrtGenAI)
 
 bool cil::IHV::OrtGenAI::Init(const API_IHV_Init_t& api) {
   if (inference_ == nullptr) {
@@ -43,7 +53,11 @@ bool cil::IHV::OrtGenAI::Init(const API_IHV_Init_t& api) {
 
   if (auto llama2_inference =
           std::dynamic_pointer_cast<infer::Llama2Inference>(inference_)) {
-    llama2_inference->Init(nlohmann::json::parse(api.model_config));
+    const std::optional<API_IHV_DeviceID_t> device_id =
+      api.device_id != nullptr ?
+      std::optional<API_IHV_DeviceID_t>{*api.device_id} : std::nullopt;
+    llama2_inference->Init(nlohmann::json::parse(api.model_config),
+                           device_id);
 
   } else {
     inference_->Init();

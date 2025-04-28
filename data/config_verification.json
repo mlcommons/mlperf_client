@@ -1,6 +1,7 @@
 {
- "AMD_ORTGenAI-DML_GPU.json": "1644f1aea8ab80c4a10784f3062a8ad9d6b6970115d8222e80f3dcf13aa220ea",
- "Intel_ORTGenAI-DML_GPU.json": "662ddb11fc0d353728b2f443c16948e2fc71dd35c5efc277acb4d047b6e9fd27",
- "Intel_OpenVINO_GPU_Default.json": "2c1e84a87f80fbc05bb138adb3ef65d68a6a19922f79bbec987b05b0a9e4a0a5",
- "NVIDIA_ORTGenAI-DML_GPU.json": "e3b2ae0b68e17f8d26eefd965a549998aa46ded2e9bc65efc193358836af9041"
+ "AMD_ORTGenAI-DML_GPU.json": "0c2166f317d6afe53aea7abaf79c9a571436817df3baec098aec7198e9c6ea56",
+ "Intel_ORTGenAI-DML_GPU.json": "f9a06cab4ee70643b2ec205b7ab70e6d537e2205869ebfa5836fdcc10c9de2d6",
+ "Intel_OpenVINO_GPU_Default.json": "cc76a95eeef466004a9fc174ab1fadc92209c16657fa4d2429d17c1178f0fc99",
+ "Intel_OpenVINO_NPU_Default.json": "04ecf017ed1c79c8dabddfcc1153897248151828b7e0dca0bcb51e4bac5d9e6c",
+ "NVIDIA_ORTGenAI-DML_GPU.json": "8215bd9bf2c9e69b390147b5a366bba7e6e13f8aa91a6ecdce08464743c694c9"
 }

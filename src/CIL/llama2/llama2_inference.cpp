@@ -25,15 +25,15 @@ bool Llama2Inference::IsValid() const { return api_handler_->IsLoaded(); }
 
 void Llama2Inference::Init(const std::string& config) {
   if (!api_handler_->IsLoaded()) {
-    error_message_ =
-        api_handler_->LibraryName() + " not loaded!: " + library_path_;
+    SetErrorMessage(api_handler_->LibraryName() +
+                    " not loaded!: " + library_path_);
     return;
   }
 
   auto init_start_time = std::chrono::high_resolution_clock::now();
 
   if (!api_handler_->Init(config)) {
-    error_message_ = "Failed to initialize " + api_type_;
+    SetErrorMessage("Failed to initialize " + api_type_);
     return;
   }
 
@@ -42,7 +42,7 @@ void Llama2Inference::Init(const std::string& config) {
   LogTime(api_type_ + " Init (Session creation) time: ", init_start_time,
           init_end_time);
 
-  error_message_.clear();
+  SetErrorMessage("");
 }
 
 void Llama2Inference::TokenCallback(void* object, Token token) {
@@ -54,8 +54,8 @@ void Llama2Inference::TokenCallback(void* object, Token token) {
 Llama2Inference::Result Llama2Inference::Run(
     std::span<const Token> input_data) {
   if (!api_handler_->IsLoaded()) {
-    error_message_ =
-        api_handler_->LibraryName() + " not loaded!: " + library_path_;
+    SetErrorMessage(api_handler_->LibraryName() +
+                    " not loaded!: " + library_path_);
     return {};
   }
 
@@ -72,7 +72,7 @@ Llama2Inference::Result Llama2Inference::Run(
 
   const auto start_time = Clock::now();
   if (!api_handler_->Infer(io_data)) {
-    error_message_ = "Failed to run inference for " + api_type_;
+    SetErrorMessage("Failed to run inference for " + api_type_);
     return {};
   }
   const auto end_time = Clock::now();
@@ -100,7 +100,7 @@ Llama2Inference::Result Llama2Inference::Run(
     LOG4CXX_INFO(GetLogger(), "Not enough timestamp samples");
   }
 
-  error_message_.clear();
+  SetErrorMessage("");
 
   // Actual tokens were returned through IO data
   if (io_data.output_size != 0 && io_data.output != nullptr) {
@@ -119,47 +119,47 @@ Llama2Inference::Result Llama2Inference::Run(
 
 void Llama2Inference::Deinit() {
   if (!api_handler_->IsLoaded()) {
-    error_message_ =
-        api_handler_->LibraryName() + " not loaded!: " + library_path_;
+    SetErrorMessage(api_handler_->LibraryName() +
+                    " not loaded!: " + library_path_);
     return;
   }
 
   if (!api_handler_->Deinit()) {
-    error_message_ = "Failed to deinitialize " + api_type_;
+    SetErrorMessage("Failed to deinitialize " + api_type_);
     return;
   }
 
-  error_message_.clear();
+  SetErrorMessage("");
 }
 
 void Llama2Inference::Prepare() {
   if (!api_handler_->IsLoaded()) {
-    error_message_ =
-        api_handler_->LibraryName() + " not loaded!: " + library_path_;
+    SetErrorMessage(api_handler_->LibraryName() +
+                    " not loaded!: " + library_path_);
     return;
   }
 
   if (!api_handler_->Prepare()) {
-    error_message_ = "Failed to prepare " + api_type_;
+    SetErrorMessage("Failed to prepare " + api_type_);
     return;
   }
 
-  error_message_.clear();
+  SetErrorMessage("");
 }
 
 void Llama2Inference::Reset() {
   if (!api_handler_->IsLoaded()) {
-    error_message_ =
-        api_handler_->LibraryName() + " not loaded!: " + library_path_;
+    SetErrorMessage(api_handler_->LibraryName() +
+                    " not loaded!: " + library_path_);
     return;
   }
 
   if (!api_handler_->Reset()) {
-    error_message_ = "Failed to reset " + api_type_;
+    SetErrorMessage("Failed to reset " + api_type_);
     return;
   }
 
-  error_message_.clear();
+  SetErrorMessage("");
 }
 
 }  // namespace cil::infer

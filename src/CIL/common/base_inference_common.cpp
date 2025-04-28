@@ -33,4 +33,21 @@ void BaseInferenceCommon::SetErrorMessage(const std::string& error_message) {
   error_message_ = error_message;
 }
 
+const API_IHV_DeviceList_t *const BaseInferenceCommon::EnumerateDevices() {
+  static DeviceListPtr dev_list = []() -> DeviceListPtr {
+    API_IHV_DeviceList_t *dl = AllocateDeviceList(1);
+
+    dl->count = 1;
+    dl->device_info_data[0].device_id = 0;
+    dl->device_info_data[0].device_name[0] = '0';
+
+    // Wrap device list pointer unto unique ptr with std::free deleter
+    DeviceListPtr p(dl);
+    return p;
+  }();
+
+  return dev_list.get();
+}
+
+
 }  // namespace cil::infer

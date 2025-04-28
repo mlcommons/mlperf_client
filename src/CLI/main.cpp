@@ -68,12 +68,11 @@ void generate_command_options(CommandParser& command_parser) {
                                "Show the application version and exit.", false);
   command_parser.AddFlag(version_option);
 
-  std::string config_option_description =
-      "Specify configuration file. Please refer to README file for "
-      "configuration file format.";
-
   // Add config option
-  CommandOption config_option("config", 'c', config_option_description, false);
+  CommandOption config_option("config", 'c',
+                              "Specify configuration file. Please refer to "
+                              "README file for configuration file format.",
+                              false);
   config_option.SetOptionTypeHint("file");
   config_option.SetCustomErrorMessage(
       "You must provide a path to a configuration file.");
@@ -120,6 +119,16 @@ void generate_command_options(CommandParser& command_parser) {
       download_behaviour_option,
       {"forced", "prompt", "skip_all", "deps_only", "normal"});
 
+  // Add no-cach-local-files option
+  CommandOption cache_local_files_option(
+      "cache-local-files", 'n',
+      "true by default. If it is set to false local files specified in the "
+      "config will not be copied and cached",
+      false);
+
+  cache_local_files_option.SetDefaultValue("true");
+  command_parser.AddBooleanOption(cache_local_files_option);
+
   // Add output_dir option
   CommandOption output_dir_option(
       "output-dir", 'o',
@@ -137,15 +146,32 @@ void generate_command_options(CommandParser& command_parser) {
   data_dir_option.SetOptionTypeHint("folder");
   command_parser.AddOption(data_dir_option);
 
+  // Add Enumerate devices option
+  CommandOption enumerate_option(
+      "enumerate-devices", 'e',
+      "Enumerate devices based on provided config and exit", false);
+  command_parser.AddFlag(enumerate_option);
+
+  // Add Device Id override option
+  CommandOption device_id_override_option(
+      "device-id", 'i', "Override device id from configuration", false);
+  device_id_override_option.SetCustomErrorMessage(
+      "You must provide a valid Device ID.");
+  device_id_override_option.SetDefaultValue("0");
+  device_id_override_option.SetValidValues(
+      {"all", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"});
+  command_parser.AddOption(device_id_override_option);
+
   // set the display order
-  command_parser.SetDisplayOptionOrder({
-    "help", "version", "config", "logger", "output-dir", "data-dir",
-        "pause", "list-models", "download_behaviour"
-  });
+  command_parser.SetDisplayOptionOrder(
+      {"help", "version", "config", "logger", "output-dir", "data-dir",
+       "enumerate-devices",
+       "device-id",
+       "pause",
+       "list-models", "download_behaviour", "cache-local-files"});
 }
 
 int main(int argc, char* argv[]) {
-  utils::SetCurrentDirectory();
 #if defined(_WIN32) || defined(_WIN64)
   CommandParser command_parser("mlperf-windows.exe", app_description);
 #elif defined(__APPLE__)
@@ -182,6 +208,20 @@ int main(int argc, char* argv[]) {
       std::clog << "- " << model << std::endl;
     }
     return 0;
+  }
+
+  // Make sure we are using the correct working directory from executable
+  utils::SetCurrentDirectory(utils::GetCurrentDirectory());
+
+  fs::path app_data_dir = utils::GetAppDefaultDataPath();
+  fs::path logs_dir = app_data_dir / "Logs";
+  if (!fs::exists(logs_dir)) {
+    try {
+      fs::create_directories(logs_dir);
+    } catch (const fs::filesystem_error& e) {
+      LOG4CXX_ERROR(loggerMain,
+                    "Failed to create the Logs directory: " << e.what());
+    }
   }
 
   std::shared_ptr<cil::Unpacker> unpacker = std::make_shared<cil::Unpacker>();
@@ -224,17 +264,6 @@ int main(int argc, char* argv[]) {
     // use it
     std::cout << "The logger configuration file: " << log_config_path
               << " is used." << std::endl;
-  }
-
-  fs::path logsDir = "Logs";
-
-  if (!fs::exists(logsDir)) {
-    try {
-      fs::create_directories(logsDir);
-    } catch (const fs::filesystem_error& e) {
-      LOG4CXX_ERROR(loggerMain,
-                    "Failed to create the Logs directory: " << e.what());
-    }
   }
 
   LOG4CXX_INFO(loggerMain, "Starting...");
@@ -308,64 +337,63 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
+  bool enumerate_only = command_parser.OptionPassed("enumerate-devices");
+
+  std::optional<int> device_id;
+  if (auto option = command_parser["device-id"]; option.has_value()) {
+    try {
+      if (option.value() == "all") {
+        device_id = -1;
+        LOG4CXX_INFO(loggerMain, "Device id override used: all devices");
+      } else {
+        device_id = std::stoi(option.value());
+        LOG4CXX_INFO(loggerMain,
+                     "Device id override used: " << device_id.value());
+      }
+    } catch (const std::invalid_argument&) {
+      LOG4CXX_ERROR(loggerMain, "Invalid device id: " << option.value());
+      return 1;
+    }
+  }
+
   cli::SystemController controller(config_path, unpacker, output_dir, data_dir);
   LOG4CXX_INFO(loggerMain, "Configuring scenarios...\n");
-  if (!controller.ConfigStage()) {
+  if (!controller.Config()) {
     LOG4CXX_ERROR(loggerMain, "Failed to configure scenarios, aborting...");
     return 1;
   }
-  std::string download_behaviour_option_value = "normal";
+
   if (command_parser.OptionPassed("download_behaviour")) {
-    download_behaviour_option_value =
+    auto download_behaviour_option_value =
         command_parser.GetOptionValue("download_behaviour");
-  } else {
-    std::string config_download_behavior = controller.GetDownloadBehavior();
-    if (!config_download_behavior.empty()) {
-      download_behaviour_option_value = config_download_behavior;
-    }
+    controller.SetSystemDownloadBehavior(download_behaviour_option_value);
   }
-  const auto& scenarios = controller.GetScenarios();
-  for (int i = 0; i < scenarios.size(); ++i) {
-    const auto& scenario = scenarios[i];
-    LOG4CXX_INFO(loggerMain,
-                 "\nStarting to run scenario " << scenario.GetName());
-    if (!controller.DownloadStage(i, download_behaviour_option_value)) {
-      LOG4CXX_ERROR(loggerMain,
-                    "Failed to download necessary files, skipping...");
-      continue;
-    }
-    if (download_behaviour_option_value == "deps_only") {
-      LOG4CXX_INFO(loggerMain, "Downloaded dependencies successfully.");
-      continue;
-    }
 
-    LOG4CXX_INFO(loggerMain, "\nPreparing for inferences execution...\n");
-    if (!controller.PreparationStage(i)) {
-      LOG4CXX_ERROR(loggerMain, "Inferences preparation failed, skipping...");
-      continue;
-    }
-
-    LOG4CXX_INFO(loggerMain, "Verifying files...\n");
-    if (!controller.DataVerificationStage(i)) {
-      LOG4CXX_WARN(loggerMain, "");
-    }
-
-    // Start the timer
-    auto benchmarkStart = std::chrono::high_resolution_clock::now();
-    if (!controller.BenchmarkStage(i)) {
-      LOG4CXX_ERROR(loggerMain, "Failed to run benchmarks, skipping...");
-      continue;
-    }
-    // Stop the timer and calculate the duration
-    auto benchmarkEnd = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> duration = benchmarkEnd - benchmarkStart;
-
-    LOG4CXX_INFO(loggerMain, "\n\nFinished running of scenario "
-                                 << scenario.GetName() << " in "
-                                 << duration.count() << " seconds");
-
-    controller.DisplayResultsStage();
+  if (command_parser.OptionPassed("cache-local-files")) {
+    auto cache_local_files =
+        command_parser.GetOptionValue("cache-local-files") ==
+        "true";  // default value is true
+    controller.SetSystemCacheLocalFiles(cache_local_files);
   }
+
+  auto logger = [](cli::SystemController::LogLevel log_level,
+                   const std::string& message) {
+    using enum cli::SystemController::LogLevel;
+    switch (log_level) {
+      case kInfo:
+        LOG4CXX_INFO(loggerMain, message);
+        break;
+      case kWarning:
+        LOG4CXX_WARN(loggerMain, message);
+        break;
+      case kError:
+        LOG4CXX_ERROR(loggerMain, message);
+        break;
+    }
+  };
+
+  controller.Run(logger, enumerate_only, device_id);
+
   log4cxx::LogManager::shutdown();
   std::string pause_option_value =
       command_parser.GetOptionValue("pause");  // the Default value is true

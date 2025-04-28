@@ -16,8 +16,10 @@ LoggerPtr loggerExecutionConfig(Logger::getLogger("ExecutionConfig"));
 
 namespace cil {
 
-bool ExecutionConfig::ValidateAndParse(const std::string& json_file_path,
-                                       const std::string& schema_file_path) {
+bool ExecutionConfig::ValidateAndParse(
+    const std::string& json_file_path, const std::string& schema_file_path,
+    const std::string& config_verification_file_path) {
+  config_verified_ = false;
   // Load the JSON data
   nlohmann::json json_data;
   std::ifstream json_file(json_file_path);
@@ -45,43 +47,41 @@ bool ExecutionConfig::ValidateAndParse(const std::string& json_file_path,
     return false;
   }
   FromJson(json_data);
-  return true;
-}
 
-bool ExecutionConfig::IsConfigVerified(
-    const std::string& json_file_path,
-    const std::string& config_verification_file_path) {
-  config_file_hash_ =
-      utils::ComputeFileSHA256(json_file_path, loggerExecutionConfig);
-  if (config_file_hash_.empty()) {
-    LOG4CXX_ERROR(loggerExecutionConfig,
-                  "Failed to compute the hash of the config file");
-    return false;
-  }
-  nlohmann::json config_verification_json;
-  std::ifstream config_verification_file(config_verification_file_path);
-  if (!config_verification_file.is_open()) {
-    LOG4CXX_ERROR(loggerExecutionConfig,
-                  "Failed to open config verification file");
-    return false;
-  }
-  try {
-    config_verification_file >> config_verification_json;
-  } catch (const std::exception& e) {
-    LOG4CXX_ERROR(loggerExecutionConfig,
-                  "Failed to parse config verification file.");
-    return false;
-  }
-  for (const auto& [key, value] : config_verification_json.items()) {
-    if (value == config_file_hash_) {
-      config_file_name_ = key;
+  if (!config_verification_file_path.empty()) {
+    config_file_hash_ =
+        utils::ComputeFileSHA256(json_file_path, loggerExecutionConfig);
+    if (config_file_hash_.empty()) {
+      LOG4CXX_ERROR(loggerExecutionConfig,
+                    "Failed to compute the hash of the config file");
       return true;
     }
+    nlohmann::json config_verification_json;
+    std::ifstream config_verification_file(config_verification_file_path);
+    if (!config_verification_file.is_open()) {
+      LOG4CXX_ERROR(loggerExecutionConfig,
+                    "Failed to open config verification file");
+      return true;
+    }
+    try {
+      config_verification_file >> config_verification_json;
+    } catch (const std::exception& e) {
+      LOG4CXX_ERROR(loggerExecutionConfig,
+                    "Failed to parse config verification file.");
+      return true;
+    }
+    for (const auto& [key, value] : config_verification_json.items()) {
+      if (value == config_file_hash_) {
+        config_file_name_ = key;
+        config_verified_ = true;
+        return true;
+      }
+    }
+
+    config_file_name_ = fs::path(json_file_path).filename().string();
   }
 
-  config_file_name_ = fs::path(json_file_path).filename().string();
-
-  return false;
+  return true;
 }
 
 void ExecutionConfig::from_json(const nlohmann::json& j, ExecutionConfig& obj) {
@@ -100,6 +100,9 @@ void SystemConfig::from_json(const nlohmann::json& j, SystemConfig& obj) {
   // DownloadBehavior is optional, so we have to check if it exists
   if (j.contains("DownloadBehavior")) {
     j.at("DownloadBehavior").get_to(obj.download_behavior_);
+  }
+  if (j.contains("CacheLocalFiles")) {
+    j.at("CacheLocalFiles").get_to(obj.cache_local_files_);
   }
   // comment is optional, so we have to check if it exists
   if (j.contains("Comment")) {
@@ -321,6 +324,44 @@ nlohmann::json ScenarioConfig::ToJson() const {
     j["ExecutionProviders"].push_back(ep.ToJson());
   }
   return j;
+}
+
+bool ExecutionConfig::isConfigFileValid(const std::string& json_path) {
+  bool isValid = true;
+  if (json_path.empty()) {
+    isValid = false;
+  } else {
+    fs::path json_file_path(json_path);
+    if (!fs::exists(json_file_path) || !fs::is_regular_file(json_file_path)) {
+      isValid = false;
+    }
+    // check if the file is a json file
+    if (isValid && json_file_path.extension() != ".json") {
+      isValid = false;
+    }
+  }
+  return isValid;
+}
+
+std::filesystem::path GetExecutionProviderParentLocation(
+    const cil::ExecutionProviderConfig& ep_config,
+    const std::string& deps_dir) {
+  const auto& ep_name = ep_config.GetName();
+
+  auto library_path = ep_config.GetLibraryPath();
+
+  // create path variable to store the destination directory
+  fs::path dest_dir;
+  if (!library_path.empty()) {
+    // Remove the file:// prefix if it exists
+    if (library_path.find("file://") == 0) {
+      library_path = library_path.substr(7);
+    }
+    dest_dir = fs::path(library_path).parent_path();
+  } else {
+    dest_dir = fs::path(deps_dir) / cil::GetEPDependencySubdirPath(ep_name);
+  }
+  return dest_dir;
 }
 
 }  // namespace cil

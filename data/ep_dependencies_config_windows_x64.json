@@ -5,103 +5,103 @@
       "Files": [
         {
           "Name": "tbbmalloc.dll",
-          "Path": "https://client.mlcommons-storage.org/deps/0.5/binaries/x64/NativeOpenVINO/tbbmalloc.dll"
+          "Path": "https://client.mlcommons-storage.org/deps/0.6/binaries/x64/NativeOpenVINO/tbbmalloc.dll"
         },
         {
           "Name": "tbb12.dll",
-          "Path": "https://client.mlcommons-storage.org/deps/0.5/binaries/x64/NativeOpenVINO/tbb12.dll"
+          "Path": "https://client.mlcommons-storage.org/deps/0.6/binaries/x64/NativeOpenVINO/tbb12.dll"
         },
         {
           "Name": "openvino.dll",
-          "Path": "https://client.mlcommons-storage.org/deps/0.5/binaries/x64/NativeOpenVINO/openvino.dll"
+          "Path": "https://client.mlcommons-storage.org/deps/0.6/binaries/x64/NativeOpenVINO/openvino.dll"
         },
         {
           "Name": "openvino_pytorch_frontend.dll",
-          "Path": "https://client.mlcommons-storage.org/deps/0.5/binaries/x64/NativeOpenVINO/openvino_pytorch_frontend.dll"
+          "Path": "https://client.mlcommons-storage.org/deps/0.6/binaries/x64/NativeOpenVINO/openvino_pytorch_frontend.dll"
         },
         {
           "Name": "openvino_onnx_frontend.dll",
-          "Path": "https://client.mlcommons-storage.org/deps/0.5/binaries/x64/NativeOpenVINO/openvino_onnx_frontend.dll"
+          "Path": "https://client.mlcommons-storage.org/deps/0.6/binaries/x64/NativeOpenVINO/openvino_onnx_frontend.dll"
         },
         {
           "Name": "openvino_intel_gpu_plugin.dll",
-          "Path": "https://client.mlcommons-storage.org/deps/0.5/binaries/x64/NativeOpenVINO/openvino_intel_gpu_plugin.dll"
+          "Path": "https://client.mlcommons-storage.org/deps/0.6/binaries/x64/NativeOpenVINO/openvino_intel_gpu_plugin.dll"
         },
         {
           "Name": "openvino_intel_cpu_plugin.dll",
-          "Path": "https://client.mlcommons-storage.org/deps/0.5/binaries/x64/NativeOpenVINO/openvino_intel_cpu_plugin.dll"
+          "Path": "https://client.mlcommons-storage.org/deps/0.6/binaries/x64/NativeOpenVINO/openvino_intel_cpu_plugin.dll"
         },
         {
           "Name": "openvino_intel_npu_plugin.dll",
-          "Path": "https://client.mlcommons-storage.org/deps/0.5/binaries/x64/NativeOpenVINO/openvino_intel_npu_plugin.dll"
+          "Path": "https://client.mlcommons-storage.org/deps/0.6/binaries/x64/NativeOpenVINO/openvino_intel_npu_plugin.dll"
         },
         {
           "Name": "openvino_auto_plugin.dll",
-          "Path": "https://client.mlcommons-storage.org/deps/0.5/binaries/x64/NativeOpenVINO/openvino_auto_plugin.dll"
+          "Path": "https://client.mlcommons-storage.org/deps/0.6/binaries/x64/NativeOpenVINO/openvino_auto_plugin.dll"
         },
         {
           "Name": "openvino_hetero_plugin.dll",
-          "Path": "https://client.mlcommons-storage.org/deps/0.5/binaries/x64/NativeOpenVINO/openvino_hetero_plugin.dll"
+          "Path": "https://client.mlcommons-storage.org/deps/0.6/binaries/x64/NativeOpenVINO/openvino_hetero_plugin.dll"
         },
         {
           "Name": "plugins.xml",
-          "Path": "https://client.mlcommons-storage.org/deps/0.5/binaries/x64/NativeOpenVINO/plugins.xml"
+          "Path": "https://client.mlcommons-storage.org/deps/0.6/binaries/x64/NativeOpenVINO/plugins.xml"
         },
         {
           "Name": "core_tokenizers.dll",
-          "Path": "https://client.mlcommons-storage.org/deps/0.5/binaries/x64/NativeOpenVINO/core_tokenizers.dll"
+          "Path": "https://client.mlcommons-storage.org/deps/0.6/binaries/x64/NativeOpenVINO/core_tokenizers.dll"
         },
         {
           "Name": "icudt70.dll",
-          "Path": "https://client.mlcommons-storage.org/deps/0.5/binaries/x64/NativeOpenVINO/icudt70.dll"
+          "Path": "https://client.mlcommons-storage.org/deps/0.6/binaries/x64/NativeOpenVINO/icudt70.dll"
         },
         {
           "Name": "icuuc70.dll",
-          "Path": "https://client.mlcommons-storage.org/deps/0.5/binaries/x64/NativeOpenVINO/icuuc70.dll"
+          "Path": "https://client.mlcommons-storage.org/deps/0.6/binaries/x64/NativeOpenVINO/icuuc70.dll"
         },
         {
           "Name": "openvino_auto_batch_plugin.dll",
-          "Path": "https://client.mlcommons-storage.org/deps/0.5/binaries/x64/NativeOpenVINO/openvino_auto_batch_plugin.dll"
+          "Path": "https://client.mlcommons-storage.org/deps/0.6/binaries/x64/NativeOpenVINO/openvino_auto_batch_plugin.dll"
         },
         {
           "Name": "openvino_auto_plugin.dll",
-          "Path": "https://client.mlcommons-storage.org/deps/0.5/binaries/x64/NativeOpenVINO/openvino_auto_plugin.dll"
+          "Path": "https://client.mlcommons-storage.org/deps/0.6/binaries/x64/NativeOpenVINO/openvino_auto_plugin.dll"
         },
         {
           "Name": "openvino_c.dll",
-          "Path": "https://client.mlcommons-storage.org/deps/0.5/binaries/x64/NativeOpenVINO/openvino_c.dll"
+          "Path": "https://client.mlcommons-storage.org/deps/0.6/binaries/x64/NativeOpenVINO/openvino_c.dll"
         },
         {
           "Name": "openvino_genai.dll",
-          "Path": "https://client.mlcommons-storage.org/deps/0.5/binaries/x64/NativeOpenVINO/openvino_genai.dll"
+          "Path": "https://client.mlcommons-storage.org/deps/0.6/binaries/x64/NativeOpenVINO/openvino_genai.dll"
         },
         {
           "Name": "openvino_hetero_plugin.dll",
-          "Path": "https://client.mlcommons-storage.org/deps/0.5/binaries/x64/NativeOpenVINO/openvino_hetero_plugin.dll"
+          "Path": "https://client.mlcommons-storage.org/deps/0.6/binaries/x64/NativeOpenVINO/openvino_hetero_plugin.dll"
         },
         {
           "Name": "openvino_intel_npu_plugin.dll",
-          "Path": "https://client.mlcommons-storage.org/deps/0.5/binaries/x64/NativeOpenVINO/openvino_intel_npu_plugin.dll"
+          "Path": "https://client.mlcommons-storage.org/deps/0.6/binaries/x64/NativeOpenVINO/openvino_intel_npu_plugin.dll"
         },
         {
           "Name": "openvino_ir_frontend.dll",
-          "Path": "https://client.mlcommons-storage.org/deps/0.5/binaries/x64/NativeOpenVINO/openvino_ir_frontend.dll"
+          "Path": "https://client.mlcommons-storage.org/deps/0.6/binaries/x64/NativeOpenVINO/openvino_ir_frontend.dll"
         },
         {
           "Name": "openvino_tokenizers.dll",
-          "Path": "https://client.mlcommons-storage.org/deps/0.5/binaries/x64/NativeOpenVINO/openvino_tokenizers.dll"
+          "Path": "https://client.mlcommons-storage.org/deps/0.6/binaries/x64/NativeOpenVINO/openvino_tokenizers.dll"
         },
         {
           "Name": "openvino_paddle_frontend.dll",
-          "Path": "https://client.mlcommons-storage.org/deps/0.5/binaries/x64/NativeOpenVINO/openvino_paddle_frontend.dll"
+          "Path": "https://client.mlcommons-storage.org/deps/0.6/binaries/x64/NativeOpenVINO/openvino_paddle_frontend.dll"
         },
         {
           "Name": "openvino_tensorflow_frontend.dll",
-          "Path": "https://client.mlcommons-storage.org/deps/0.5/binaries/x64/NativeOpenVINO/openvino_tensorflow_frontend.dll"
+          "Path": "https://client.mlcommons-storage.org/deps/0.6/binaries/x64/NativeOpenVINO/openvino_tensorflow_frontend.dll"
         },
         {
           "Name": "openvino_tensorflow_lite_frontend.dll",
-          "Path": "https://client.mlcommons-storage.org/deps/0.5/binaries/x64/NativeOpenVINO/openvino_tensorflow_lite_frontend.dll"
+          "Path": "https://client.mlcommons-storage.org/deps/0.6/binaries/x64/NativeOpenVINO/openvino_tensorflow_lite_frontend.dll"
         }
       ]
     },
@@ -110,15 +110,15 @@
       "Files": [
         {
           "Name": "onnxruntime-genai.dll",
-          "Path": "https://client.mlcommons-storage.org/deps/0.5/binaries/x64/OrtGenAI/onnxruntime-genai.dll"
+          "Path": "https://client.mlcommons-storage.org/deps/0.6/binaries/x64/OrtGenAI/onnxruntime-genai.dll"
         },
         {
           "Name": "onnxruntime.dll",
-          "Path": "https://client.mlcommons-storage.org/deps/0.5/binaries/x64/OrtGenAI/onnxruntime.dll"
+          "Path": "https://client.mlcommons-storage.org/deps/0.6/binaries/x64/OrtGenAI/onnxruntime.dll"
         },
         {
           "Name": "DirectML.dll",
-          "Path": "https://client.mlcommons-storage.org/deps/0.5/binaries/x64/OrtGenAI/DirectML.dll"
+          "Path": "https://client.mlcommons-storage.org/deps/0.6/binaries/x64/OrtGenAI/DirectML.dll"
         }
       ]
     }

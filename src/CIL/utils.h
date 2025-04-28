@@ -51,6 +51,18 @@ inline fs::path GetAppDefaultTempPath() {
 }
 
 /**
+ * @brief Retrieves the path to the default data directory.
+ *
+ * This function returns the path to a default data directory used by the
+ * application.
+ *
+ * @return A path to the default data directory.
+ */
+inline fs::path GetAppDefaultDataPath() {
+  return fs::current_path();
+}
+
+/**
  * A handle returned by AddLibraryPath function and used to remove the
  * directory from the search path.
  */
@@ -106,7 +118,7 @@ std::string GetCurrentDirectory();
  * directory from which it was launched. For Windows, it uses
  * `SetCurrentDirectoryA`, and for other systems, it uses `chdir`.
  */
-void SetCurrentDirectory();
+void SetCurrentDirectory(const std::string& path = "");
 /**
  * @brief Creates a directory at the specified path.
  *

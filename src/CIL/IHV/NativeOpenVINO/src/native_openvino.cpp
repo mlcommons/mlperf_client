@@ -34,12 +34,21 @@ cil::IHV::NativeOpenVINO::NativeOpenVINO(const API_IHV_Setup_t& api) {
     inference_ = std::make_shared<infer::Llama2Inference>(
         model_path, ep_settings, logger, api.deps_dir);
 
+    auto error_message = inference_->GetErrorMessage();
+    if (!error_message.empty()) {
+      api.logger(api.context, API_IHV_LogLevel::API_IHV_ERROR,
+                 error_message.c_str());
+      inference_.reset();
+    }
+
     return;
   }
 
   auto error = "Model " + model_name + " is not supported";
   api.logger(api.context, API_IHV_LogLevel::API_IHV_FATAL, error.c_str());
 }
+
+DEFINE_IHV_CLASS_ENUMERATE_DEVICES_IMPL(cil::IHV::NativeOpenVINO)
 
 bool cil::IHV::NativeOpenVINO::Init(const API_IHV_Init_t& api) {
   if (inference_ == nullptr) {
@@ -52,8 +61,12 @@ bool cil::IHV::NativeOpenVINO::Init(const API_IHV_Init_t& api) {
           std::dynamic_pointer_cast<infer::Llama2Inference>(inference_);
       llama2_inference != nullptr) {
     // Load model configs
-    std::string model_config = api.model_config;
-    llama2_inference->Init(nlohmann::json::parse(api.model_config));
+    const std::string model_config = api.model_config;
+    const std::optional<API_IHV_DeviceID_t> device_id =
+      api.device_id != nullptr ?
+      std::optional<API_IHV_DeviceID_t>{*api.device_id} : std::nullopt;
+    llama2_inference->Init(nlohmann::json::parse(api.model_config),
+                           device_id);
   } else {
     api.logger(api.context, API_IHV_LogLevel::API_IHV_FATAL,
                "IHV NativeOpenVINO Init: The inference model is unknown!");
@@ -185,3 +198,19 @@ bool cil::IHV::NativeOpenVINO::Deinit(const API_IHV_Deinit_t& api) {
 DEFINE_API_IHV_BASIC_IMPL(cil::IHV::NativeOpenVINO,
                           API_IHV_NATIVE_OPENVINO_NAME,
                           API_IHV_NATIVE_OPENVINO_VERSION)
+
+#include <Windows.h>
+
+BOOL WINAPI DllMain(HINSTANCE hinstDLL,
+                    DWORD fdwReason,
+                    LPVOID lpvReserved ) {
+  if (fdwReason == DLL_PROCESS_ATTACH) {
+    // FIXME Workaround to be removed in the next version
+    // Increase library counter to avoid static objects
+    // destructors ordering issue.
+    LoadLibraryExA("IHV_NativeOpenVINO.dll",
+                   0,
+                   LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+  }
+  return TRUE;
+}

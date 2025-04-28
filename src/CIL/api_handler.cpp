@@ -25,6 +25,9 @@ API_Handler::API_Handler(Type type, const std::string& library_path,
                                        dylib::no_filename_decorations);
     setup_ = library_->get_function<std::remove_pointer_t<API_IHV_Setup_func>>(
         "API_IHV_Setup");
+    enumerate_devices_ = library_->get_function<
+        std::remove_pointer_t<API_IHV_EnumerateDevices_func>>(
+        "API_IHV_EnumerateDevices");
     init_ = library_->get_function<std::remove_pointer_t<API_IHV_Init_func>>(
         "API_IHV_Init");
     prepare_ =
@@ -103,13 +106,43 @@ bool API_Handler::Setup(const std::string& ep_name,
   }
 }
 
-bool API_Handler::Init(const std::string& model_config) {
+bool API_Handler::EnumerateDevices(API_Handler::DeviceListPtr& device_list) {
   if (!IsLoaded()) {
     logger_(LogLevel::kFatal, LibraryName() + " library is not loaded.");
     return false;
   }
 
-  API_IHV_Init_t api = {this, &Log, ihv_struct_, model_config.c_str()};
+  API_IHV_DeviceEnumeration_t api = {this, &Log, ihv_struct_, nullptr};
+
+  try {
+    if (enumerate_devices_(&api) != API_IHV_RETURN_SUCCESS) {
+      logger_(LogLevel::kFatal,
+              LibraryName() + " unsuccessful device enumeration.");
+      return false;
+    }
+    if (nullptr == api.device_list) {
+      logger_(LogLevel::kFatal, LibraryName() + " no device list provided.");
+      return false;
+    }
+
+    device_list = api.device_list;
+    return true;
+  } catch (const std::exception& e) {
+    logger_(LogLevel::kFatal, "Failed to call EnumerateDevices() for " +
+                                  LibraryName() + " library. " + e.what());
+    return false;
+  }
+}
+
+bool API_Handler::Init(const std::string& model_config,
+                       std::optional<API_IHV_DeviceID_t> device_id) {
+  if (!IsLoaded()) {
+    logger_(LogLevel::kFatal, LibraryName() + " library is not loaded.");
+    return false;
+  }
+
+  API_IHV_Init_t api = {this, &Log, ihv_struct_, model_config.c_str(),
+                        device_id.has_value() ? &device_id.value() : nullptr};
 
   try {
     return init_(&api) == API_IHV_RETURN_SUCCESS;
@@ -241,7 +274,7 @@ std::string API_Handler::CanBeLoaded(API_Handler::Type type,
 
   Logger logger = [&ss](LogLevel level, std::string message) {
     using enum LogLevel;
-    
+
     switch (level) {
       case kInfo:
         ss << "INFO: ";
@@ -264,6 +297,77 @@ std::string API_Handler::CanBeLoaded(API_Handler::Type type,
   return ss.str();
 }
 
+API_Handler::DeviceList API_Handler::EnumerateDevices(
+    API_Handler::Type type,
+                              const std::string& library_path,
+                              const std::string& ep_name,
+                              const std::string& model_name,
+                              const nlohmann::json& ep_settings,
+                              std::string& error,
+                              std::string& log) {
+  std::stringstream ss;
+  std::stringstream ss_err;
+
+  Logger logger = [&ss, &ss_err](LogLevel level, std::string message) {
+    using enum LogLevel;
+
+    switch (level) {
+      case kInfo:
+        ss << "INFO: ";
+        ss << message << std::endl;
+        break;
+      case kWarning:
+        ss << "WARNING: ";
+        ss << message << std::endl;
+        break;
+      case kError:
+        ss_err << "ERROR: ";
+        ss_err << message << std::endl;
+        break;
+      case kFatal:
+        ss_err << "FATAL: ";
+        ss_err << message << std::endl;
+        break;
+    }
+  };
+
+  auto api_handler = std::make_unique<API_Handler>(type, library_path, logger);
+
+  auto deps_dir = fs::absolute(fs::path(library_path).parent_path()).string();
+
+  std::string device_type_out;
+  if (!api_handler->Setup(ep_name, model_name, "", deps_dir, ep_settings,
+                          device_type_out)) {
+    log = ss.str();
+    error = ss_err.str();
+    return {};
+  }
+
+  API_Handler::DeviceListPtr device_list;
+
+  if (!api_handler->EnumerateDevices(device_list)) {
+    log = ss.str();
+    error = ss_err.str();
+    return {};
+  }
+
+  DeviceList devices;
+  for (size_t i = 0; i < device_list->count; ++i) {
+    auto device_id = device_list->device_info_data[i].device_id;
+    auto device_name = device_list->device_info_data[i].device_name;
+    if (device_name == nullptr) {
+      device_name = "";
+    }
+    DeviceInfo device_info = {device_id, device_name};
+    devices.emplace_back(device_info);
+  }
+
+  log = ss.str();
+  error = ss_err.str();
+
+  return devices;
+}
+
 void API_Handler::Log(void* context, API_IHV_LogLevel level,
                       const char* message) {
   auto* obj = static_cast<API_Handler*>(context);
@@ -281,10 +385,14 @@ void API_Handler::Log(void* context, API_IHV_LogLevel level,
       break;
     case API_IHV_ERROR:
       obj->logger_(LogLevel::kError, message);
+      obj->ihv_errors_ += message;
+      obj->ihv_errors_ += "\n";
       break;
     case API_IHV_FATAL:
     default:
       obj->logger_(LogLevel::kFatal, message);
+      obj->ihv_errors_ += message;
+      obj->ihv_errors_ += "\n";
       break;
   }
 }

@@ -2,6 +2,7 @@
 
 #include <functional>
 #include <nlohmann/json.hpp>
+#include <optional>
 #include <string>
 
 #include "IHV/IHV.h"
@@ -25,6 +26,7 @@ class API_Handler {
   };
 
   using Logger = std::function<void(LogLevel, std::string)>;
+  using DeviceListPtr = const API_IHV_DeviceList_t*;
 
   API_Handler(Type type, const std::string& library_path, Logger logger);
   virtual ~API_Handler();
@@ -40,8 +42,11 @@ class API_Handler {
   bool Setup(const std::string& ep_name, const std::string& model_name,
              const std::string& model_path, const std::string& deps_dir,
              const nlohmann::json& ep_settings, std::string& device_type_out);
-
-  bool Init(const std::string& model_config = std::string());  // Load model
+  // Enumerate available devices
+  bool EnumerateDevices(DeviceListPtr& device_list);
+  // Load model on specified device (or default if not provided)
+  bool Init(const std::string& model_config = std::string(),
+            std::optional<API_IHV_DeviceID_t> device_id = std::nullopt);
   bool Prepare();                          // Setup inference
   bool Infer(API_IHV_IO_Data_t& io_data);  // Run inference
   bool Reset();                            // Reset inference
@@ -50,6 +55,22 @@ class API_Handler {
 
   static std::string CanBeLoaded(API_Handler::Type type,
                                  const std::string& library_path);
+
+  struct DeviceInfo {
+    API_IHV_DeviceID_t device_id;
+    std::string device_name;
+  };
+
+  typedef std::vector<DeviceInfo> DeviceList;
+
+  static DeviceList EnumerateDevices(API_Handler::Type type,
+                                     const std::string& library_path,
+                                     const std::string& ep_name,
+                                     const std::string& model_name,
+                                     const nlohmann::json& ep_settings,
+                                     std::string& error, std::string& log);
+
+  std::string GetIHVErrors() const { return ihv_errors_; }
 
  private:
   static void Log(void* context, API_IHV_LogLevel level, const char* message);
@@ -61,6 +82,7 @@ class API_Handler {
   Logger logger_;
 
   API_IHV_Setup_func setup_ = nullptr;
+  API_IHV_EnumerateDevices_func enumerate_devices_ = nullptr;
   API_IHV_Init_func init_ = nullptr;
   API_IHV_Prepare_func prepare_ = nullptr;
   API_IHV_Infer_func infer_ = nullptr;
@@ -72,6 +94,8 @@ class API_Handler {
   utils::LibraryPathHandle library_path_handle_;
   Type type_;
   std::string library_path_directory_;
+
+  std::string ihv_errors_;
 };
 
 }  // namespace cil

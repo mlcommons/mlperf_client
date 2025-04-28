@@ -17,9 +17,9 @@ However, if you wish to build the libraries, the following scripts are available
 **Note:**
 > GUI work is in progress
 
-## Table of macOS
+## Table of Contents
 - [MLPerf Client benchmark](#mlperf-client-benchmark)
-  - [Table of macOS](#table-of-contents)
+  - [Table of Contents](#table-of-contents)
   - [Prerequisites](#prerequisites)
     - [macOS](#macos)
       - [macOS CLI Mode](#macos-cli-mode)
@@ -37,7 +37,7 @@ However, if you wish to build the libraries, the following scripts are available
 ## Prerequisites
 ### macOS
 #### macOS CLI Mode
-- Xcode 15.3
+- Xcode
 - Make sure to install the following components:
   - Command Line Tools for Xcode
   - CMake

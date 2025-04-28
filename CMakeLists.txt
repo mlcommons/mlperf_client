@@ -105,16 +105,18 @@ if(WIN32)
         # Native OpenVINO only supported on x64 build
         option(MLPERF_IHV_NATIVE_OPENVINO "Enable IHV Native OpenVINO EP" ON)
         option(MLPERF_IHV_ORT_GENAI "Enable Onnx Runtime GenAI path using DML." ON)
-	else()
+    else()
+        set(MLPERF_IHV_NATIVE_OPENVINO OFF)
         set(MLPERF_IHV_ORT_GENAI OFF)
-    endif()
-
+	endif()
+	
 elseif(APPLE)
 # Options to enable/disable IHV for MacOS
 
 	set(MLPERF_IHV_NATIVE_OPENVINO OFF)
 	set(MLPERF_IHV_ORT_GENAI OFF)
 endif()
+
 
 add_subdirectory(src)
 

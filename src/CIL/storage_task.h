@@ -10,7 +10,7 @@ class Storage;
 class StorageTask : public ProgressableTask {
  public:
   StorageTask(std::shared_ptr<Storage> storage, const std::string& file_name,
-              const std::string& sub_dir);
+              const std::string& sub_dir, bool cache_local_files = true);
   std::string GetSourcePath() const;
   std::string GetResPath(bool absolute = false) const;
 
@@ -33,6 +33,7 @@ class StorageTask : public ProgressableTask {
   std::string sub_dir_;
   std::string res_path_;
   std::string error_message_;
+  bool cache_local_files_;
   bool pre_check_done_ = false;
   bool is_target_file_valid_ = false;
 

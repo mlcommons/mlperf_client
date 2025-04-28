@@ -4,9 +4,10 @@
 #include <comdef.h>
 #include <log4cxx/logger.h>
 
+#include <codecvt>
 #include <iostream>
 #include <locale>
-#include <codecvt>
+
 
 using namespace log4cxx;
 LoggerPtr loggerSystemInfoProviderWindows(
@@ -53,10 +54,16 @@ void SystemInfoProviderWindows::Initialize() {
       nullptr, -1, nullptr, nullptr, RPC_C_AUTHN_LEVEL_DEFAULT,
       RPC_C_IMP_LEVEL_IMPERSONATE, nullptr, EOAC_NONE, nullptr);
   if (FAILED(hr)) {
-    LOG4CXX_ERROR(loggerSystemInfoProviderWindows,
-                  "Failed to initialize security, error code: " << hr);
-    CoUninitialize();
-    return;
+    if (hr == RPC_E_TOO_LATE) {
+      LOG4CXX_ERROR(
+          loggerSystemInfoProviderWindows,
+          "CoInitializeSecurity was already called, error code: " << hr);
+    } else {
+      LOG4CXX_ERROR(loggerSystemInfoProviderWindows,
+                    "Failed to initialize security, error code: " << hr);
+      CoUninitialize();
+      return;
+    }
   }
 
   IWbemLocator* locator = nullptr;

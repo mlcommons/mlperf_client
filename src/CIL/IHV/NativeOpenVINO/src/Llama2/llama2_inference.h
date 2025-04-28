@@ -4,6 +4,7 @@
 #include <nlohmann/json.hpp>
 #include <openvino/genai/streamer_base.hpp>
 #include <openvino/genai/tokenizer.hpp>
+#include <optional>
 
 #include "../../IHV.h"  // Include IHV API definitions
 #include "../base_inference.h"
@@ -69,7 +70,8 @@ class Llama2Inference : public BaseInference {
                   const NativeOpenVINOExecutionProviderSettings& ep_settings,
                   cil::Logger logger, const std::string& deps_dir);
 
-  void Init(const nlohmann::json& model_config);
+  void Init(const nlohmann::json& model_config,
+            std::optional<API_IHV_DeviceID_t> device_id);
 
   void Prepare() override;
 

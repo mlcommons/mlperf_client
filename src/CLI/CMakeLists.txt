@@ -43,7 +43,7 @@ endif()
 file(GLOB_RECURSE SOURCES "*.cpp")
 
 if(APPLE)
-    # Include .mm files only for macOS
+    # Include .m and .mm files only for Apple
     file(GLOB_RECURSE MM_SOURCES "*.m" "*.mm")
     list(APPEND SOURCES ${MM_SOURCES})
 endif()
@@ -55,7 +55,6 @@ file(GLOB_RECURSE HEADERS "*.h")
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} PREFIX "Source files" FILES ${SOURCES})
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} PREFIX "Header files" FILES ${HEADERS})
 
-# Create the console executable
 add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
 
 set_target_properties(${PROJECT_NAME} PROPERTIES CXX_CLANG_TIDY "${CLANG_TIDY_COMMAND}")
@@ -69,10 +68,6 @@ target_compile_definitions(${PROJECT_NAME}
     PRIVATE
 # Add additional compile definitions here
 )
-
-get_property(MLPERF_USING_PREBUILT_ORT GLOBAL PROPERTY USING_PREBUILT_ORT)
-target_compile_definitions(${PROJECT_NAME} PRIVATE USING_PREBUILT_ORT=$<BOOL:${MLPERF_USING_PREBUILT_ORT}>)
-
 
 target_compile_options(${PROJECT_NAME}
 	PRIVATE
@@ -102,7 +97,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE ${LOG4CXX_INCLUDE_DIR})
 set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${PROJECT_NAME})
 
 if(WIN32)
-set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "mlperf-windows" SUFFIX ".exe")
+    set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "mlperf-windows" SUFFIX ".exe")
 else()
-set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "mlperf-mac")
+    set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "mlperf-mac")
 endif()

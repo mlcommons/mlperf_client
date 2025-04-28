@@ -73,9 +73,24 @@ double cil::infer::BaseInference::GetBenchmarkTime() const {
 
 std::string BaseInference::GetDeviceType() const { return device_type_; }
 
-std::string BaseInference::GetErrorMessage() const { return error_message_; }
+std::string BaseInference::GetErrorMessage(bool include_ep_errors) const {
+  if (include_ep_errors) {
+    std::string ihv_errors = GetEPErrorMessages();
+    if (!ihv_errors.empty()) {
+      return error_message_ + ":\n" + ihv_errors;
+    }
+  }
+  return error_message_;
+}
 
 log4cxx::LoggerPtr BaseInference::GetLogger() const { return logger_; }
+
+std::string BaseInference::GetEPErrorMessages() const {
+  if (api_handler_) {
+    return api_handler_->GetIHVErrors();
+  }
+  return "";
+}
 
 void BaseInference::SetBenchmarkTime(double benchmark_time) {
   benchmark_time_ = benchmark_time;

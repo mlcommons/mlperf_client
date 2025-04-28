@@ -12,6 +12,10 @@ file(GLOB_RECURSE SOURCES "*.cpp")
 # Define the header files for the library
 file(GLOB_RECURSE HEADERS "*.h")
 
+# Exclude files located in the directml subdirectory
+list(FILTER SOURCES EXCLUDE REGEX ".*/directml/.*")
+list(FILTER HEADERS EXCLUDE REGEX ".*/directml/.*")
+
 # Define source groups
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} PREFIX "Source files" FILES ${SOURCES})
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} PREFIX "Header files" FILES ${HEADERS})

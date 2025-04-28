@@ -80,6 +80,7 @@ add_subdirectory(../../../../../deps/JSONSchema JSONSchema)
 
 # Add common code from CIL, used by ONNX too
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../../common" common_cil)
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../../common/directml" common_directml_cil)
 
 target_include_directories(${PROJECT_NAME}
     PUBLIC
@@ -94,7 +95,8 @@ target_link_libraries(${PROJECT_NAME}
     ${ORT_GENAI_LIB}
     nlohmann_json::nlohmann_json
     nlohmann_json_schema_validator::validator
-	  common_cil
+	common_cil
+    common_directml_cil
 )
 
 target_link_libraries(${PROJECT_NAME} PUBLIC onnxruntime-genai)

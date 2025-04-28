@@ -2,19 +2,24 @@
 #define BENCHMARK_RESULT_H_
 
 #include <nlohmann/json.hpp>
+#include <set>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace cil {
 
 struct PerformanceResult {
-  double time_to_first_token_duration = 0.;   // Geomean TTFT (sec)
-  double token_generation_rate = 0.0;         // 2+ token/second rate
-  uint64_t average_input_tokens = 0;          // Average input tokens provided to LLM pipeline
-  uint64_t average_generated_tokens = 0;      // Average tokens generated for all runs
+  double time_to_first_token_duration = 0.;  // Geomean TTFT (sec)
+  double token_generation_rate = 0.0;        // 2+ token/second rate
+  uint64_t average_input_tokens =
+      0;  // Average input tokens provided to LLM pipeline
+  uint64_t average_generated_tokens =
+      0;  // Average tokens generated for all runs
 };
 
-using CategoryPerformanceResult = std::unordered_map<std::string, PerformanceResult>;
+using CategoryPerformanceResult =
+    std::unordered_map<std::string, PerformanceResult>;
 
 struct BenchmarkResult {
   std::string config_file_name;
@@ -38,13 +43,20 @@ struct BenchmarkResult {
   bool results_verified = false;
   std::string benchmark_duration;
   std::string error_message;
+  std::string ep_error_messages;
   std::string device_type;
 
   // LLM stuffs
   bool is_llm_benchmark = false;
-  double total_inference_duration = 0.0;      // Total time spent in LLM pipeline (sec)
-  std::vector<std::string> output;            // Model output vector for input prompts
-  CategoryPerformanceResult  performance_results;
+  double total_inference_duration =
+      0.0;                          // Total time spent in LLM pipeline (sec)
+  std::vector<std::string> output;  // Model output vector for input prompts
+  CategoryPerformanceResult performance_results;
+
+  static inline const std::string kLLMOverallCategory = "Overall";
+  static inline const std::set<std::string> kLLMRequiredCategories = {
+      "Content Generation", "Creative Writing", "Summarization, Light",
+      "Summarization, Moderate"};
 };
 
 }  // namespace cil

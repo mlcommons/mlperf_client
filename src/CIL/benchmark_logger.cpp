@@ -70,7 +70,7 @@ BenchmarkLogger::BenchmarkLogger(const std::string& output_dir)
 #endif
 
 {
-  system_info_provider_->FetchInfo();
+  if (system_info_provider_) system_info_provider_->FetchInfo();
 
   if (!output_dir.empty()) {
     auto appender = log4cxx::cast<log4cxx::FileAppender>(
@@ -110,15 +110,19 @@ BenchmarkLogger::~BenchmarkLogger() = default;
 
 bool BenchmarkLogger::AppendBenchmarkResult(const BenchmarkResult& result) {
   nlohmann::ordered_json json_obj = BenchmarkResultToJson(result);
-  if (ValidateUTF8inJSONObj(json_obj)) {
+  bool validated = ValidateUTF8inJSONObj(json_obj);
+  if (validated) {
     WriteResults(json_obj);
     results_.push_back(result);
   } else {
+    auto failed_results = result;
+    failed_results.benchmark_success = false;
+    failed_results.error_message = "Invalid UTF-8 string found in output";
     LOG4CXX_ERROR(loggerBenchmarkLogger,
                   "Invalid UTF-8 string found in BenchmarkResult");
-    return false;
+    results_.push_back(failed_results);
   }
-  return true;
+  return validated;
 }
 
 void BenchmarkLogger::DisplayAllResults() {
@@ -228,27 +232,31 @@ void BenchmarkLogger::DisplayAllResults() {
             << exec_result.ep_configuration << ":\n";
         if (exec_result.benchmark_success) {
           if (exec_result.is_llm_benchmark) {
-            auto it = exec_result.performance_results.find("Overall");
-            if (it != exec_result.performance_results.end()) {
-              auto overall_perf_results = it->second;
-              oss << Indent(3) << "OVERALL:\t"
-                  << "Geomean Time to First Token: "
-                  << DumpRoundedDouble(
-                         overall_perf_results.time_to_first_token_duration, 3)
-                  << " s, ";
-              if (std::fabs(overall_perf_results.token_generation_rate) >
-                  1e-5) {
-                oss << "Geomean 2nd+ Token Generation Rate: "
+            const bool show_overall = config_verified_;
+            if (show_overall) {
+              auto it = exec_result.performance_results.find(
+                  BenchmarkResult::kLLMOverallCategory);
+              if (it != exec_result.performance_results.end()) {
+                auto overall_perf_results = it->second;
+                oss << Indent(3) << "OVERALL:\t"
+                    << "Geomean Time to First Token: "
                     << DumpRoundedDouble(
-                           overall_perf_results.token_generation_rate, 2)
-                    << " tokens/s, ";
-              } else {
-                oss << "Token Generation Rate: N/A, ";
+                           overall_perf_results.time_to_first_token_duration, 3)
+                    << " s, ";
+                if (std::fabs(overall_perf_results.token_generation_rate) >
+                    std::numeric_limits<float>::epsilon()) {
+                  oss << "Geomean 2nd+ Token Generation Rate: "
+                      << DumpRoundedDouble(
+                             overall_perf_results.token_generation_rate, 2)
+                      << " tokens/s, ";
+                } else {
+                  oss << "Token Generation Rate: N/A, ";
+                }
+                oss << "Avg Input Tokens: "
+                    << overall_perf_results.average_input_tokens
+                    << ", Avg Generated Tokens: "
+                    << overall_perf_results.average_generated_tokens << "\n";
               }
-              oss << "Avg Input Tokens: "
-                  << overall_perf_results.average_input_tokens
-                  << ", Avg Generated Tokens: "
-                  << overall_perf_results.average_generated_tokens << "\n";
             }
             for (const auto& [category, perf_result] :
                  exec_result.performance_results) {
@@ -276,11 +284,26 @@ void BenchmarkLogger::DisplayAllResults() {
                 << ", Avg Inference Duration: "
                 << DumpRoundedDouble(exec_result.duration, 9) << " s\n";
           }
-        } else {
-          oss << Indent(3) << "Error: "
-              << utils::CleanErrorMessageFromStaticPaths(
-                     exec_result.error_message)
-              << "\n";
+        }
+        if (!exec_result.error_message.empty() ||
+            !exec_result.ep_error_messages.empty()) {
+          if (!exec_result.error_message.empty()) {
+            oss << Indent(3) << "Error: "
+                << utils::CleanErrorMessageFromStaticPaths(
+                       exec_result.error_message);
+            if (!exec_result.ep_error_messages.empty()) {
+              oss << ",\n" << Indent(3) << exec_result.ep_error_messages;
+            } else {
+              oss << ".\n";
+            }
+          } else {
+            oss << Indent(3) << "Error: " << exec_result.ep_error_messages;
+          }
+          oss << Indent(3) << "Check Logs/error.log"
+              << (exec_result.scenario_name == "Llama2"
+                      ? " and Logs/llama2_executor.log"
+                      : "")
+              << " for more details.\n";
         }
       }
     }
@@ -334,22 +357,34 @@ nlohmann::ordered_json BenchmarkLogger::BenchmarkResultToJson(
   json_obj["Avg Inference Duration"] = RoundDouble(result.duration, 3);
   json_obj["Benchmark Duration"] = result.benchmark_duration;
   json_obj["Results Verified"] = result.results_verified;
-  json_obj["Error Message"] = result.error_message;
+  if (!result.ep_error_messages.empty()) {
+    if (result.error_message.empty()) {
+      json_obj["Error Message"] = result.ep_error_messages;
+    } else {
+      json_obj["Error Message"] =
+          result.error_message + "\n" + result.ep_error_messages;
+    }
+    json_obj["EP Error Messages"] = result.ep_error_messages;
+  } else
+    json_obj["Error Message"] = result.error_message;
   json_obj["Device Type"] = result.device_type;
 
   if (result.is_llm_benchmark) {
     nlohmann::json overall_perf_results_json{};
-    auto it = result.performance_results.find("Overall");
-    if (it != result.performance_results.end()) {
-      auto overall_perf_results = it->second;
-      overall_perf_results_json["Geomean Time to First Token"] =
-          RoundDouble(overall_perf_results.time_to_first_token_duration, 3);
-      overall_perf_results_json["Geomean 2nd+ Token Generation Rate"] =
-          RoundDouble(overall_perf_results.token_generation_rate, 3);
-      overall_perf_results_json["Avg Input Tokens"] =
-          overall_perf_results.average_input_tokens;
-      overall_perf_results_json["Avg Generated Tokens"] =
-          overall_perf_results.average_generated_tokens;
+    const bool show_overall = config_verified_;
+    if (show_overall) {
+      auto it = result.performance_results.find("Overall");
+      if (it != result.performance_results.end()) {
+        auto overall_perf_results = it->second;
+        overall_perf_results_json["Geomean Time to First Token"] =
+            RoundDouble(overall_perf_results.time_to_first_token_duration, 3);
+        overall_perf_results_json["Geomean 2nd+ Token Generation Rate"] =
+            RoundDouble(overall_perf_results.token_generation_rate, 3);
+        overall_perf_results_json["Avg Input Tokens"] =
+            overall_perf_results.average_input_tokens;
+        overall_perf_results_json["Avg Generated Tokens"] =
+            overall_perf_results.average_generated_tokens;
+      }
     }
     json_obj["overall_results"] = overall_perf_results_json;
 
@@ -383,6 +418,8 @@ nlohmann::ordered_json BenchmarkLogger::BenchmarkResultToJson(
 
     json_obj["Output"] = sanitized_output;
   }
+
+  if (!system_info_provider_) return json_obj;
 
   const auto& cpu_info = system_info_provider_->GetCpuInfo();
   json_obj["SysInfo_CPUArchitecture"] = cpu_info.architecture;

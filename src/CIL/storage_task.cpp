@@ -11,10 +11,12 @@ LoggerPtr loggerStorageTask(Logger::getLogger("Downloader"));
 namespace cil {
 StorageTask::StorageTask(std::shared_ptr<Storage> storage,
                          const std::string& file_name,
-                         const std::string& sub_dir)
+                         const std::string& sub_dir,
+                         bool cache_local_files)
     : storage_(storage),
       file_name_(file_name),
       sub_dir_(sub_dir),
+      cache_local_files_(cache_local_files),
       status_(Status::kReady),
       progress_(0) {}
 
@@ -56,7 +58,7 @@ bool StorageTask::CheckIfFileExistsInStorage(bool ignore_cache) {
 
   // File name is extracted from the URI
   auto res_path =
-      storage_->CheckIfLocalFileExists(file_name_, sub_dir_, ignore_cache);
+      storage_->CheckIfLocalFileExists(file_name_, sub_dir_, ignore_cache, cache_local_files_);
   if (!res_path.empty()) {
     LOG4CXX_INFO(
         loggerStorageTask,

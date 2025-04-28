@@ -5,4 +5,4 @@
 #define APP_VERSION_SUFFIX "@VERSION_SUFFIX@"
 #define APP_BUILD_NUMBER "@GIT_COMMIT_HASH@"
 #define APP_VERSION_STRING "@VERSION_STRING@"
-#define APP_BUILD_NAME "MLCommons Standard Build"
+#define APP_BUILD_NAME "Development Build"

@@ -93,12 +93,12 @@ std::string GetCurrentDirectory() {
   return path;
 }
 
-void SetCurrentDirectory() {
-  std::string exePath = utils::GetCurrentDirectory();
+void SetCurrentDirectory(const std::string& path) {
+    std::string targetPath = path.empty() ? utils::GetCurrentDirectory() : path;
 #if defined(_WIN32) || defined(_WIN64)
-  SetCurrentDirectoryA(exePath.c_str());
+    SetCurrentDirectoryA(targetPath.c_str());
 #else
-  chdir(exePath.c_str());
+    chdir(targetPath.c_str());
 #endif
 }
 
@@ -691,7 +691,6 @@ bool IsEpSupportedOnThisPlatform(const std::string_view& model_name,
 
 #if WITH_IHV_ORT_GENAI
   if (is_supported_ihv("OrtGenAI")) return true;
-
 #endif
 
   return false;

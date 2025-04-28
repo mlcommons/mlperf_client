@@ -4,22 +4,21 @@
 #include <filesystem>
 #include <map>
 #include <memory>
+#include <optional>
+#include <functional>
 #include <string>
-#include <unordered_map>
-#include <unordered_set>
 
 namespace cil {
 class ExecutionConfig;
 class Unpacker;
 class EPDependenciesManager;
-class ScenarioDataProvider;
-class FileSignatureVerifier;
-class ExecutionProviderConfig;
 class ScenarioConfig;
 class BenchmarkLogger;
+
 }  // namespace cil
 
 namespace cli {
+
 /**
  * @class SystemController
  *
@@ -40,8 +39,7 @@ class SystemController {
    */
   SystemController(const std::string& json_config_path,
                    std::shared_ptr<cil::Unpacker> unpacker,
-                   const std::string& output_dir = {},
-                   const std::string& data_dir = {});
+                   const std::string& output_dir, const std::string& data_dir);
   ~SystemController();
   /**
    * @brief Loads and verifies the tool configuration.
@@ -52,67 +50,15 @@ class SystemController {
    * @return True if the configuration is loaded and verified successfully,
    * false otherwise.
    */
-  bool ConfigStage();
+  bool Config();
   /**
-   * @brief Downloads the necessary files for specified scenarios indexed.
-   *
-   * This method downloads the necessary files for the specified scenarios,
-   * including the model, input, and asset files. Additionally, it downloads the
-   * necessary dependencies for the execution providers (eps). This stage is
-   * also responsible for unpacking the downloaded files and preparing them for
-   * the next stages.
-   *
-   * @param model_index Index of the model/scenario to download its files.
-   * @param download_behavior Controls the behavior of the download stage.
-   * eps.
-   * @return True if the download stage is successful, false otherwise.
-   */
-  bool DownloadStage(int model_index, const std::string& download_behavior);
-  /**
-   * @brief Prepares the configuration for the supplied scenarios.
-   *
-   * This method performs several tasks to prepare the application:
-   * - Checks if the specified model is supported.
-   * - Prepares the dependencies required by execution providers (eps).
-   * - Loads the verification data for each scenario.
-   *
-   * @return True if the preparation stage is successful, false otherwise.
-   */
-  bool PreparationStage(int model_index);
-  /**
-   * @brief Verifies the data for the specified scenarios.
-   *
-   * This method verifies the data for the specified scenarios, including all
-   * the downloaded files. It checks the file signatures and hashes against the
-   * provided data verification file for each scenario to ensure the integrity
-   * of the downloaded files.
-   *
-   * @param model_index Index of the model/scenario to verify its data.
-   * @return True if the data verification stage is successful, false otherwise.
-   */
-  bool DataVerificationStage(int model_index);
-  /**
-   * @brief Benchmarks the specified scenarios.
-   *
-   * This method benchmarks the specified scenarios using the provided execution
-   * providers (eps) and displays the results, also logs the result to
-   * logs/results.json. the benchmarking process includes the following steps:
-   * - Loading the model and input files.
-   * - Running the benchmarking process.
-   * - collecting system information.
-   * - Logging the results.
-   *
-   * @param model_index Index of the model/scenario to benchmark.
-   * @return True if the benchmark stage is successful, false otherwise.
-   */
-  bool BenchmarkStage(int model_index);
-  /**
-   * @brief Displays the results of all the benchmarked scenarios.
+   * @brief Custom stage which displays the results of all the benchmarked
+   * scenarios.
    *
    * This method is responsible for displaying the benchmarking for all the
    * scenarios.
    */
-  void DisplayResultsStage();
+  void DisplayResultsStage(cil::BenchmarkLogger& results_logger) const;
   /**
    * @brief Retrieves the list of configuration scenarios.
    *
@@ -140,9 +86,65 @@ class SystemController {
    *
    * This method fetches the system-defined configuration for download behavior.
    *
-   * @return A constant reference to a string containing the download behavior configuration.
+   * @return A constant reference to a string containing the download behavior
+   * configuration.
    */
-  const std::string& GetDownloadBehavior() const;
+  const std::string& GetSystemDownloadBehavior() const;
+
+  /*
+   * @brief Sets the download behavior configuration.
+   *
+   * This method sets the download behavior configuration to the provided value.
+   *
+   * @param download_behavior The download behavior configuration value.
+   *
+   */
+  void SetSystemDownloadBehavior(const std::string& download_behavior);
+
+  /*
+   * @brief Retrieves the value for CacheLocalFiles parameter from the config
+   *
+   * If it is set to false local files specified in the config will not be
+   * copied and cached
+   *
+   * @return A boolean value containing the value of CacheLocalFiles config
+   */
+  bool GetSystemCacheLocalFiles() const;
+
+  /*
+   * @brief Sets the value for CacheLocalFiles parameter from the command line
+   * if provided, otherwise the value from the system config is used or true.
+   *
+   * @param cache_local_files The value of CacheLocalFiles parameter from the
+   * command line if provided, otherwise the value from the system config is
+   * used or false.
+   *
+   */
+  void SetSystemCacheLocalFiles(bool cache_local_files);
+
+  enum class LogLevel { kInfo, kWarning, kError };
+  using Logger = std::function<void(LogLevel, std::string)>;
+
+  /*
+   * @brief Runs the benchmark stages.
+   *
+   * This method is responsible for running the benchmark stages, including
+   * download, preparation, data verification, benchmarking, and
+   * displaying results.
+   *
+   * @param download_behaviour_option_value The download behaviour option value.
+   * @param cache_local_files The value of CacheLocalFiles parameter from the
+   * command line if provided, otherwise the value from the system config is
+   * used or false.
+   * @param logger The logger function to log messages for main application.
+   * The controller will separately log messages for each stage using log4cxx
+   * library. This could be used to log messages to console for the user using
+   * standard output.
+   *
+   * @return True if the benchmark stages are successful, false otherwise.
+   */
+  bool Run(const Logger& logger, bool enumerate_devices = false,
+           std::optional<int> device_id = std::nullopt) const;
 
   /**
    * @brief List of supported model names.
@@ -153,15 +155,6 @@ class SystemController {
   static const std::vector<std::string> kSupportedModels;
 
  private:
-  std::filesystem::path GetEPParentLocation(
-      const cil::ExecutionProviderConfig& ep_config) const;
-
-  bool PrepareDirectMLAdaptersIfNeeded(
-      std::unordered_set<std::string>& not_prepared_ep_names,
-      const std::string_view& target_ep_name,
-      const std::string_view& library_path,
-      bool update_config = false);
-
   static void InterruptHandler(int sig);
 
   static std::atomic<bool> interrupt_;
@@ -174,26 +167,9 @@ class SystemController {
   std::string output_results_schema_path_;
   std::string data_verification_file_schema_path_;
   std::string input_file_schema_path_;
-  std::string data_dir_;
 
-  std::unordered_map<int, std::vector<std::string>> model_file_paths_;
-  std::map<int, std::vector<std::string>> input_file_paths_;
-  std::map<int, std::vector<std::string>> asset_file_paths_;
-  std::map<int, std::string> output_results_file_paths_;
-  std::map<int, std::shared_ptr<cil::ScenarioDataProvider>>
-      scenario_data_providers_;
-  std::map<int, std::shared_ptr<cil::FileSignatureVerifier>>
-      file_signature_verifiers_;
-
-  std::map<std::string, std::string> path_to_source_map_;
-  std::map<std::string, std::string> source_to_path_map_;
-
-  std::vector<std::pair<cil::ExecutionProviderConfig, std::string>>
-      prepared_eps_;
-
-  std::unique_ptr<cil::BenchmarkLogger> results_logger_;
-  bool config_verified_{false};
-
+  const std::string output_dir_;
+  const std::string data_dir_;
 };
 
 }  // namespace cli

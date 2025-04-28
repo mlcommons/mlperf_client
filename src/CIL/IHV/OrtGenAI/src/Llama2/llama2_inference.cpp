@@ -51,14 +51,26 @@ Llama2Inference::Llama2Inference(
     const std::string& deps_dir,
     const OrtGenAIExecutionProviderSettings& ep_settings, cil::Logger logger)
     : BaseInference(model_path, ep_name, deps_dir, ep_settings, logger),
-      config_(logger) {
+      config_(logger) {}
+
+void Llama2Inference::Init(const nlohmann::json& model_config,
+                           std::optional<API_IHV_DeviceID_t> device_id) {
+  BaseInference::Init();
+  if (!error_message_.empty()) return;
+
+  if (initialized_) {
+    error_message_ =
+        "OrtGenAI->Init called but it already has been initialized!";
+    return;
+  }
+
   const auto model_parent_path =
       std::filesystem::path(model_path_).parent_path();
   auto model_folder = fs::current_path().append(model_parent_path.string());
 
   // Handle genai_config.json and environment variables
 
-  if (ep_name.find("OrtGenAI") != std::string::npos) {
+  if (ep_name_.find("OrtGenAI") != std::string::npos) {
     SetupGenaiConfigForDirectML();
   }
 
@@ -69,17 +81,6 @@ Llama2Inference::Llama2Inference(
       CheckResult(OgaCreateModel(model_folder.string().c_str(), &oga_model_));
   } catch (const std::exception& e) {
     error_message_ = e.what();
-    return;
-  }
-}
-
-void Llama2Inference::Init(const nlohmann::json& model_config) {
-  BaseInference::Init();
-  if (!error_message_.empty()) return;
-
-  if (initialized_) {
-    error_message_ =
-        "OrtGenAI->Init called but it already has been initialized!";
     return;
   }
 
@@ -108,11 +109,9 @@ void Llama2Inference::Init(const nlohmann::json& model_config) {
       CheckResult(OgaGeneratorParamsSetSearchNumber(
           oga_gen_params_, "temperature", config_.search.temperature));
       CheckResult(
-        OgaGeneratorParamsSetSearchNumber(oga_gen_params_, "min_length", 1));
-      CheckResult(
-        OgaGeneratorParamsSetSearchNumber(oga_gen_params_, "max_length", 
-                                          config_.search.max_total_length));
-
+          OgaGeneratorParamsSetSearchNumber(oga_gen_params_, "min_length", 1));
+      CheckResult(OgaGeneratorParamsSetSearchNumber(
+          oga_gen_params_, "max_length", config_.search.max_total_length));
     }
   } catch (const std::exception& e) {
     error_message_ = e.what();
@@ -147,21 +146,16 @@ const std::vector<int32_t>& Llama2Inference::Run(
     CheckResult(OgaAppendTokenSequence(token_ptr, token_count,
                                        oga_benchmark_sequences_));
 
-    CheckResult(OgaGeneratorParamsSetInputSequences(oga_gen_params_,
-                                                    oga_benchmark_sequences_));
-
     // This should be in Init, but Init it does not have info about the input
     CheckResult(
         OgaCreateGenerator(oga_model_, oga_gen_params_, &oga_bench_generator_));
+    CheckResult(OgaGenerator_AppendTokenSequences(oga_bench_generator_,
+                                                  oga_benchmark_sequences_));
 
     // Run Benchmark
     {
       ScopedNvtx bench("Benchmark");
       for (size_t i = 0; i < config_.search.max_length; i++) {
-        {
-          ScopedNvtx logit_range("Comp. Logit");
-          CheckResult(OgaGenerator_ComputeLogits(oga_bench_generator_));
-        }
         {
           ScopedNvtx logit_range("Gene. Token");
           CheckResult(OgaGenerator_GenerateNextToken(oga_bench_generator_));
@@ -205,6 +199,8 @@ void Llama2Inference::Deinit() {
     error_message_ = "OrtGenAI->DeInit called before it has been initialized!";
     return;
   }
+  output_data_.clear();
+
   if (oga_gen_params_) {
     OgaDestroyGeneratorParams(oga_gen_params_);
     oga_gen_params_ = 0;
@@ -217,17 +213,44 @@ void Llama2Inference::Deinit() {
     OgaDestroySequences(oga_benchmark_sequences_);
     oga_benchmark_sequences_ = 0;
   }
-  output_data_.clear();
+  if (oga_model_) {
+    OgaDestroyModel(oga_model_);
+    oga_model_ = 0;
+  }
+
+  try {
+    if (backup_genai_config.has_value()) {
+      std::ofstream genai_config_out{backup_genai_config->first};
+      genai_config_out << backup_genai_config->second.dump(4);
+      genai_config_out.close();
+    }
+  } catch (const std::exception& e) {
+    logger_(LogLevel::kFatal,
+            "Failed to restore genai_config.json: " + std::string(e.what()));
+  }
+
   initialized_ = false;
 }
 
 void cil::IHV::infer::Llama2Inference::SetupGenaiConfigForDirectML() {
   // Get the directory of model_file_path
 
-  const auto& luuid_h = ep_settings_.GetLuidH();
-  const auto& luuid_l = ep_settings_.GetLuidL();
+  const auto& device_id = ep_settings_.GetDeviceId().value_or(0);
 
-  if (!luuid_h || !luuid_l) return;
+  if (!directml_devices_.has_value()) {
+    logger_(LogLevel::kError, "No DirectML devices found");
+    error_message_ = "No DirectML devices found";
+    return;
+  } else if (device_id >= directml_devices_.value().size()) {
+    logger_(LogLevel::kError,
+            "Invalid device id: " + std::to_string(device_id));
+    error_message_ = "Invalid device id: " + std::to_string(device_id);
+    return;
+  }
+
+  const auto& device = directml_devices_.value()[device_id];
+  const auto luuid_h = device.luid_high_part;
+  const auto luuid_l = device.luid_low_part;
 
   fs::path model_dir = fs::path(model_path_).parent_path();
   // Construct path to genai_config.json
@@ -267,8 +290,8 @@ void cil::IHV::infer::Llama2Inference::SetupGenaiConfigForDirectML() {
     backup_genai_config = {genai_config_path.string(), genai_config};
 
     for (auto& dml_provider_option : dml_provider_options) {
-      dml_provider_option.get()["luid_high_part"] = std::to_string(luuid_h.value());
-      dml_provider_option.get()["luid_low_part"] = std::to_string(luuid_l.value());
+      dml_provider_option.get()["luid"] =
+          std::to_string(luuid_h) + ":" + std::to_string(luuid_l);
     }
     std::ofstream genai_config_out{genai_config_path};
     genai_config_out << genai_config.dump(4);
@@ -284,28 +307,12 @@ void cil::IHV::infer::Llama2Inference::SetupGenaiConfigForDirectML() {
 }
 
 Llama2Inference::~Llama2Inference() {
-  Deinit();  // This might not be required
+  // This might not be required
 
-  if (oga_model_) {
-    OgaDestroyModel(oga_model_);
-    oga_model_ = 0;
-  }
+  if (initialized_) Deinit();
 
   OgaShutdown();
-
-  try {
-    if (backup_genai_config.has_value()) {
-      std::ofstream genai_config_out{backup_genai_config->first};
-      genai_config_out << backup_genai_config->second.dump(4);
-      genai_config_out.close();
-    }
-  } catch (const std::exception& e) {
-    logger_(LogLevel::kFatal,
-            "Failed to restore genai_config.json: " + std::string(e.what()));
-  }
-
-};
-
+}
 }  // namespace infer
 }  // namespace IHV
 }  // namespace cil

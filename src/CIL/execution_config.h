@@ -1,6 +1,7 @@
 #ifndef EXECUTION_SCENARIO_CONFIG_H_
 #define EXECUTION_SCENARIO_CONFIG_H_
 
+#include <filesystem>
 #include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
@@ -34,8 +35,13 @@ class SystemConfig {
     j["EPDependenciesConfigPath"] = ep_dependencies_config_path_;
     return j;
   }
-  const std::string& GetDownloadBehavior() const {
-    return download_behavior_;
+  const std::string& GetDownloadBehavior() const { return download_behavior_; }
+  void SetDownloadBehavior(const std::string& download_behavior) {
+    download_behavior_ = download_behavior;
+  }
+  bool GetCacheLocalFiles() const { return cache_local_files_; }
+  void SetCacheLocalFiles(bool cache_local_files) {
+    cache_local_files_ = cache_local_files;
   }
 
  private:
@@ -45,7 +51,8 @@ class SystemConfig {
   std::string ep_dependencies_config_path_;
   bool is_base_dir_correct_ = false;
   std::string base_dir_;
-  std::string download_behavior_;
+  std::string download_behavior_ = "normal";
+  bool cache_local_files_ = true;
 };
 
 class ScenarioConfig {
@@ -76,8 +83,7 @@ class ScenarioConfig {
    *
    * This function generates a unique key for each global and overridden model
    * file path. These keys can be used to identify and match corresponding extra
-   * files associated with the model (e.g., locating the .onnx.data file
-   * corresponding to a specific .onnx model file). The function returns a map
+   * files associated with the model. The function returns a map
    * where each entry consists of a file path as the key and its corresponding
    * unique key as the value.
    *
@@ -157,17 +163,13 @@ class ScenarioConfig {
 class ExecutionConfig {
  public:
   ExecutionConfig() = default;
-  ExecutionConfig(const std::string& json_file_path,
-                  const std::string& schema_file_path) {
-    ValidateAndParse(json_file_path, schema_file_path);
-  }
   ~ExecutionConfig() = default;
 
   bool ValidateAndParse(const std::string& json_file_path,
-                        const std::string& schema_file_path);
-
-  bool IsConfigVerified(const std::string& json_file_path,
+                        const std::string& schema_file_path,
                         const std::string& config_verification_file_path);
+
+  bool IsConfigVerified() const { return config_verified_; }
 
   std::string GetConfigFileName() const { return config_file_name_; }
 
@@ -175,9 +177,12 @@ class ExecutionConfig {
 
   const std::vector<ScenarioConfig>& GetScenarios() const { return scenarios_; }
   const SystemConfig& GetSystemConfig() const { return system_config_; }
+  SystemConfig& GetSystemConfig() { return system_config_; }
 
   static void from_json(const nlohmann::json& j, ExecutionConfig& obj);
   void FromJson(const nlohmann::json& j) { from_json(j, *this); }
+
+  static bool isConfigFileValid(const std::string& json_path);
 
  private:
   std::vector<ScenarioConfig> scenarios_;
@@ -185,7 +190,12 @@ class ExecutionConfig {
 
   std::string config_file_name_;
   std::string config_file_hash_;
+
+  bool config_verified_{false};
 };
+
+std::filesystem::path GetExecutionProviderParentLocation(
+    const cil::ExecutionProviderConfig& ep_config, const std::string& deps_dir);
 
 }  // namespace cil
 

@@ -1,6 +1,6 @@
 [submodule "deps/cpp-httplib"]
-    path = deps/cpp-httplib
-    url = https://github.com/yhirose/cpp-httplib.git
+	path = deps/cpp-httplib
+	url = https://github.com/yhirose/cpp-httplib.git
 [submodule "deps/JSON"]
 	path = deps/JSON
 	url = https://github.com/nlohmann/json.git

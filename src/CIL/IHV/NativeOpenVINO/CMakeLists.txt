@@ -18,7 +18,7 @@ if(NOT OPENVINO_INSTALL_DIR)
 # Download and unpack the ZIP file
 FetchContent_Declare(
   OPENVINO_GENAI
-  URL https://storage.openvinotoolkit.org/repositories/openvino_genai/packages/2025.0.1/windows/openvino_genai_windows_2025.0.1.0_x86_64.zip # URL to the ZIP file
+  URL https://storage.openvinotoolkit.org/repositories/openvino_genai/packages/pre-release/2025.2.0.0rc3/openvino_genai_windows_2025.2.0.0rc3_x86_64.zip # URL to the ZIP file
 )
 
 FetchContent_MakeAvailable(OPENVINO_GENAI)

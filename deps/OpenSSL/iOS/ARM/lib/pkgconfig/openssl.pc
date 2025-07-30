@@ -1,0 +1,9 @@
+prefix=/Users/emil/Desktop/Projects/mlperf_client_dev/deps/OpenSSL/iOS/ARM
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: OpenSSL
+Description: Secure Sockets Layer and cryptography libraries and tools
+Version: 3.0.12
+Requires: libssl libcrypto

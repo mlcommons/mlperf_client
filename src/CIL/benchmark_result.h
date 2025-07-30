@@ -18,6 +18,15 @@ struct PerformanceResult {
       0;  // Average tokens generated for all runs
 };
 
+struct SystemInfo {
+  std::string os_name;
+  size_t ram = 0;
+  std::string cpu_model;
+  std::string cpu_architecture;
+  std::string gpu_name;
+  size_t gpu_ram = 0;
+};
+
 using CategoryPerformanceResult =
     std::unordered_map<std::string, PerformanceResult>;
 
@@ -35,16 +44,24 @@ struct BenchmarkResult {
   std::vector<std::string> data_file_names;
   std::string execution_provider_name;
   nlohmann::json ep_configuration;
+  SystemInfo system_info;
   int iterations = 0;
   int iterations_warmup = 0;
   bool benchmark_success = false;
   std::string benchmark_start_time;
-  double duration = 0.0;                      // Average time per iteration
+  double duration = 0.0;  // Average time per iteration
   bool results_verified = false;
+  bool config_verified = false;
+  bool config_experimental = false;
   std::string benchmark_duration;
   std::string error_message;
   std::string ep_error_messages;
   std::string device_type;
+  std::vector<int> labels;
+  std::vector<std::string> label_strings;
+  std::vector<double> probability_percents;
+  std::vector<std::vector<size_t>>
+      skipped_prompts;  // Prompts that were skipped
 
   // LLM stuffs
   bool is_llm_benchmark = false;
@@ -56,7 +73,7 @@ struct BenchmarkResult {
   static inline const std::string kLLMOverallCategory = "Overall";
   static inline const std::set<std::string> kLLMRequiredCategories = {
       "Content Generation", "Creative Writing", "Summarization, Light",
-      "Summarization, Moderate"};
+      "Summarization, Moderate", "Code Analysis"};
 };
 
 }  // namespace cil

@@ -1,6 +1,7 @@
 #ifndef EXECUTION_PROVIDER_CONFIG_H_
 #define EXECUTION_PROVIDER_CONFIG_H_
 
+#include <filesystem>
 #include <map>
 #include <memory>
 #include <nlohmann/json.hpp>
@@ -32,7 +33,9 @@ class ExecutionProviderConfig {
     obj.config_ = j.value("Config", nlohmann::json());
 
     if (j.contains("LibraryPath")) {
-      j.at("LibraryPath").get_to(obj.library_path_);
+      //convert to full path if not empty
+      std::string  p = j.at("LibraryPath");
+      obj.library_path_ = !p.empty() ? std::filesystem::absolute(p).string() : "";
     }
     if (j.contains("Dependencies")) {
       j.at("Dependencies").get_to(obj.dependencies_);
@@ -45,6 +48,8 @@ class ExecutionProviderConfig {
         obj.models_.emplace_back(model);
       }
     }
+    if (obj.name_ == "RyzenAI" && obj.config_["device_type"] != "NPU")
+      obj.name_ = "OrtGenAI-RyzenAI";
   }
 
   nlohmann::json ToJson() const {
@@ -69,6 +74,7 @@ class ExecutionProviderConfig {
 
   const std::string& GetName() const { return name_; }
   const nlohmann::json& GetConfig() const { return config_; }
+  void SetConfig(const nlohmann::json& config) { config_ = config; }
   const std::string& GetLibraryPath() const { return library_path_; }
   const std::vector<std::string>& GetDependencies() const {
     return dependencies_;

@@ -16,10 +16,18 @@
 #include <filesystem>
 #include <string>
 
+#include "../CLI/version.h"
+
 #ifdef _WIN32
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#else
+#include <TargetConditionals.h>
+#if TARGET_OS_IOS
+#include "ios/ios_utils.h"
+#endif
+
 #endif
 
 #undef GetCurrentDirectory
@@ -43,10 +51,14 @@ namespace utils {
  */
 
 inline fs::path GetAppDefaultTempPath() {
-#if defined(DEBUG_BUILD)
-  return (fs::current_path() / "deps");
+  std::string version = APP_VERSION_STRING;
+  if (size_t pos = version.rfind('.'); pos != std::string::npos) {
+    version = version.substr(0, pos);
+  }
+#if (defined(DEBUG_BUILD)) && not defined(__APPLE__)
+  return (fs::current_path() / "deps" / version);
 #else
-  return (std::filesystem::temp_directory_path() / "MLPerf");
+  return (std::filesystem::temp_directory_path() / "MLPerf" / version);
 #endif
 }
 
@@ -59,6 +71,10 @@ inline fs::path GetAppDefaultTempPath() {
  * @return A path to the default data directory.
  */
 inline fs::path GetAppDefaultDataPath() {
+#if TARGET_OS_IOS
+  return cil::ios_utils::GetDocumentsDirectoryPath();
+#endif
+
   return fs::current_path();
 }
 
@@ -147,6 +163,19 @@ bool CreateDirectory(const std::string& directoryPath);
 bool CreateUniqueDirectory(const fs::path& base_dir, fs::path& out_path,
                            int max_attempts = 100);
 /**
+ * @brief Checks whether the specified directory is writable.
+ *
+ * This function attempts to create and remove a temporary file in the specified
+ * directory to determine whether the process has write permissions. It is more
+ * reliable than checking filesystem permissions alone, as it validates actual
+ * write capability.
+ *
+ * @param path The path to the directory to check for write access.
+ * @return True if the directory is writable, false otherwise.
+ */
+bool IsDirectoryWritable(const std::string& path);
+
+/**
  * @brief Saves a boolean flag to the system's registry or configuration store.
  *
  * This a cross-platform function that saves a boolean flag to the system's
@@ -184,13 +213,13 @@ bool ReadFlagFromSettings(const std::string& settings_path,
  * @param format The format string to be used for the date and time.
  * @return A string containing the current date and time.
  */
-std::string GetCurrentDateTimeString(const std::string& format = "%Y-%m-%d %X");
+std::string GetCurrentDateTimeString(const std::string& format = "%m-%d-%Y %X");
 /**
  * @brief Converts a time point to a formatted local time string.
  *
  * This function converts a given high-resolution clock time point to a string
- * representing the local time in the format %Y-%m-%d %H:%M:%S", followed by the
- * timezone information.
+ * * representing the local time in the format %m-%d-%Y %H:%M:%S.milisec",
+ * followed by the timezone information.
  *
  * @param time_point The high-resolution clock time point to be converted.
  * @return A string representing the local time in the format %Y-%m-%d
@@ -297,6 +326,19 @@ std::string NormalizePath(const std::string& path);
  */
 std::string StringToLowerCase(const std::string& input_string);
 /**
+ * @brief Replace char withing the string.
+ *
+ * This function takes a string as input and returns a new string
+ * where all characters equal to char are replaced with new character.
+ *
+ * @param input_string Original string.
+ * @param find Original character.
+ * @param replace New character.
+ * @return A new string with original characters replaced.
+ */
+std::string StringReplaceChar(const std::string& input_string,
+                              unsigned char find, unsigned char replace);
+/**
  * @brief Checks if the given string is a valid UTF-8 string.
  *
  * This function checks if the given string is a valid UTF-8 string.
@@ -393,14 +435,25 @@ bool IsEpSupportedOnThisPlatform(const std::string_view& model_name,
                                  const std::string_view& ep_name);
 
 /**
-* @brief Cleans and trims the given string.
-*
-* This function cleans and trims the given string by removing any null characters and
-* leading and trailing whitespaces.
-* 
-* @param str The string to be cleaned and trimmed.
-* @return A string representing the cleaned and trimmed string.
-*/
+ * @brief Checks if the given config file is supported on this platform.
+ *
+ * This function checks support by examining the configuration file name.
+ *
+ * @param config_file_name Name of the configuration JSON file.
+ * @return True if the file name indicates support, false otherwise.
+ */
+bool IsEpConfigSupportedOnThisPlatform(
+    const std::string_view& config_file_name);
+
+/**
+ * @brief Cleans and trims the given string.
+ *
+ * This function cleans and trims the given string by removing any null
+ * characters and leading and trailing whitespaces.
+ *
+ * @param str The string to be cleaned and trimmed.
+ * @return A string representing the cleaned and trimmed string.
+ */
 std::string CleanAndTrimString(std::string str);
 
 }  // namespace utils

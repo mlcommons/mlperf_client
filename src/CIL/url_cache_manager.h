@@ -8,7 +8,7 @@ namespace cil {
 
 class URLCacheManager {
  public:
-  URLCacheManager();
+  explicit URLCacheManager(const std::string& deps_dir);
   ~URLCacheManager() = default;
 
   URLCacheManager(const URLCacheManager&) = delete;
@@ -19,8 +19,11 @@ class URLCacheManager {
   bool IsUrlInCache(const std::string& url) const;
   bool ValidateFile(const std::string& url, const std::string& filePath,
                     bool check_version = false) const;
-  void AddUrlToCache(const std::string& url, const std::string& file_path, bool with_version = false);
+  void AddUrlToCache(const std::string& url, const std::string& file_path,
+                     bool with_version = false);
   std::string GetFilePathFromCache(const std::string& url) const;
+
+  void ClearCache();
 
  private:
   static const std::string kUrlCacheFileName;

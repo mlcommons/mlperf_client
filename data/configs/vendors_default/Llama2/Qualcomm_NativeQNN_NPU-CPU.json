@@ -1,0 +1,46 @@
+{
+  "SystemConfig": {
+    "Comment": "Llama 2 7B Chat, Native QNN, NPU CPU, Base prompts",
+    "TempPath": "",
+    "EPDependenciesConfigPath": ""
+  },
+  "Scenarios": [
+    {
+      "Name": "Llama2",
+      "Models": [
+        {
+          "ModelName": "llama-2-7b-chat-hf-qti",
+          "FilePath": "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/llama2/models/NativeQNN/llama2_cpu.bin",
+          "DataFilePath": "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/llama2/models/NativeQNN/llama2_npu.zip",
+          "TokenizerPath": "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/llama2/models/NativeQNN/tokenizer-v1.zip"
+        }
+      ],
+      "InputFilePath": [
+        "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/llama2/data/content_generation/greedy-prompt_cot.39329.json",
+        "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/llama2/data/content_generation/greedy-prompt_t0.677207.json",
+        "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/llama2/data/creative_writing/greedy-prompt_niv.123362.json",
+        "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/llama2/data/creative_writing/greedy-prompt_niv.77134.json",
+        "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/llama2/data/summarization/greedy-prompt_flan.1221694.json",
+        "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/llama2/data/summarization/greedy-prompt_flan.1221607.json",
+        "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/llama2/data/summarization2k/greedy-prompt_flan.997680.json",
+        "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/llama2/data/summarization2k/greedy-prompt_flan.1854150.json",
+        "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/llama2/data/code_analysis/command_parser_cpp_2k.json",
+        "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/llama2/data/code_analysis/performance_counter_group_cpp_2k.json"
+      ],
+      "AssetsPath": [],
+      "ResultsVerificationFile": "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/generation-greedy-results.json",
+      "DataVerificationFile": "",
+      "Iterations": 3,
+      "WarmUp": 1,
+      "Delay": 5,
+      "ExecutionProviders": [
+        {
+          "Name": "NativeQNN",
+          "Config": {
+            "device_type": "NPU_CPU"
+          }
+        }
+      ]
+    }
+  ]
+}

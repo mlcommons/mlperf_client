@@ -21,6 +21,7 @@ LoggerPtr loggerUtils(Logger::getLogger("Utils"));
 #include <setupapi.h>
 #elif defined(__APPLE__)
 #include <CoreFoundation/CoreFoundation.h>
+#include <TargetConditionals.h>
 #include <dlfcn.h>
 #include <mach-o/dyld.h>
 #include <sys/ioctl.h>
@@ -94,11 +95,11 @@ std::string GetCurrentDirectory() {
 }
 
 void SetCurrentDirectory(const std::string& path) {
-    std::string targetPath = path.empty() ? utils::GetCurrentDirectory() : path;
+  std::string targetPath = path.empty() ? utils::GetCurrentDirectory() : path;
 #if defined(_WIN32) || defined(_WIN64)
-    SetCurrentDirectoryA(targetPath.c_str());
+  SetCurrentDirectoryA(targetPath.c_str());
 #else
-    chdir(targetPath.c_str());
+  chdir(targetPath.c_str());
 #endif
 }
 
@@ -117,7 +118,7 @@ bool CreateDirectory(const std::string& directoryPath) {
 
 bool CreateUniqueDirectory(const fs::path& base_dir, fs::path& out_path,
                            int max_attempts) {
-  std::string time_str = GetCurrentDateTimeString("%Y%m%d%H%M%S");
+  std::string time_str = GetCurrentDateTimeString("%m%d%Y%H%M%S");
 
 #if defined(_WIN32) || defined(_WIN64)
   auto pid = _getpid();
@@ -137,6 +138,24 @@ bool CreateUniqueDirectory(const fs::path& base_dir, fs::path& out_path,
   }
 
   return false;
+}
+
+bool IsDirectoryWritable(const std::string& path) {
+  if (path.empty()) return false;
+
+  std::filesystem::path dir_path(path);
+  if (!std::filesystem::exists(dir_path) ||
+      !std::filesystem::is_directory(dir_path))
+    return false;
+
+  std::filesystem::path test_file = dir_path / "mlperf_tmp_writable_test.txt";
+  std::ofstream ofs(test_file.string(), std::ios::out | std::ios::trunc);
+  if (!ofs.is_open()) return false;
+
+  ofs.close();
+  std::error_code ec;
+  std::filesystem::remove(test_file, ec);
+  return true;
 }
 
 void SaveFlagToSettings(const std::string& settings_path,
@@ -260,7 +279,12 @@ std::string GetDateTimeString(
   std::tm* local_tm = std::localtime(&in_time_t);
 
   std::stringstream ss;
-  ss << std::put_time(local_tm, "%Y-%m-%d %H:%M:%S");
+  // Print with milliseconds "02-25-2025 17:38:15.269"
+  auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    now.time_since_epoch()) %
+                1000;
+  ss << std::put_time(local_tm, "%m-%d-%Y %H:%M:%S.") << '.'
+     << std::setfill('0') << std::setw(3) << millis.count();
 
   char timezone[6];  // Buffer for timezone, e.g, +0400
   std::strftime(timezone, sizeof(timezone), "%z", local_tm);
@@ -459,6 +483,15 @@ std::string StringToLowerCase(const std::string& input_string) {
   std::transform(input_string.begin(), input_string.end(),
                  std::back_inserter(lower_case_str),
                  [](unsigned char c) { return std::tolower(c); });
+  return lower_case_str;
+}
+
+std::string StringReplaceChar(const std::string& input_string,
+                              unsigned char find, unsigned char replace) {
+  std::string lower_case_str;
+  std::transform(input_string.begin(), input_string.end(),
+                 std::back_inserter(lower_case_str),
+                 [&](unsigned char c) { return c == find ? replace : c; });
   return lower_case_str;
 }
 
@@ -667,9 +700,7 @@ std::string FormatDuration(const std::chrono::steady_clock::duration& duration,
 
 std::string CleanAndTrimString(std::string str) {
   std::replace(str.begin(), str.end(), '\0', ' ');
-  static auto is_space = [](auto ch) {
-    return std::isspace(ch);
-  };
+  static auto is_space = [](auto ch) { return std::isspace(ch); };
   str.erase(str.begin(), std::find_if_not(str.begin(), str.end(), is_space));
   str.erase(std::find_if_not(str.rbegin(), str.rend(), is_space).base(),
             str.end());
@@ -678,7 +709,8 @@ std::string CleanAndTrimString(std::string str) {
 
 bool IsEpSupportedOnThisPlatform(const std::string_view& model_name,
                                  const std::string_view& ep_name) {
-  if (!model_name.empty() && model_name != "llama2")
+  if (!model_name.empty() && model_name != "llama2" && model_name != "llama3" &&
+      model_name != "phi3.5" && model_name != "phi4")
     return false;
 
   auto is_supported_ihv = [&](const std::string& name) {
@@ -689,11 +721,48 @@ bool IsEpSupportedOnThisPlatform(const std::string_view& model_name,
   if (is_supported_ihv("NativeOpenVINO")) return true;
 #endif
 
+#if WITH_IHV_NATIVE_QNN
+  if (is_supported_ihv("NativeQNN")) return true;
+#endif
 #if WITH_IHV_ORT_GENAI
   if (is_supported_ihv("OrtGenAI")) return true;
+
+#endif
+#if WITH_IHV_ORT_GENAI_RYZENAI
+  if (is_supported_ihv("OrtGenAI-RyzenAI")) return true;
+#endif
+#if WITH_IHV_WIN_ML
+  if (is_supported_ihv("WindowsML")) return true;
+
+#endif
+#if WITH_IHV_GGML_METAL
+  if (is_supported_ihv("Metal")) return true;
+#endif
+#if WITH_IHV_GGML_VULKAN
+  if (is_supported_ihv("Vulkan")) return true;
+#endif
+#if WITH_IHV_GGML_CUDA
+  if (is_supported_ihv("CUDA")) return SupportsVendorID(VendorID::kNVIDIA);
+#endif
+#if WITH_IHV_MLX
+  if (is_supported_ihv("MLX")) return true;
 #endif
 
   return false;
+}
+
+bool IsEpConfigSupportedOnThisPlatform(
+    const std::string_view& config_file_name) {
+#if defined(__APPLE__)
+  const std::string config = StringToLowerCase(std::string(config_file_name));
+#if TARGET_OS_IOS
+  return config.starts_with("ios");
+#else
+  return config.starts_with("macos");
+#endif
+#else
+  return !config_file_name.empty();
+#endif
 }
 
 }  // namespace utils

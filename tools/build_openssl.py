@@ -50,7 +50,7 @@ def build_openssl_for_windows(openssl_src_dir, openssl_target_dir):
 
     print("OpenSSL has been built successfully.")
 
-def build_openssl_for_mac(openssl_src_dir, openssl_target_dir):
+def build_openssl_for_darwin(openssl_src_dir, openssl_target_dir, ios_target):
     if not os.path.exists(os.path.join(openssl_src_dir, '.git')):
         subprocess.run(["git", "clone", "https://github.com/openssl/openssl.git", openssl_src_dir], check=True)
 
@@ -61,14 +61,19 @@ def build_openssl_for_mac(openssl_src_dir, openssl_target_dir):
     subprocess.run(["git", "submodule", "init"], check=True)
     subprocess.run(["git", "submodule", "update"], check=True)
 
-    if platform.processor() == 'arm':
-         openssl_platform = 'darwin64-arm64-cc'
+    if ios_target:
+        openssl_platform = 'ios64-cross'
+        ios_sdk_path = subprocess.check_output(['xcrun', '--sdk', 'iphoneos', '--show-sdk-path']).decode().strip()
+        configure_command_extra_args = f" -isysroot \"{ios_sdk_path}\""
     else:
-         openssl_platform = 'darwin64-x86_64-cc'
-
-    # Requires perl and nasm which can be installed using e.g. 
-
+        if platform.processor() == 'arm':
+            openssl_platform = 'darwin64-arm64-cc'
+        else:
+            openssl_platform = 'darwin64-x86_64-cc'
+        configure_command_extra_args = f""
     configure_command = f"./Configure {openssl_platform} no-shared --prefix=\"{openssl_target_dir}\" --openssldir=\"{openssl_target_dir}\""
+    configure_command += configure_command_extra_args
+
     build_command = f"{configure_command} && make && make install"
     subprocess.run(build_command, check=True, shell=True)
 
@@ -85,24 +90,20 @@ if __name__ == '__main__':
     # Create a parser
     parser = argparse.ArgumentParser(description="Get some hyperparameters.")
 
-    # Get an arg for num_epochs
-    parser.add_argument("--target_dir",
-                        default="openssl-build",
-                        type=str,
-                        help="Installation directory for OpenSSL")
-						
-    parser.add_argument("--source_dir",
-                    default="openssl-src",
-                    type=str,
-                    help="Directory where the OpenSSL source is located")
-
+    parser.add_argument("source_dir", help="Path to the OpenSSL directory")
+    parser.add_argument("--ios", action="store_true", help="Build for iOS")
 
     # Get our arguments from the parser
     args = parser.parse_args()
 
-    # Setup hyperparameters
-    SOURCE_DIR = args.source_dir
-    TARGET_DIR = args.target_dir
+    SOURCE_DIR = os.path.join(args.source_dir, "src")
+    
+    if platform.system() == "Windows":
+        TARGET_DIR = os.path.join(args.source_dir, "Windows", "MSVC")
+    elif platform.system() == "Darwin":
+        TARGET_DIR = os.path.join(args.source_dir, "iOS" if args.ios else "macOS", "ARM")    
+    else:
+        print("Unsupported platform.")
 
     # Get the system's operating system
     os_system = platform.system()
@@ -111,7 +112,6 @@ if __name__ == '__main__':
         print("Windows OS detected.")
         build_openssl_for_windows(SOURCE_DIR, TARGET_DIR)
     elif os_system == "Darwin":
-        print("macOS detected.")
-        build_openssl_for_mac(SOURCE_DIR, TARGET_DIR)
+        build_openssl_for_darwin(SOURCE_DIR, TARGET_DIR, args.ios)
     else:
         print("Build is supported for macOS/Windows only!")

@@ -1,0 +1,44 @@
+{
+  "model_config": {
+    "model": {
+      "bos_token_id": 1,
+      "context_length": 4096,
+      "decoder": {
+        "head_size": 128,
+        "hidden_size": 4096,
+        "inputs": {
+          "input_ids": "input_ids",
+          "attention_mask": "attention_mask",
+          "position_ids": "position_ids",
+          "past_key_names": "past_key_values.%d.key",
+          "past_value_names": "past_key_values.%d.value"
+        },
+        "outputs": {
+          "logits": "logits",
+          "present_key_names": "present.%d.key",
+          "present_value_names": "present.%d.value"
+        },
+        "num_attention_heads": 32,
+        "num_hidden_layers": 32,
+        "num_key_value_heads": 32
+      },
+      "eos_token_id": 32000,
+      "pad_token_id": 32000,
+      "vocab_size": 32011
+    },
+    "search": {
+      "method": "greedy",
+      "num_beams": 1,
+      "temperature": 0.6,
+      "top_k": 1,
+      "top_p": 0.9,
+      "stop_on_eos": true,
+      "max_length": 512,
+      "max_total_length": 1024
+    }
+  },
+  "prompts": [
+    "<|user|> Given a definition of a task and a sample input, break the definition into small parts.\nEach of those parts will have some instruction. Explain their meaning by showing an example that meets the criteria in the instruction. Use the following format:\nPart  # : a key part of the definition.\nUsage: Sample response that meets the criteria from the key part. Explain why you think it meets the criteria.\n\nQ: Given a story, answer the question about the story. The question is the last sentence in the input. These stories can be difficult due to their length and how each story has at least one of the three following scenarios: the first is when the individual's belief matches reality, the second is when the individual's belief does not match reality, and the third is when an individual has a false belief about another individual's beliefs. The question will ask about the location of an object in the story with respect to either none or one of the three scenarios.\nEmily entered the garage. Hannah entered the garage. The tomato is in the blue_suitcase. Emily moved the tomato to the green_crate. Where does Emily think that Hannah searches for the tomato? Aria entered the hallway. Emily entered the hallway. The strawberry is in the green_basket. Aria moved the strawberry to the red_box. Where does Aria think that Emily searches for the strawberry? Aria entered the bathroom. Jayden entered the bathroom. The spinach is in the green_envelope. Jayden exited the bathroom. Aria moved the spinach to the blue_cupboard. Aria exited the bathroom. Jayden entered the bathroom. Where was the spinach at the beginning? Jayden is in the bathroom. Emily entered the bathroom. The spinach is in the blue_cupboard. Jayden moved the spinach to the green_envelope. Where was the spinach at the beginning? Aria entered the lounge. Hannah entered the lounge. The grapes is in the blue_treasure_chest. Hannah exited the lounge. Aria moved the grapes to the red_drawer. Where does Aria think that Hannah searches for the grapes?\nA: <|end|><|assistant|>"
+  ],
+  "category": "Creative Writing"
+}

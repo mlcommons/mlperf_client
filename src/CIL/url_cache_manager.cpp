@@ -15,8 +15,13 @@ namespace cil {
 
 const std::string URLCacheManager::kUrlCacheFileName = "url_cache.json";
 
-URLCacheManager::URLCacheManager() {
-  cache_file_path_ = utils::GetAppDefaultTempPath() / kUrlCacheFileName;
+URLCacheManager::URLCacheManager(const std::string& deps_dir) {
+  if (deps_dir.empty()) {
+    cache_file_path_ = utils::GetAppDefaultTempPath() / kUrlCacheFileName;
+  } else {
+    cache_file_path_ = std::filesystem::path(deps_dir) / kUrlCacheFileName;
+  }
+
   LoadCacheFromFile();
 }
 
@@ -90,6 +95,24 @@ void URLCacheManager::AddUrlToCache(const std::string& url,
 std::string URLCacheManager::GetFilePathFromCache(
     const std::string& url) const {
   return IsUrlInCache(url) ? cache_[url][0] : "";
+}
+
+void URLCacheManager::ClearCache() {
+  for (const auto& [url, file_info] : cache_.items()) {
+    std::filesystem::path file_path = file_info[0];
+    if (std::filesystem::exists(file_path)) {
+      try {
+        std::filesystem::remove(file_path);
+      } catch (const std::filesystem::filesystem_error& e) {
+        LOG4CXX_ERROR(url_cache_logger, "Failed to remove file: "
+                                            << file_path << ", " << e.what());
+      }
+    }
+  }
+
+  cache_.clear();
+  if (std::filesystem::exists(cache_file_path_))
+    std::filesystem::remove(cache_file_path_);
 }
 
 }  // namespace cil

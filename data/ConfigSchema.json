@@ -146,7 +146,14 @@
                   "type": "string",
                   "enum": [
                     "NativeOpenVINO",
-                    "OrtGenAI"
+                    "OrtGenAI",
+                    "OrtGenAI-RyzenAI",
+                    "Vulkan",
+                    "CUDA",
+                    "Metal",
+                    "NativeQNN",
+                    "MLX",
+                    "WindowsML"
                   ]
                 },
                 "Config": {
@@ -261,6 +268,142 @@
                     },
                     "LibraryPath": {
                       "type": "string"
+                    },
+                    "required": [
+                      "Config"
+                    ]
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "Name": {
+                        "const": "WindowsML"
+                      }
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "Config": {
+                        "type": "object",
+                        "properties": {
+                          "device_type": {
+                            "type": "string",
+                            "enum": [
+                              "GPU",
+                              "NPU"
+                            ]
+                          }
+                        }
+                      }
+                    },
+                    "LibraryPath": {
+                      "type": "string"
+                    },
+                    "required": [
+                      "Config"
+                    ]
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "Name": {
+                        "const": "Vulkan"
+                      }
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "Config": {
+                        "type": "object",
+                        "properties": {
+                          "device_type": {
+                            "type": "string",
+                            "enum": [
+                              "GPU",
+                              "CPU"
+                            ]
+                          },
+                          "gpu_layers": {
+                            "type": "integer",
+                            "minimum": 0
+                          }
+                        }
+                      },
+                      "LibraryPath": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "Config"
+                    ]
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "Name": {
+                        "const": "CUDA"
+                      }
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "Config": {
+                        "type": "object",
+                        "properties": {
+                          "device_type": {
+                            "type": "string",
+                            "enum": [
+                              "GPU",
+                              "CPU"
+                            ]
+                          },
+                          "gpu_layers": {
+                            "type": "integer",
+                            "minimum": 0
+                          }
+                        }
+                      },
+                      "LibraryPath": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "Config"
+                    ]
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "Name": {
+                        "const": "Metal"
+                      }
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "Config": {
+                        "type": "object",
+                        "properties": {
+                          "device_type": {
+                            "type": "string",
+                            "enum": [
+                              "GPU",
+                              "CPU"
+                            ]
+                          },
+                          "gpu_layers": {
+                            "type": "integer",
+                            "minimum": 0
+                          }
+                        }
+                      },
+                      "LibraryPath": {
+                        "type": "string"
+                      }
                     },
                     "required": [
                       "Config"

@@ -1,0 +1,89 @@
+{
+    "MMLUDataPath": "mmlu_data",
+    "MLPerfProgramPath": "mlperf-windows.exe",
+    "OutputDir": "output",
+    "DataSplitStep": null,
+    "Subjects": null,
+    "HfToken": "hf_**********",
+    "RunID": null,
+    "FewShotPromptsNumber": 5,
+    "InputConfigPath": null,
+    "RunConfigPath": null,
+    "InputConfigTemplate": {
+        "model_config": {
+            "model": {
+                "bos_token_id": 1,
+                "context_length": 4096,
+                "decoder": {
+                    "head_size": 128,
+                    "hidden_size": 4096,
+                    "inputs": {
+                        "input_ids": "input_ids",
+                        "attention_mask": "attention_mask",
+                        "position_ids": "position_ids",
+                        "past_key_names": "past_key_values.%d.key",
+                        "past_value_names": "past_key_values.%d.value"
+                    },
+                    "outputs": {
+                        "logits": "logits",
+                        "present_key_names": "present.%d.key",
+                        "present_value_names": "present.%d.value"
+                    },
+                    "num_attention_heads": 32,
+                    "num_hidden_layers": 32,
+                    "num_key_value_heads": 32
+                },
+                "eos_token_id": 2,
+                "pad_token_id": 0,
+                "vocab_size": 32000
+            },
+            "search": {
+                "max_total_length": 4096
+            }
+        }
+    },
+    "RunConfigTemplate": {
+        "SystemConfig": {
+            "Comment": "Phi 3.5 OrtGenAi DML config",
+            "TempPath": "",
+            "EPDependenciesConfigPath": ""
+        },
+        "Scenarios": [
+            {
+                "Name": "Phi3.5",
+                "Models": [
+                    {
+                        "ModelName": "Phi3.5 phi-3.5-mini_instruct-dml",
+                        "FilePath": "https://mlperf-public-files.s3-accelerate.amazonaws.com/scenario_files/llm/phi3.5/models/OrtGenAI/Phi-3.5-mini-instruct-dml/model.onnx",
+                        "DataFilePath": "https://mlperf-public-files.s3-accelerate.amazonaws.com/scenario_files/llm/phi3.5/models/OrtGenAI/Phi-3.5-mini-instruct-dml/model.onnx.data.zip",
+                        "TokenizerPath": "https://mlperf-public-files.s3-accelerate.amazonaws.com/scenario_files/llm/phi3.5/models/OrtGenAI/Phi-3.5-mini-instruct-dml/tokenizer.zip"
+                    }
+                ],
+                "InputFilePath": [
+                    "https://client.mlcommons-storage.org/deps/0.5/scenario_files/llm/llama2/data/content_generation/greedy-prompt_cot.39329.json",
+                    "https://client.mlcommons-storage.org/deps/0.5/scenario_files/llm/llama2/data/content_generation/greedy-prompt_t0.677207.json",
+                    "https://client.mlcommons-storage.org/deps/0.5/scenario_files/llm/llama2/data/creative_writing/greedy-prompt_niv.123362.json",
+                    "https://client.mlcommons-storage.org/deps/0.5/scenario_files/llm/llama2/data/creative_writing/greedy-prompt_niv.77134.json",
+                    "https://client.mlcommons-storage.org/deps/0.5/scenario_files/llm/llama2/data/summarization/greedy-prompt_flan.1221694.json",
+                    "https://client.mlcommons-storage.org/deps/0.5/scenario_files/llm/llama2/data/summarization/greedy-prompt_flan.1221607.json",
+                    "https://client.mlcommons-storage.org/deps/0.5/scenario_files/llm/llama2/data/summarization/greedy-prompt_flan.997680.json",
+                    "https://client.mlcommons-storage.org/deps/0.5/scenario_files/llm/llama2/data/summarization/greedy-prompt_flan.1854150.json"
+                ],
+                "AssetsPath": [],
+                "ResultsVerificationFile": "https://client.mlcommons-storage.org/deps/0.5/scenario_files/llm/llama2/data/generation-test-greedy-expected-results.json",
+                "DataVerificationFile": "",
+                "Iterations": 3,
+                "Delay": 0,
+                "ExecutionProviders": [
+                    {
+                        "Name": "OrtGenAI",
+                        "Config": {
+                            "device_type": "GPU",
+                            "device_id": 0
+                        }
+                    }
+                ]
+            }
+        ]
+    }
+}

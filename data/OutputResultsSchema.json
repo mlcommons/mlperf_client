@@ -2,25 +2,6 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "properties": {
-    "ImageLabelMappings": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "filename": {
-            "type": "string"
-          },
-          "label": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "filename",
-          "label"
-        ],
-        "additionalProperties": false
-      }
-    },
     "expected_tokens": {
       "type": "array",
       "items": {

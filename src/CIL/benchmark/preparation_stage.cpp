@@ -6,6 +6,13 @@
 #include "scenario_data_provider.h"
 #include "utils.h"
 
+#ifdef __APPLE__
+#include <TargetConditionals.h>
+#if TARGET_OS_IOS
+#include "ios/ios_utils.h"
+#endif
+#endif  //__APPLE__
+
 using namespace log4cxx;
 namespace fs = std::filesystem;
 
@@ -43,7 +50,8 @@ class PreparationStage::Impl {
 
   void UnpackLibraryIfNeeded(const std::vector<Unpacker::Asset>& assets,
                              EP ep_type, const std::string& ep_name,
-                             std::string& library_path);
+                             std::string& library_path,
+                             bool try_to_load = true);
 
   void CanLoadLibrary(EP ep_type, const std::string& ep_name,
                       const std::string& library_path);
@@ -110,10 +118,10 @@ bool PreparationStage::Impl::PrepareIHVDevicesIfNeeded(
         LOG4CXX_INFO(logger_, "\tDevice ID: " << device_id << ", Device Name: "
                                               << device_name);
       }
-      continue;
     }
 
-    if (((!ep_config.contains("device_id") || ep_config["device_id"] < 0) && !device_id_.has_value()) ||
+    if (((!ep_config.contains("device_id") || ep_config["device_id"] < 0) &&
+         !device_id_.has_value()) ||
         (device_id_.has_value() && device_id_.value() == -1)) {
       if (devices.empty()) {
         LOG4CXX_ERROR(logger_, "Failed to prepare " << ep_name
@@ -153,9 +161,8 @@ bool PreparationStage::Impl::PrepareIHVDevicesIfNeeded(
     }
   }
 
-  if (enumerate_only_) return true;
-
   prepared_eps_ = adjusted_eps;
+  if (enumerate_only_) return true;
 
   return valid_eps > 0;
 }
@@ -182,6 +189,7 @@ void PreparationStage::Impl::PrepareDeviceIdsIfNeeded() {
       switch (ep_type) {
         case EP::kIHVOrtGenAI:
         case EP::kIHVNativeOpenVINO:
+        case EP::kIHVWindowsML:
           check_devices(ep_type, library_path);
           break;
         default:
@@ -202,7 +210,7 @@ void PreparationStage::Impl::PrepareDeviceIdsIfNeeded() {
 
 void PreparationStage::Impl::UnpackLibraryIfNeeded(
     const std::vector<Unpacker::Asset>& assets, EP ep_type,
-    const std::string& ep_name, std::string& library_path) {
+    const std::string& ep_name, std::string& library_path, bool try_to_load) {
   for (auto& asset : assets) {
     auto& unpacked_asset = unpacked_map_[asset];
     unpacked_asset =
@@ -213,7 +221,7 @@ void PreparationStage::Impl::UnpackLibraryIfNeeded(
       throw std::runtime_error(error);
     }
   }
-  CanLoadLibrary(ep_type, ep_name, library_path);
+  if (try_to_load) CanLoadLibrary(ep_type, ep_name, library_path);
 }
 
 void PreparationStage::Impl::CanLoadLibrary(EP ep_type,
@@ -227,6 +235,65 @@ void PreparationStage::Impl::CanLoadLibrary(EP ep_type,
   }
   eps_libraries_[ep_type].insert(library_path);
 }
+
+#if WITH_IHV_WIN_ML
+static bool InstallWindowsMLMSIX(const std::string& library_path,
+                                 const log4cxx::LoggerPtr& logger) {
+  // Helper to run command hidden
+  auto RunHiddenCommand = [](const std::string& cmd) -> bool {
+    STARTUPINFOA si = {sizeof(si)};
+    PROCESS_INFORMATION pi;
+    si.dwFlags = STARTF_USESHOWWINDOW;
+    si.wShowWindow = SW_HIDE;
+
+    std::string cmd_copy = "cmd.exe /C " + cmd;
+
+    BOOL success = CreateProcessA(nullptr,
+                                  &cmd_copy[0],  // Command line (mutable)
+                                  nullptr, nullptr, FALSE, CREATE_NO_WINDOW,
+                                  nullptr, nullptr, &si, &pi);
+
+    if (success) {
+      WaitForSingleObject(pi.hProcess, INFINITE);
+      DWORD exitCode;
+      GetExitCodeProcess(pi.hProcess, &exitCode);
+      CloseHandle(pi.hProcess);
+      CloseHandle(pi.hThread);
+      return (exitCode == 0);
+    }
+
+    return false;
+  };
+
+  // Step 1: Check if package is already installed
+  std::string check_cmd =
+      "powershell.exe -ExecutionPolicy Bypass -NoProfile "
+      "-Command \"if (Get-AppxPackage -Name Microsoft.WindowsMLRuntime.0.3) { "
+      "exit 0 } else { exit 1 }\"";
+
+  if (RunHiddenCommand(check_cmd)) {
+    return true;
+  }
+
+  // Step 2: Install the package
+  auto msix_path = (fs::path(library_path).parent_path() /
+                    "Microsoft.Windows.AI.MachineLearning.msix")
+                       .lexically_normal();
+
+  std::string install_cmd =
+      "powershell.exe -ExecutionPolicy Bypass -NoProfile "
+      "-Command \"Add-AppxPackage -Path '" +
+      msix_path.string() + "'\"";
+
+  if (!RunHiddenCommand(install_cmd)) {
+    LOG4CXX_ERROR(logger, "Failed to install Windows ML MSIX package: " +
+                              msix_path.string());
+    return false;
+  }
+
+  return true;
+}
+#endif
 
 bool PreparationStage::Impl::Run() {
   const auto scenario_name = scenario_config_.GetName();
@@ -262,19 +329,15 @@ bool PreparationStage::Impl::Run() {
       // config with this new one
       auto ep_config_json = ep.GetConfig();
 
-#if WITH_QNN
-      if (ep_name == "QNN") {
-        SetupQNN(ep_config_json, was_visited);
-      }
-#endif()
-
       auto can_load_library = [&]() {
         CanLoadLibrary(ep_type, ep_name, library_path);
       };
 
       auto unpack_library_if_needed =
-          [&](const std::vector<Unpacker::Asset>& assets) {
-            UnpackLibraryIfNeeded(assets, ep_type, ep_name, library_path);
+          [&](const std::vector<Unpacker::Asset>& assets,
+              bool try_to_load = true) {
+            UnpackLibraryIfNeeded(assets, ep_type, ep_name, library_path,
+                                  try_to_load);
           };
 
       if (!empty_library_path) {
@@ -283,6 +346,13 @@ bool PreparationStage::Impl::Run() {
           error += " library path does not exist: " + library_path;
           throw std::runtime_error(error);
         }
+#if WITH_IHV_WIN_ML
+        if (ep_type == kIHVWindowsML &&
+            !InstallWindowsMLMSIX(library_path, logger_)) {
+          throw std::runtime_error(
+              "Failed to install Windows ML MSIX package, skipping...");
+        }
+#endif
         can_load_library();
       } else {
         switch (ep_type) {
@@ -291,9 +361,61 @@ bool PreparationStage::Impl::Run() {
             unpack_library_if_needed({kNativeOpenVINO});
             break;
 #endif
+#if WITH_IHV_NATIVE_QNN
+          case kIHVNativeQNN:
+            unpack_library_if_needed({kNativeQNN});
+            break;
+#endif
 #if WITH_IHV_ORT_GENAI
           case kIHVOrtGenAI:
             unpack_library_if_needed({kOrtGenAI});
+            break;
+#endif
+#if WITH_IHV_ORT_GENAI_RYZENAI
+          case kkIHVOrtGenAIRyzenAI:
+            unpack_library_if_needed({kOrtGenAIRyzenAI});
+            break;
+#endif
+#if WITH_IHV_WIN_ML
+          case kIHVWindowsML: {
+            unpack_library_if_needed({kWindowsML}, false);
+            if (!InstallWindowsMLMSIX(library_path, logger_)) {
+              throw std::runtime_error(
+                  "Failed to install Windows ML MSIX package, skipping...");
+            }
+            can_load_library();
+          } break;
+#endif
+#if WITH_IHV_MLX
+          case kIHVMLX:
+#if !TARGET_OS_IOS
+            unpack_library_if_needed({kMLX});
+#else
+            library_path =
+                ios_utils::GetIOSLibraryPath("IHV_MLX.framework/IHV_MLX");
+            can_load_library();
+#endif
+            break;
+#endif
+#if WITH_IHV_GGML_METAL
+          case kIHVMetal:
+#if !TARGET_OS_IOS
+            unpack_library_if_needed({kGGML_Metal, kGGML_EPs});
+#else
+            library_path = ios_utils::GetIOSLibraryPath(
+                "IHV_GGML_EPs.framework/IHV_GGML_EPs");
+            can_load_library();
+#endif
+            break;
+#endif
+#if WITH_IHV_GGML_VULKAN
+          case kIHVVulkan:
+            unpack_library_if_needed({kGGML_Vulkan, kGGML_EPs});
+            break;
+#endif
+#if WITH_IHV_GGML_CUDA
+          case kIHVCUDA:
+            unpack_library_if_needed({kGGML_CUDA, kGGML_EPs});
             break;
 #endif
           default:

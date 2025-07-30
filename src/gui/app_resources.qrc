@@ -1,0 +1,67 @@
+<RCC>
+    <qresource prefix="/icons">
+        <file>resources/icons/chevron-down-30.png</file>
+        <file>resources/icons/chevron-up-30.png</file>
+        <file>resources/icons/chevron-down-50.png</file>
+        <file>resources/icons/chevron-up-48.png</file>
+        <file>resources/icons/expand_down.png</file>
+        <file>resources/icons/expand_left.png</file>
+        <file>resources/icons/ep_checked.png</file>
+        <file>resources/icons/ep_info_icon.png</file>
+        <file>resources/icons/ep_unchecked.png</file>
+        <file>resources/icons/checkbox_primary_on.png</file>
+        <file>resources/icons/checkbox_primary_off.png</file>
+        <file>resources/icons/checkbox_primary_disabled.png</file>
+        <file>resources/icons/checkbox_secondary_on.png</file>
+        <file>resources/icons/checkbox_secondary_off.png</file>
+        <file>resources/icons/bi_gpu_small-line.png</file>
+        <file>resources/icons/ri_npu-line.png</file>
+        <file>resources/icons/ri_alert-fill.png</file>
+        <file>resources/icons/success_green_icon.png</file>
+        <file>resources/icons/bi_gpu_card.png</file>
+        <file>resources/icons/octicon_chevron-up-12.png</file>
+
+        <file>resources/icons/cpu.png</file>
+        <file>resources/icons/gpu.png</file>
+        <file>resources/icons/npu.png</file>
+        <file>resources/icons/os.png</file>
+        <file>resources/icons/windows10.png</file>
+        <file>resources/icons/windows11.png</file>
+        <file>resources/icons/macos.png</file>
+        <file>resources/icons/action_info-16.png</file>
+        <file>resources/icons/mdi_temperature.png</file>
+        <file>resources/icons/ic_baseline-power.png</file>
+        <file>resources/icons/arrow_right_alt.png</file>
+        <file>resources/icons/calendar_icon.png</file>
+        <file>resources/icons/time_icon.png</file>
+        <file>resources/icons/touch_icon.png</file>
+        <file>resources/icons/folder_icon.png</file>
+        <file>resources/icons/edu_icon.png</file>
+        <file>resources/icons/summarize_icon.png</file>
+        <file>resources/icons/add.png</file>
+        <file>resources/icons/add_disabled.png</file>
+        <file>resources/icons/delete.png</file>
+        <file>resources/icons/delete_disabled.png</file>
+        <file>resources/icons/filter_list.png</file>
+        <file>resources/icons/export_icon.png</file>
+        <file>resources/icons/arrow_left.png</file>
+        <file>resources/icons/close_icon.png</file>
+        <file>resources/icons/popup_info_icon.png</file>
+        <file>resources/icons/intel_logo.png</file>
+        <file>resources/icons/nvidia_logo.png</file>
+        <file>resources/icons/qualcomm_logo.png</file>
+        <file>resources/icons/amd_logo.png</file>
+    </qresource>
+    <qresource prefix="/fonts">
+        <file>resources/fonts/Roboto/Roboto-Black.ttf</file>
+        <file>resources/fonts/Roboto/Roboto-Bold.ttf</file>
+        <file>resources/fonts/Roboto/Roboto-Light.ttf</file>
+        <file>resources/fonts/Roboto/Roboto-Medium.ttf</file>
+        <file>resources/fonts/Roboto/Roboto-Regular.ttf</file>
+        <file>resources/fonts/Roboto/Roboto-Thin.ttf</file>
+    </qresource>
+    <qresource prefix="/">
+        <file>resources/styles.qss</file>
+        <file>resources/MLPerf Client EULA.pdf</file>
+    </qresource>
+</RCC>

@@ -71,6 +71,7 @@ class API_Handler {
                                      std::string& error, std::string& log);
 
   std::string GetIHVErrors() const { return ihv_errors_; }
+  void ClearErrorMessage() { ihv_errors_.clear(); }
 
  private:
   static void Log(void* context, API_IHV_LogLevel level, const char* message);

@@ -39,8 +39,8 @@
 
 #include "command_option.h"
 #include "command_parser.h"
+#include "benchmark/runner.h"
 #include "execution_config.h"
-#include "settings.h"
 #include "system_controller.h"
 #include "unpacker.h"
 #include "utils.h"
@@ -146,6 +146,14 @@ void generate_command_options(CommandParser& command_parser) {
   data_dir_option.SetOptionTypeHint("folder");
   command_parser.AddOption(data_dir_option);
 
+  CommandOption temp_dir_option(
+      "temp-dir", 't',
+      "Specify directory, where temporary files will be stored. Overrides "
+      "value provided in the config file, if provided.",
+      false);
+  temp_dir_option.SetOptionTypeHint("folder");
+  command_parser.AddOption(temp_dir_option);
+
   // Add Enumerate devices option
   CommandOption enumerate_option(
       "enumerate-devices", 'e',
@@ -162,13 +170,19 @@ void generate_command_options(CommandParser& command_parser) {
       {"all", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"});
   command_parser.AddOption(device_id_override_option);
 
+  CommandOption skip_failed_prompts_option(
+    "skip-failed-prompts", 's',
+    "Skip failed prompts during the execution of the application. If set to true, "
+    "the application will not stop on failed prompts and will continue execution.",
+    false);
+  command_parser.AddFlag(skip_failed_prompts_option);
+
   // set the display order
-  command_parser.SetDisplayOptionOrder(
-      {"help", "version", "config", "logger", "output-dir", "data-dir",
-       "enumerate-devices",
-       "device-id",
-       "pause",
-       "list-models", "download_behaviour", "cache-local-files"});
+  command_parser.SetDisplayOptionOrder({
+    "help", "version", "config", "logger", "output-dir", "data-dir", "temp-dir",
+        "enumerate-devices", "device-id",
+        "pause", "list-models", "download_behaviour", "cache-local-files", "skip-failed-prompts",
+  });
 }
 
 int main(int argc, char* argv[]) {
@@ -204,13 +218,12 @@ int main(int argc, char* argv[]) {
   // Check for the list models option
   if (command_parser.OptionPassed("list-models")) {
     std::clog << "List of supported models:" << std::endl;
-    for (const auto& model : cli::SystemController::kSupportedModels) {
+    for (const auto& model : cil::BenchmarkRunner::kSupportedModels) {
       std::clog << "- " << model << std::endl;
     }
     return 0;
   }
 
-  // Make sure we are using the correct working directory from executable
   utils::SetCurrentDirectory(utils::GetCurrentDirectory());
 
   fs::path app_data_dir = utils::GetAppDefaultDataPath();
@@ -225,6 +238,19 @@ int main(int argc, char* argv[]) {
   }
 
   std::shared_ptr<cil::Unpacker> unpacker = std::make_shared<cil::Unpacker>();
+
+  bool temp_dir_overriden = false;
+  if (command_parser.OptionPassed("temp-dir")) {
+    auto temp_dir = command_parser.GetOptionValue("temp-dir");
+    if (!fs::exists(temp_dir) || !fs::is_directory(temp_dir)) {
+      LOG4CXX_ERROR(loggerMain,
+                    "temp-dir is not a valid directory: " << temp_dir);
+      return 1;
+    }
+    unpacker->SetDepsDir(temp_dir, false);
+    temp_dir_overriden = true;
+  }
+
   std::string deps_dir = unpacker->GetDepsDir();
   // Configure the logger before displaying the version
   // Check for Log4Cxx XML config override
@@ -356,9 +382,11 @@ int main(int argc, char* argv[]) {
     }
   }
 
-  cli::SystemController controller(config_path, unpacker, output_dir, data_dir);
+  auto skip_failed_prompts = command_parser.OptionPassed("skip-failed-prompts");
+
+  cli::SystemController controller(config_path, unpacker, output_dir, data_dir, skip_failed_prompts);
   LOG4CXX_INFO(loggerMain, "Configuring scenarios...\n");
-  if (!controller.Config()) {
+  if (!controller.Config(temp_dir_overriden)) {
     LOG4CXX_ERROR(loggerMain, "Failed to configure scenarios, aborting...");
     return 1;
   }

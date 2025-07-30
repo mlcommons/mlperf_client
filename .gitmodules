@@ -13,3 +13,9 @@
 [submodule "deps/minizip-ng"]
 	path = deps/minizip-ng
 	url = https://github.com/zlib-ng/minizip-ng.git
+[submodule "deps/llama.cpp"]
+	path = deps/llama.cpp
+	url = https://github.com/ggerganov/llama.cpp.git
+[submodule "deps/mlx-swift"]
+	path = deps/mlx-swift
+	url = https://github.com/ml-explore/mlx-swift.git

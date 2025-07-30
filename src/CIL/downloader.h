@@ -52,7 +52,7 @@ class Downloader {
    */
 
   bool operator()(const std::string& file_url,
-                  const DownloadProgressCallback& progress_callback);
+                  const DownloadProgressCallback& progress_callback) const;
   /**
    * @brief Interrupts the download process.
    *
@@ -72,16 +72,19 @@ class Downloader {
   std::string destination_file_path_;
   std::atomic<bool> stop_download;
 
-  bool download_remote_file(const std::string& host_name,
-                            const std::string& host_file_path,
-                            const std::string& destination_file_path,
-                            int num_threads,
-                            const DownloadProgressCallback& progress_callback);
-  void download_chunk(const std::string& host_name,
-                      const std::string& host_file_path, uint64_t start,
-                      uint64_t end, const std::string& output_file_path,
-                      std::atomic<uint64_t>& progress,
-                      std::atomic<bool>& has_failed, int retry);
+  bool DownloadRemoteFile(
+      const std::string& host_name, const std::string& host_file_path,
+      const std::string& destination_file_path, int num_threads,
+      const DownloadProgressCallback& progress_callback) const;
+  void DownloadChunk(const std::string& host_name,
+                     const std::string& host_file_path, uint64_t start,
+                     uint64_t end, const std::string& output_file_path,
+                     std::atomic<uint64_t>& progress,
+                     std::atomic<bool>& has_failed, int retry) const;
+
+  template <typename ClientType>
+  void SetProxyIfAvailable(ClientType& client) const;
+  std::pair<std::string, int> ParseProxy(const std::string_view& proxy) const;
 };
 
 }  // namespace cil

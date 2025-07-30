@@ -3,6 +3,7 @@
 
 #include <nlohmann/json.hpp>
 #include <string>
+#include <unordered_set>
 
 namespace cil {
 
@@ -58,6 +59,29 @@ class BenchmarkLogger {
    */
   void SetConfigVerified(bool is_verified);
 
+  /**
+   * @brief Set config experimental flag
+   *
+   */
+  void SetConfigExperimental(bool is_experimental);
+
+  /**
+   * @brief Get the benchmark results.
+   *
+   */
+  const std::vector<BenchmarkResult>& GetResults() const;
+
+  /**
+   * @brief Read results from file
+   *
+   */
+  static std::vector<BenchmarkResult> ReadResultsFromFile(
+      const std::string& filename);
+
+  static void RemoveResultsFromFile(
+      const std::string& filename,
+      const std::unordered_set<int>& rows_to_remove);
+
  private:
   nlohmann::ordered_json BenchmarkResultToJson(const BenchmarkResult& result);
   void WriteResults(const nlohmann::ordered_json& json_array);
@@ -65,11 +89,12 @@ class BenchmarkLogger {
   std::vector<BenchmarkResult> GetResults(
       const std::map<std::string, BenchmarkResult>& results);
 
-  bool config_verified_;
+  bool config_verified_{false};
+  bool config_experimental_{false};
   std::string application_version_string_;
   std::string filename_;
   std::vector<BenchmarkResult> results_;
-  std::unique_ptr<SystemInfoProvider> system_info_provider_;
+  SystemInfoProvider* system_info_provider_;
 };
 
 }  // namespace cil

@@ -1,0 +1,6 @@
+set(CMAKE_SYSTEM_NAME Darwin)
+
+set(CMAKE_OSX_SYSROOT macosx)
+
+set(CMAKE_OSX_ARCHITECTURES "arm64")
+

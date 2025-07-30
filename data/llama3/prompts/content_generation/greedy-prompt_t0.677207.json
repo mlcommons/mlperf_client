@@ -1,0 +1,44 @@
+{
+  "model_config": {
+    "model": {
+      "bos_token_id": 128000,
+      "context_length": 4096,
+      "decoder": {
+        "head_size": 128,
+        "hidden_size": 4096,
+        "inputs": {
+          "input_ids": "input_ids",
+          "attention_mask": "attention_mask",
+          "position_ids": "position_ids",
+          "past_key_names": "past_key_values.%d.key",
+          "past_value_names": "past_key_values.%d.value"
+        },
+        "outputs": {
+          "logits": "logits",
+          "present_key_names": "present.%d.key",
+          "present_value_names": "present.%d.value"
+        },
+        "num_attention_heads": 32,
+        "num_hidden_layers": 32,
+        "num_key_value_heads": 32
+      },
+      "eos_token_id": 128009,
+      "pad_token_id": 128004,
+      "vocab_size": 128256
+    },
+    "search": {
+      "method": "greedy",
+      "num_beams": 1,
+      "temperature": 0.6,
+      "top_k": 1,
+      "top_p": 0.9,
+      "stop_on_eos": true,
+      "max_length": 256,
+      "max_total_length": 448
+    }
+  },
+  "prompts": [
+    "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\nYou are an AI assistant. User will you give you a task. Your goal is to complete the task as faithfully as you can. While performing the task think step-by-step and justify your steps.<|eot_id|><|start_header_id|>user<|end_header_id|>\n\nTwo neighboring farms both had depleted soils due to intensive agricultural practices for decades. Apple far decided to start an agroforestry system and other methods to protect their depleted soils, while Pear farm did nothing and had big losses the following years.  Which farm used fewer cover crops?<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"
+  ],
+  "category": "Content Generation"
+}

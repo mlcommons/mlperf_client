@@ -18,7 +18,7 @@ class BaseInferenceCommon {
   using DeviceListPtr =
       std::unique_ptr<API_IHV_DeviceList_t, DeviceListDeleter>;
 
-  BaseInferenceCommon(const std::string& model_path, Logger logger);
+  BaseInferenceCommon(const std::string& model_path, const std::string& model_name, Logger logger);
   virtual ~BaseInferenceCommon() = default;
 
   void LogTime(
@@ -78,6 +78,7 @@ class BaseInferenceCommon {
   }  // namespace cil::infer
 
   std::string model_path_;
+  std::string model_name_;
   // Logger
   Logger logger_;
 

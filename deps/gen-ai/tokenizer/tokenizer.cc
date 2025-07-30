@@ -8,6 +8,15 @@ namespace tfm {
 
 static std::string_view GetModelName(const std::string_view& tok_cls) {
   constexpr std::string_view tok = "Tokenizer";
+  constexpr std::string_view pretrainedFast = "PreTrainedTokenizerFast";
+  constexpr std::string_view pretrained = "PreTrainedTokenizer";
+  
+  // Check for PreTrainedTokenizerFast format (used by Llama3)
+  if (tok_cls == pretrainedFast || tok_cls == pretrained) {
+    return "Llama3";  // Maps PreTrainedTokenizerFast class to Llama3 model
+  }
+  
+  // Standard tokenizer format (ModelNameTokenizer)
   if (tok_cls.size() > tok.length()) {
     if (tok_cls.substr(tok_cls.size() - tok.length()) == tok) {
       return tok_cls.substr(0, tok_cls.size() - tok.length());
@@ -23,11 +32,19 @@ TfmStatus CreateBPETokenizer(const std::string& tokenizer_path,
                              const std::string& tokenizer_type,
                              std::unique_ptr<Tokenizer>& token_ptr) {
   auto token_cfg = std::make_unique<TokenConfig>();
-  auto config_file = tokenizer_path + "/tokenizer_config.json";
+  
+  // Use standard tokenizer_config.json file
+  std::string config_file = tokenizer_path + "/tokenizer_config.json";
+  
   auto status = token_cfg->LoadJson(config_file);
+  if (!status.ok()) {
+    return status;
+  }
 
+  // Determine tokenizer type
   std::string type = tokenizer_type;
   if (type.empty()) {
+    // Check for Llama3 model based on tokenizer class
     if (BPETokenizer::IsSupportedModel(GetModelName(token_cfg->tokenizer_class_))) {
       type = "BPE";
     } /* else if (fs::exists(tokenizer_path + "/tokenizer.model")) {

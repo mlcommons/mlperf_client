@@ -89,12 +89,12 @@ ScenarioDataProvider::GetExpectedTokens() const {
   return expected_tokens_;
 }
 
-void ScenarioDataProvider::SetLlama2TokenizerPath(const std::string& path) {
-  llama2_tokenizer_path_ = path;
+void ScenarioDataProvider::SetLLMTokenizerPath(const std::string& path) {
+  llm_tokenizer_path_ = path;
 }
 
-std::string ScenarioDataProvider::getLLama2TokenizerPath() const {
-  return llama2_tokenizer_path_;
+std::string ScenarioDataProvider::GetLLMTokenizerPath() const {
+  return llm_tokenizer_path_;
 }
 
 }  // namespace cil

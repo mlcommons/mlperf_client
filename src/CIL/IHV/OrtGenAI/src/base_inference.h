@@ -11,7 +11,9 @@ namespace infer {
 
 class BaseInference : public cil::infer::BaseInferenceCommon {
  public:
-  BaseInference(const std::string& model_path, const std::string& ep_name,
+  BaseInference(const std::string& model_path, 
+                const std::string& model_name,
+                const std::string& ep_name,
                 const std::string& deps_dir,
                 const OrtGenAIExecutionProviderSettings& ep_settings,
                 cil::Logger logger);

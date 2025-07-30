@@ -1,0 +1,44 @@
+{
+  "model_config": {
+    "model": {
+      "bos_token_id": 128000,
+      "context_length": 4096,
+      "decoder": {
+        "head_size": 128,
+        "hidden_size": 4096,
+        "inputs": {
+          "input_ids": "input_ids",
+          "attention_mask": "attention_mask",
+          "position_ids": "position_ids",
+          "past_key_names": "past_key_values.%d.key",
+          "past_value_names": "past_key_values.%d.value"
+        },
+        "outputs": {
+          "logits": "logits",
+          "present_key_names": "present.%d.key",
+          "present_value_names": "present.%d.value"
+        },
+        "num_attention_heads": 32,
+        "num_hidden_layers": 32,
+        "num_key_value_heads": 32
+      },
+      "eos_token_id": 128009,
+      "pad_token_id": 128004,
+      "vocab_size": 128256
+    },
+    "search": {
+      "method": "greedy",
+      "num_beams": 1,
+      "temperature": 0.6,
+      "top_k": 1,
+      "top_p": 0.9,
+      "stop_on_eos": true,
+      "max_length": 256,
+      "max_total_length": 1792
+    }
+  },
+  "prompts": [
+    "<|begin_of_text|><|start_header_id|>user<|end_header_id|>\n\nNews article: Actors are always under the microscope when it comes to packing on the pounds -- but sometimes sacrificing their health -- and good looks -- comes with the job. Take Russell Crowe, for example. The 48-year-old Aussie was recently rescued by U.S. Coast Guard when he lost his way kayaking in the waters off New York's Long Island. However, it wasn't his dramatic rescue most people were talking about -- it was his dramatic weight gain. Crowe is currently filming Darren Aronofsky's Noah, and the actor apparently needed to gain some weight for the role. This isn't the actor's first time he's packed on the pounds for a film. He gained a whopping 63 pounds for 2008's Body of Lies, completely doing away with his lean, muscular Gladiator physique. Who else needed to gain -- or lose -- weight for a role? Click through the gallery above to find out. George Clooney stunned his female fans when he put on 30 pounds for the 2005 flick Syriana. Meanwhile, Charlize Theron also gained 30 pounds to portray real-life serial killer Aileen Wuornos in 2003's Monster. Theron's dedication to the role won her the Academy Award for best actress. Some stars have had to drastically shed the pounds for their dream roles. Christian Bale lost 63 pounds for The Machinist. His daily diet consisted of only water, one cup of coffee and an apple. Who else? Check out the gallery and then weigh in on the weigh in that surprised you the most! Matthew McConaughey committed to losing 30 pounds to play a man with HIV in \"The Dallas Buyer's Club,\" telling Larry King, \"I should not look healthy by the time I'm doing that film.\" Anne Hathaway not only chopped off her brown locks to portray Fantine in \"Les Miserables,\" she lost a substantial amount of weight for the role. Though rumors ran rampant that she was starving herself, her rep claims she was \"on a special diet\" to \"look more frail as she is playing a prostitute who is dying of tuberculosis.\" Mila Kunis dropped 20 pounds off her 5-foot-two-inch frame to play a ballerina in 2010's \"Black Swan.\" \"I could see why this industry is so f*cked up, because at 95 pounds, I would literally look at myself in the mirror and I was like, 'Oh my God!' she told E! News. \"I had no shape, no boobs, no ass .. All you saw was bone.\" Kunis continued: \"In real life, I looked disgusting, but in photographs and on film, it looked amazing.\" Rooney Mara went through a total transformation for her role as Lisbeth Salander in \"The Girl with the Dragon Tattoo.\" Not only did she chop and dye her hair and get several piercings, she \"starved\" herself to lose weight for the role. \"[Director] David [Fincher] didn't want me to lose any weight; that was something that I wanted to do that he was, kind of, opposed to,\" she told The Hollywood Reporter. Natalie Portman had to look near skeletal to play a crazy ballerina in \"Black Swan.\" Like Mila Kunis, she also dropped 20 pounds and scored the Academy Award for Best Actress in 2011. Portman trained in ballet for a full year before filming in order to portray the ballerina. \"I mean, I had never gotten that much training -- to be doing five-to-eight hours a day of [it] was really a challenge,\" she told Us Weekly. 50 Cent lost a shocking amount of weight for his role in \"Things Fall Apart,\" in which he plays a cancer-ridden football player. The actor and rapper said he dropped from 214 pounds to 160 pounds over the course of just nine weeks with a liquid diet and working out three hours a day. Christian Bale has put his body through hell for movie roles. The action lost nearly 65 pounds by eating only 275 calories a day over the course of four months, for his role in \"The Machinist.\" The 121-pound actor then bulked up to 190 lbs in just five months to play Batman in \"Batman Begins\" and he later gained another 30 pounds of muscle for \"The Dark Knight.\" \"It was like a massive shock to my body because of what I was trying to get it to do,\" Bale told the BBC. \"My metabolism had to get back up to speed, because my heart had gotten used to a whole different way of living.\" Beyonce lost 20 pounds to play Deena Jones, the lead singer of the Dreamettes, in 2006's \"Dreamgirls.\" \"At the beginning (of filming), I was my normal weight,\"she told People. \"I actually gained a little bit, but then I lost 20 lbs. when I went from young Deena to old Deena. I wanted it to be something more than just make-up and hair. I wanted to see the change.\" Tom Hanks has challenged his body to fit the role throughout the years. He gained 30 pounds in 1992 to play an alcoholic baseball coach in \"A League of Their Own,\" and lost all of it and more for the 1993 movie \"Philadelphia,\" where he played an AIDS patient. Years later he lost more than 50 pounds to portray a plane crash survivor in \"Cast Away.\" Seth Rogen shed 30 pounds in 2009 for his title role in 2011's \"The Green Hornet\" by eating right and working out. \"No...I did not do any experimental injections! It's just diet and exercise. It works!\" he told the Long Island Press in 2011. Former \"Lost\" star Matthew Fox made himself almost unrecognizable for his role as a cage-fighter in 2012's \"Alex Cross.\" \"The amount of dedication and the weight loss is this much of where he went,\" his co-star Tyler Perry told MTV. \"He really went to where ever he had to go. I don't even want to know what dark places he went to to get that character, but he was amazing.\" Matt Damon lost a startling 50 pounds for 1996's \"Courage Under Fire,\" but it came at a price. According to ABC News, he lost 40 pounds in under three months for the role, and it left him with adrenal gland damage. After having a baby, Jennifer Hudson had to drop her pregnancy weight quickly to portray Winnie Mandela in 2011's \"Winnie.\" \"Whatever it takes to morph into a character I'll do it,\" Hudson told People, adding that she dropped the pounds by working out and exercising portion control through Weight Watchers. What is a shorter version of the above article?<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"
+  ],
+  "category": "Summarization, Moderate"
+}

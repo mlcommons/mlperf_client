@@ -1,0 +1,44 @@
+{
+  "model_config": {
+    "model": {
+      "bos_token_id": 1,
+      "context_length": 4096,
+      "decoder": {
+        "head_size": 128,
+        "hidden_size": 4096,
+        "inputs": {
+          "input_ids": "input_ids",
+          "attention_mask": "attention_mask",
+          "position_ids": "position_ids",
+          "past_key_names": "past_key_values.%d.key",
+          "past_value_names": "past_key_values.%d.value"
+        },
+        "outputs": {
+          "logits": "logits",
+          "present_key_names": "present.%d.key",
+          "present_value_names": "present.%d.value"
+        },
+        "num_attention_heads": 32,
+        "num_hidden_layers": 32,
+        "num_key_value_heads": 32
+      },
+      "eos_token_id": 2,
+      "pad_token_id": 0,
+      "vocab_size": 32000
+    },
+    "search": {
+      "method": "greedy",
+      "num_beams": 1,
+      "temperature": 0.6,
+      "top_k": 1,
+      "top_p": 0.9,
+      "stop_on_eos": true,
+      "max_length": 128,
+      "max_total_length": 1216
+    }
+  },
+  "prompts": [
+    "<s>[INST]<<SYS>>You are an AI assistant. User will you give you a task. Your goal is to complete the task as faithfully as you can. While performing the task think step-by-step and justify your steps.<</SYS>>Write a title for this article:\n\nThoughts on the economic scene.If you remember only one thing about tax reform, it should be this: it’s hard.\n\nThoughts on the economic scene.\n\nAs I mentioned in an article on Sunday, the most expensive tax breaks tend to be popular. The three largest are those for employer-provided health insurance, mortgage interest and 401(k) saving. The largest corporate tax breaks include some popular ones as well, like the tax benefit for research and development.\n\nOver the weekend, Mitt Romney waded into the tax-reform debate, inadvertently, when reporters overheard him telling Republican donors which tax breaks he would consider eliminating as president. The three he named were the deduction for mortgage interest on vacation homes and the deductions for state and local taxes. Although his remarks were a bit vague, he seemed to suggest that he would eliminate them only for high-income households.\n\nHow much revenue would those steps produce? Maybe about $40 billion a year, using generous assumptions. That is hardly nothing; $40 billion is more than half the annual cost of the Bush tax cuts on income above $200,000 a year, for instance.\n\nYet $40 billion still pales compared with the size of future deficits or, for that matter, the additional tax cuts that Mr. Romney has proposed. Those cuts would cost the government more than $400 billion a year relative to current policy, according to the Tax Policy Center. Relative to current law – which includes a series of tax increases that take effect on Jan. 1 – the Romney tax cuts would cost close to $900 billion a year. To put it another way, if Mr. Romney eliminated the deductions he mentioned, he would need to come up with at least 10 times as much loophole-closing — and maybe 20 or 30 times as much — to keep his tax plan from adding to the deficit.\n\nAs for the details on the loophole-closing he mentioned: The mortgage deduction on second homes costs the federal government somewhere in the neighborhood of $10 billion a year, Roberton Williams of the Tax Policy Center told me. If Mr. Romney’s proposed tax cuts also became law, the cost would fall to $8 billion, because some of the additional revenue would be lost to lower marginal rates. And if the proposal applied only to affluent families with second homes, rather than all owners of second homes, the change would raise less than $8 billion.\n\nNo matter what, Mr. Williams called the estimate \"very rough\" and said the actual number could be considerably lower than $8 billion or $10 billion.\n\nEliminating the deductions for state and local taxes on top income would probably make a bigger difference. The total cost of those deductions, including for property taxes, will be $68 billion in fiscal 2013, the Office of Management and Budget says. Other analysis, by the Joint Committee on Taxation, suggests that perhaps half of this total might apply to income above $200,000 a year (a cutoff Mr. Romney has previously used to define top incomes). That would reduce the deficit by $30 billion to $40 billion a year.\n\nSo even under fairly aggressive estimates, the elimination of these three deductions would raise only a modest amount of money.\n\nMr. Romney did not claim otherwise, to be sure. The broader point is simply that tax reform is difficult. Eliminating tax breaks for the affluent, as both President Obama and Mr. Romney have proposed, can make a serious dent in the deficit, but it almost certainly cannot eliminate the long-term deficit on its own.\n\nThe long-term deficit stems from a basic disconnect between the government Americans want and the taxes they now pay. Closing that gap will probably be impossible without raising taxes on the 98 percent of Americans who make less than $200,000 a year — or cutting their benefits deeply. [/INST]"
+  ],
+  "category": "Summarization, Light"
+}

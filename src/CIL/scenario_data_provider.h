@@ -21,8 +21,8 @@ class ScenarioDataProvider {
 
   const std::vector<std::vector<uint32_t>>& GetExpectedTokens() const;
 
-  void SetLlama2TokenizerPath(const std::string& path);
-  std::string getLLama2TokenizerPath() const;
+  void SetLLMTokenizerPath(const std::string& path);
+  std::string GetLLMTokenizerPath() const;
 
  private:
   void ReadOutputResultsFile();
@@ -32,7 +32,7 @@ class ScenarioDataProvider {
   std::string output_results_path_;
   std::string output_results_schema_path_;
   std::string input_file_schema_path_;
-  std::string llama2_tokenizer_path_;
+  std::string llm_tokenizer_path_;
 
  
 

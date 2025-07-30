@@ -17,6 +17,7 @@ enum class BpeModelType {
   kBmtGPT2,
   kBmtCLIP,
   kBmtSPM,
+  kBmtTKTM,  // For Llama3 with tiktoken encoding
 };
 
 class BPETokenizer : public TokenizerImpl {
@@ -51,6 +52,10 @@ class BPETokenizer : public TokenizerImpl {
                                    bool compute_offset_mapping,
                                    std::list<OffsetMappingType>& offset_map) const;
   std::vector<tfmTokenId_t> SpmEncode(std::string_view sv_input,
+                                      int64_t max_length,
+                                      bool compute_offset_mapping,
+                                      std::list<OffsetMappingType>& offset_map) const;
+  std::vector<tfmTokenId_t> TKTMEncode(std::string_view sv_input,
                                       int64_t max_length,
                                       bool compute_offset_mapping,
                                       std::list<OffsetMappingType>& offset_map) const;

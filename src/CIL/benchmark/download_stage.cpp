@@ -91,7 +91,12 @@ bool DownloadStage::Run(const ScenarioConfig& scenario_config,
     return output;
   };
 
-  auto url_cache_manager = std::make_shared<URLCacheManager>();
+  std::string
+      deps_dir;  // empty means the URLCacheManager will use the default paths i.e. appdata or default temp dir
+
+  deps_dir = unpacker_.GetDepsDir();
+
+  auto url_cache_manager = std::make_shared<URLCacheManager>(deps_dir);
 
   auto data_storage =
       std::make_shared<Storage>(data_dir_, url_cache_manager, force_download);
@@ -224,15 +229,6 @@ bool DownloadStage::Run(const ScenarioConfig& scenario_config,
 
       files = Unpacker::UnpackFilesFromZIP(file_path.string(),
                                            file_path.parent_path().string());
-
-      // temp fix for the Native CoreML scenarios
-      std::vector<std::string> mlmodel_files;
-      std::copy_if(
-          files.begin(), files.end(), std::back_inserter(mlmodel_files),
-          [](const std::string& file) {
-            return std::filesystem::path(file).extension() == ".mlmodel";
-          });
-      if (!mlmodel_files.empty()) files = mlmodel_files;
     }
 
     if (files.empty()) files.push_back(file_path.string());
@@ -283,6 +279,11 @@ bool DownloadStage::Run(const ScenarioConfig& scenario_config,
   }
 
   return true;
+}
+
+void DownloadStage::ClearCache(std::string deps_dir) {
+  auto url_cache_manager = std::make_shared<URLCacheManager>(deps_dir);
+  url_cache_manager->ClearCache();
 }
 
 }  // namespace cil

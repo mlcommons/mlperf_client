@@ -1,0 +1,44 @@
+{
+  "model_config": {
+    "model": {
+      "bos_token_id": 1,
+      "context_length": 4096,
+      "decoder": {
+        "head_size": 128,
+        "hidden_size": 4096,
+        "inputs": {
+          "input_ids": "input_ids",
+          "attention_mask": "attention_mask",
+          "position_ids": "position_ids",
+          "past_key_names": "past_key_values.%d.key",
+          "past_value_names": "past_key_values.%d.value"
+        },
+        "outputs": {
+          "logits": "logits",
+          "present_key_names": "present.%d.key",
+          "present_value_names": "present.%d.value"
+        },
+        "num_attention_heads": 32,
+        "num_hidden_layers": 32,
+        "num_key_value_heads": 32
+      },
+      "eos_token_id": 32000,
+      "pad_token_id": 32000,
+      "vocab_size": 32011
+    },
+    "search": {
+      "method": "greedy",
+      "num_beams": 1,
+      "temperature": 0.6,
+      "top_k": 1,
+      "top_p": 0.9,
+      "stop_on_eos": true,
+      "max_length": 512,
+      "max_total_length": 1088
+    }
+  },
+  "prompts": [
+    "<|im_start|>system<|im_sep|>Given a definition of a task and a sample input, break the definition into small parts.\nEach of those parts will have some instruction. Explain their meaning by showing an example that meets the criteria in the instruction. Use the following format:\nPart  # : a key part of the definition.\nUsage: Sample response that meets the criteria from the key part. Explain why you think it meets the criteria.<|im_end|><|im_start|>user<|im_sep|>You will be given a definition of a task first, then some input of the task.\nYou are given a conversation between two people. 'Person1:' and 'Person2:' are used to separate their respective dialogues. If the conversation begins with a question, label it '1' otherwise '0'.\n\n Person1:     Bob ! Your eyes look bloodshot . Did you not sleep well ?  \n Person2:  I had a drop too much last night . I attended a banquet given by a Chinese colleague of mine . And it was startling for me to find that people are forced to drink against their will on a Chinese table .  \n Person1:      You have it right . Alcohol is a medium for communicating emotion in China . Drinking with business partners or would-be friends is a way of solidifying friendship , especially in Northern China .  \n Person2:  I just felt embarrassed if I refused to drink when people toasted to me . But if I keep gulping down one cup after another , I'm afraid I would feel unfit or sick .  \n Person1:      You lose face by refusing to drink , and the host might think you refuse to give him face . The right thing to do seems to be drinking yourself into incoherence until you throw up . This will endear you to your friends .  \n Person2:  A few guys even threw a drunken fit last night , crying hoarsely and bawling whole heaps of nonsense that I never understood .  \n Person1:      Then he must be opening his heart to the friends . In a word , as long as you demonstrate a readiness to drink more in spite of already suffering extreme discomfort , no one will jeer at you .  \n Person2:  I got you . Next time . I'll preface a toast with a statement like ' I can't drink any more ' and then drink anyway . \nOutput: <|im_end|><|im_start|>assistant<|im_sep|>"
+  ],
+  "category": "Creative Writing"
+}

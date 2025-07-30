@@ -37,7 +37,12 @@ ExternalProject_Add(EXPAT
 							-DEXPAT_SHARED_LIBS=OFF
 							-DEXPAT_MSVC_STATIC_CRT=ON
 							-DBUILD_SHARED_LIBS=OFF
-
+                            $<$<BOOL:${TARGET_IOS}>:
+                            -DCMAKE_OSX_SYSROOT=iphoneos
+                            -DCMAKE_XCODE_ATTRIBUTE_IPHONEOS_DEPLOYMENT_TARGET=16.0
+                            -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY=
+                            -DCMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED=NO
+                            >
 
     BUILD_COMMAND ${CMAKE_COMMAND} -E echo "Starting Expat build..."
     COMMAND ${CMAKE_COMMAND} --build ${EXPAT_BINARY_DIR} --config Release
@@ -66,7 +71,7 @@ endif()
 FetchContent_Declare(
     apr
     GIT_REPOSITORY https://github.com/apache/apr.git
-    GIT_TAG 1.7.x
+    GIT_TAG 1.7.5
     SOURCE_DIR ${APR_SOURCE_DIR}/src
 )
 
@@ -92,7 +97,7 @@ ExternalProject_Add(APR
 							-DCMAKE_MODULE_PATH=${CMAKE_CURRENT_SOURCE_DIR}
 							-DEXPAT_INSTALL_DIR=${EXPAT_INSTALL_DIR}lib/cmake/expat-2.5.0
 							-DCMAKE_GENERATOR_PLATFORM=${CMAKE_GENERATOR_PLATFORM}
-							-DENV_PATH=${ENV_PATH}
+                            -DTARGET_IOS=${TARGET_IOS}
 
     BUILD_COMMAND ${CMAKE_COMMAND} -E echo "Starting APR build..."
     COMMAND ${CMAKE_COMMAND} --build ${APR_BINARY_DIR} --config Release
@@ -107,7 +112,7 @@ ExternalProject_Add(APR
 
 set_target_properties(APR PROPERTIES FOLDER "")
 
-if(APPLE)
+if(APPLE AND NOT TARGET_IOS)
 set(APR_ICONV_DIR ${CMAKE_BINARY_DIR}/_deps/APR-Iconv/)
 
 set(APR_ICONV_BINARY_DIR ${CMAKE_BINARY_DIR}/APR-Iconv/)
@@ -191,6 +196,7 @@ ExternalProject_Add(APR_UTIL
 							-DCMAKE_GENERATOR_PLATFORM=${CMAKE_GENERATOR_PLATFORM}
 							-DEXPAT_INSTALL_DIR=${EXPAT_INSTALL_DIR}lib/cmake/expat-2.5.0
 							-DENV_PATH=${ENV_PATH}
+                            -DTARGET_IOS=${TARGET_IOS}
 
 
     BUILD_COMMAND ${CMAKE_COMMAND} -E echo "Starting APR-Util build..."
@@ -207,11 +213,10 @@ ExternalProject_Add(APR_UTIL
 set_target_properties(APR_UTIL PROPERTIES FOLDER "")
 
 # Build the actual Log4cxx ast static without polluting main cmakefile
-set(LOG4CXX_DIR ${CMAKE_BINARY_DIR}/_deps/log4cxx/)  # Base directory for ONNX Runtime
 
 set(LOG4CXX_BINARY_DIR ${CMAKE_BINARY_DIR}/log4cxx/)
 set(LOG4CXX_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
-set(LOG4CXX_INSTALL_DIR ${LOG4CXX_DIR})
+set(LOG4CXX_INSTALL_DIR ${CMAKE_INSTALL_PREFIX})
 
 FetchContent_Declare(
     logging_log4cxx
@@ -243,8 +248,14 @@ ExternalProject_Add(Log4cxx
 							-DAPR_UTIL_INSTALL_DIR=${APR_UTIL_INSTALL_DIR}
 							-DAPR_ICONV_INSTALL_DIR=${APR_ICONV_INSTALL_DIR}
 							-DEXPAT_INSTALL_DIR=${EXPAT_INSTALL_DIR}
-							-DCMAKE_GENERATOR_PLATFORM=${CMAKE_GENERATOR_PLATFORM}
 							-DCMAKE_MODULE_PATH=${CMAKE_CURRENT_SOURCE_DIR}
+                            # Conditionally add iOS-specific options
+                            $<$<BOOL:${TARGET_IOS}>:
+                            -DCMAKE_OSX_SYSROOT=iphoneos
+                            -DCMAKE_ARCHIVE_OUTPUT_DIRECTORY=${LOG4CXX_BINARY_DIR}/Release_ios
+                            -DCMAKE_LIBRARY_OUTPUT_DIRECTORY=${LOG4CXX_BINARY_DIR}/Release_ios
+                            -DCMAKE_RUNTIME_OUTPUT_DIRECTORY=${LOG4CXX_BINARY_DIR}/Release_ios
+                            >
 
     BUILD_COMMAND ${CMAKE_COMMAND} -E echo "Starting Log4cxx build..."
     COMMAND ${CMAKE_COMMAND} --build ${LOG4CXX_BINARY_DIR} --config Release
@@ -258,5 +269,5 @@ ExternalProject_Add(Log4cxx
 
 set_target_properties(Log4cxx PROPERTIES FOLDER "")
 
-set(LOG4CXX_INCLUDE_DIR ${LOG4CXX_DIR}/include CACHE INTERNAL "Log4cxx include directory")
-set(LOG4CXX_LIB_DIR ${LOG4CXX_DIR}/lib CACHE INTERNAL "Log4cxx lib directory")
+set(LOG4CXX_INCLUDE_DIR ${LOG4CXX_INSTALL_DIR}/include CACHE INTERNAL "Log4cxx include directory")
+set(LOG4CXX_LIB_DIR ${LOG4CXX_INSTALL_DIR}/lib CACHE INTERNAL "Log4cxx lib directory")

@@ -1,0 +1,246 @@
+#include "performance_counter_group.h"
+
+#include <assert.h>
+#include <log4cxx/logger.h>
+#include <pdhmsg.h>
+
+#include <iomanip>
+#include <iostream>
+#include <numeric>
+
+#include "performance_counter_data.h"
+
+using namespace log4cxx;
+extern LoggerPtr loggerSystemInfoProviderWindows;
+
+namespace {
+std::string GetLastErrorAsString() {
+  DWORD errorMessageID = ::GetLastError();
+  if (errorMessageID == 0) return std::string();
+
+  LPSTR messageBuffer = nullptr;
+  size_t size = FormatMessageA(
+      FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
+          FORMAT_MESSAGE_IGNORE_INSERTS,
+      NULL, errorMessageID, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+      (LPSTR)&messageBuffer, 0, NULL);
+
+  std::string message(messageBuffer, size);
+
+  LocalFree(messageBuffer);
+  return message;
+}
+}  // namespace
+
+namespace cil {
+
+double PerformanceCounterGroup::GetValue(int device_index,
+                                         const std::string& label,
+                                         bool* exists) const {
+  auto it = counters_map_.find(label);
+  if (it != counters_map_.end()) {
+    const auto& values = counter_data_->GetValues(device_index);
+    if (it->second.first) {  // group
+      if (exists) *exists = true;
+
+      double value = 0;
+      const auto& group = counter_groups_[it->second.second];
+      for (auto id : group.counter_ids) {
+        auto jt = values.find(id);
+        if (jt != values.end()) {
+          value += jt->second;
+        }
+      }
+
+      return value;
+    } else {
+      auto jt = values.find(it->second.second);
+      if (jt != values.end()) {
+        if (exists) *exists = true;
+        return jt->second;
+      }
+    }
+  }
+
+  if (exists) *exists = false;
+  return -1.;
+}
+
+void PerformanceCounterGroup::StartCounterGroup() {
+  assert(counter_group_start_index_ < 0);
+  counter_group_start_index_ = (int)counters_.size();
+}
+
+bool PerformanceCounterGroup::EndCounterGroup(const std::string& label) {
+  assert(counter_group_start_index_ >= 0);
+
+  int start_index = counter_group_start_index_;
+  counter_group_start_index_ = -1;  // reset
+
+  int end_index = (int)counters_.size();
+  if (start_index < 0 || start_index == end_index) return false;
+
+  if (counters_map_.find(label) != counters_map_.end()) {
+    // label already exists
+    return false;
+  }
+
+  // validate
+  int counter_count = (int)counters_.size();
+  for (size_t i = start_index + 1; i < end_index; i++) {
+    if (counters_[start_index].units != counters_[i].units) {
+      // units does not match
+      return false;
+    }
+  }
+
+  //
+  counters_map_[label] = std::make_pair(true, (int)counter_groups_.size());
+
+  //
+  CounterGroup group;
+  group.label = label;
+  group.counter_ids.resize(end_index - start_index);
+  std::iota(group.counter_ids.begin(), group.counter_ids.end(), start_index);
+  counter_groups_.push_back(group);
+
+  return true;
+}
+
+bool PerformanceCounterGroup::AddCounter(const std::string& label,
+                                         const std::string& units,
+                                         const std::string& counter_path,
+                                         double scale,
+                                         const std::wstring& subtype) {
+  if (counters_map_.find(label) != counters_map_.end()) {
+    // label already exists
+    return false;
+  }
+
+  //
+  counters_map_[label] = std::make_pair(false, (int)counters_.size());
+
+  //
+  Counter counter;
+  counter.label = label;
+  counter.units = units;
+  counter.counter_path = counter_path;
+  counter.counter_subtype = subtype;
+  counter.scale = scale;
+  counters_.push_back(counter);
+
+  return true;
+}
+
+void PerformanceCounterGroup::Print() {
+  std::cout << name_ << ": " << std::endl;
+
+  size_t device_count = counter_data_->GetDeviceCount();
+  for (int i = 0; i < (int)device_count; i++) {
+    const std::wstring& name = counter_data_->GetDeviceName(i);
+    const std::string& type = counter_data_->GetDeviceType(i);
+    if (!type.empty()) {
+      std::cout << type;
+      std::wcout << L" (" << name << "): " << std::endl;
+    } else if (!name.empty()) {
+      std::wcout << name << ": " << std::endl;
+    }
+
+    const auto& values = counter_data_->GetValues(i);
+    for (auto& it : values) {
+      std::cout << "- " << counters_[it.first].label << ": " << std::fixed
+                << std::setprecision(2) << it.second << " "
+                << counters_[it.first].units << std::endl;
+    }
+
+    for (auto& group : counter_groups_) {
+      bool exists;
+      double value = GetValue(i, group.label, &exists);
+      if (exists) {
+        std::cout << "- " << group.label << ": " << std::fixed
+                  << std::setprecision(2) << value << " "
+                  << counters_[group.counter_ids[0]].units << std::endl;
+      }
+    }
+  }
+}
+
+bool PerformanceCounterGroup::Format() {
+  counter_data_->Prepare();
+
+  // format counters
+  bool result = true;
+  int count = (int)counters_.size();
+  for (int i = 0; i < count; i++) result &= Format(i);
+
+  // should we format counter groups?
+
+  return result;
+}
+
+bool PerformanceCounterGroup::Format(int index) {
+  Counter& counter = counters_[index];
+
+  PDH_FMT_COUNTERVALUE counter_value;
+  PDH_STATUS status = PdhGetFormattedCounterValue(
+      counter.counter_handle, PDH_FMT_DOUBLE, NULL, &counter_value);
+  if (status != ERROR_SUCCESS) {
+    LOG4CXX_ERROR(loggerSystemInfoProviderWindows,
+                  "PdhGetFormattedCounterValue (" + counter.label + ") failed: "
+                      << status << ", " << GetLastErrorAsString());
+    return false;
+  }
+
+  counter_data_->Process(index, nullptr, nullptr,
+                         counter_value.doubleValue * counter.scale);
+  return true;
+}
+
+//
+//
+bool PerformanceCounterArrayGroup::Format(int index) {
+  const Counter& counter = counters_[index];
+
+  bool result = false;
+  PDH_FMT_COUNTERVALUE_ITEM_W* itemBuffer = nullptr;
+  DWORD bufferSize = 0;
+  DWORD itemCount = 0;
+  PDH_STATUS status =
+      PdhGetFormattedCounterArrayW(counter.counter_handle, PDH_FMT_DOUBLE,
+                                   &bufferSize, &itemCount, itemBuffer);
+  if (status == PDH_MORE_DATA) {
+    PDH_FMT_COUNTERVALUE_ITEM_W* itemBuffer =
+        (PDH_FMT_COUNTERVALUE_ITEM_W*)malloc(bufferSize);
+    if (itemBuffer) {  // Get the actual data
+      status =
+          PdhGetFormattedCounterArrayW(counter.counter_handle, PDH_FMT_DOUBLE,
+                                       &bufferSize, &itemCount, itemBuffer);
+      if (status == ERROR_SUCCESS) {
+        for (DWORD i = 0; i < itemCount; ++i) {
+          counter_data_->Process(
+              index, itemBuffer[i].szName, counter.counter_subtype.data(),
+              itemBuffer[i].FmtValue.doubleValue * counter.scale);
+        }
+        result = true;
+      } else {
+        LOG4CXX_ERROR(
+            loggerSystemInfoProviderWindows,
+            "PdhGetFormattedCounterArray (" + counter.label + ", data) failed: "
+                << status << ", " << GetLastErrorAsString());
+      }
+      free(itemBuffer);
+    } else {
+      LOG4CXX_ERROR(loggerSystemInfoProviderWindows,
+                    "Memory allocation failed.");
+    }
+  } else {
+    LOG4CXX_ERROR(
+        loggerSystemInfoProviderWindows,
+        "PdhGetFormattedCounterArray (" + counter.label + ", size) failed: "
+            << status << ", " << GetLastErrorAsString());
+  }
+
+  return result;
+}
+
+}  // namespace cil

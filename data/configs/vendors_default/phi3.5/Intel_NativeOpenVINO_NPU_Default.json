@@ -1,0 +1,45 @@
+{
+  "SystemConfig": {
+    "Comment": "Phi 3.5 Mini Instruct, Native OpenVINO, NPU, Base prompts",
+    "TempPath": "",
+    "EPDependenciesConfigPath": ""
+  },
+  "Scenarios": [
+    {
+      "Name": "Phi3.5",
+      "Models": [
+        {
+          "ModelName": "Phi-3.5-mini-instruct_ov-int4-CHw",
+          "FilePath": "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/phi3.5/models/NativeOpenVINO/NPU/openvino_model.xml",
+          "DataFilePath": "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/phi3.5/models/NativeOpenVINO/NPU/openvino_model.bin",
+          "TokenizerPath": "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/phi3.5/models/NativeOpenVINO/NPU/IHV-OV-tokenizers.zip"
+        }
+      ],
+      "InputFilePath": [
+        "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/phi3.5/data/content_generation/greedy-prompt_cot.39329.json",
+        "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/phi3.5/data/content_generation/greedy-prompt_t0.677207.json",
+        "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/phi3.5/data/creative_writing/greedy-prompt_niv.123362.json",
+        "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/phi3.5/data/creative_writing/greedy-prompt_niv.77134.json",
+        "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/phi3.5/data/summarization/greedy-prompt_flan.1221607.json",
+        "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/phi3.5/data/summarization/greedy-prompt_flan.1221694.json",
+        "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/phi3.5/data/summarization2k/greedy-prompt_flan.1854150.json",
+        "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/phi3.5/data/summarization2k/greedy-prompt_flan.997680.json",
+        "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/phi3.5/data/code_analysis/command_parser_cpp_2k.json",
+        "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/phi3.5/data/code_analysis/performance_counter_group_cpp_2k.json"
+      ],
+      "AssetsPath": [],
+      "ResultsVerificationFile": "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/generation-greedy-results.json",
+      "DataVerificationFile": "",
+      "Iterations": 3,
+      "Delay": 0,
+      "ExecutionProviders": [
+        {
+          "Name": "NativeOpenVINO",
+          "Config": {
+            "device_type": "NPU"
+          }
+        }
+      ]
+    }
+  ]
+}

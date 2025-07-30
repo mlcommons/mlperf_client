@@ -1,0 +1,44 @@
+{
+  "model_config": {
+    "model": {
+      "bos_token_id": 1,
+      "context_length": 4096,
+      "decoder": {
+        "head_size": 128,
+        "hidden_size": 4096,
+        "inputs": {
+          "input_ids": "input_ids",
+          "attention_mask": "attention_mask",
+          "position_ids": "position_ids",
+          "past_key_names": "past_key_values.%d.key",
+          "past_value_names": "past_key_values.%d.value"
+        },
+        "outputs": {
+          "logits": "logits",
+          "present_key_names": "present.%d.key",
+          "present_value_names": "present.%d.value"
+        },
+        "num_attention_heads": 32,
+        "num_hidden_layers": 32,
+        "num_key_value_heads": 32
+      },
+      "eos_token_id": 32000,
+      "pad_token_id": 32000,
+      "vocab_size": 32011
+    },
+    "search": {
+      "method": "greedy",
+      "num_beams": 1,
+      "temperature": 0.6,
+      "top_k": 1,
+      "top_p": 0.9,
+      "stop_on_eos": true,
+      "max_length": 256,
+      "max_total_length": 1728
+    }
+  },
+  "prompts": [
+    "<|im_start|>system<|im_sep|>You are an AI assistant. You will be given a task. You must generate a detailed and long answer.<|im_end|><|im_start|>user<|im_sep|>Write a summary based on this article: The Japanese fans cleaning up after themselves after the game. Massive respect. We should all learn from them pic.twitter.com/Vt87CaNav3 Image copyright Reuters After a heated World Cup match, the stands are usually left with food waste, cups and wrappers scattered in the heat of the moment. Japanese fans certainly had reason to go wild on Tuesday night. Their side won their opening game, beating Colombia 2-1, and securing the team's first victory against a South American side. But after the team swept Colombia off the pitch, Japanese fans also did their share of sweeping: meticulously cleaning up their rows and seats in the stadium. Equipped with large rubbish bags they brought along, the fans marched through the rows picking up rubbish, to leave the place just as neat as they had found it. And not for the first time - supporters of the \"Samurai Blue\" have never failed to stick to their good manners. \"It's not just part of the football culture but part of Japanese culture,\" Japan-based football journalist Scott McIntyre told the BBC. He is in Russia following the team and was not at all surprised by the somewhat different nature of Samurai Blue fans. \"You often hear people say that football is a reflection of culture. An important aspect of Japanese society is making sure that everything is absolutely clean and that's the case in all sporting events and certainly also in football.\" More on the World Cup from the BBC: A habit built from childhood Senegal fans have in fact been seen doing the same at this year's World Cup - but it's the Japanese who pioneered it and are now famous for it. It is something that comes as a surprise to many foreigners attending matches in Japan. \"They might leave a bottle or some kind of food package on the ground and then it's often the case that people get tapped on the shoulder by Japanese people indicating they should clean up or take it home but can't leave it there,\" Mr McIntyre says. Image copyright AFP Image caption Japan fans certainly know how to celebrate It's a habit drilled into Japanese people from early childhood. \"Cleaning up after football matches is an extension of basic behaviours that are taught in school, where the children clean their school classrooms and hallways,\" explains Scott North, professor of sociology at Osaka University. \"With constant reminders throughout childhood, these behaviours become habits for much of the population.\" What do fans make of the fact their post-match cleaning spree becomes a regular hit on social media? If anything, they're proud. \"In addition to their heightened consciousness of the need to be clean and to recycle, cleaning up at events like the World Cup is a way Japanese fans demonstrate pride in their way of life and share it with the rest of us,\" explains Prof North. \"What better place to make a statement about the need to care responsibly for the planet than the World Cup?\" he adds. It doesn't mean that there is any more or less passion, insists Mr McIntyre. It's simply that passion doesn't slip into neglect of basic rules of behaviour let alone violence. \"I know it may sound bland and boring, but this is the reality of a country that's built on respect and politeness,\" he laughs. \"And this simply extends to doing respectful things in football.\" \"I think it's a wonderful thing that the World Cup brings so many nations and people together and get to learn and exchange these kinds of things. That's the beauty of football.\" Rating is available when the video has been rented. This feature is not available right now. Please try again later. Forget banners. Many Japanese fans were waving bright blue garbage bags at the group stage finale against Colombia. The Japanese have touched spectators around the world by cleaning up their trash after every match at the World Cup. After their 0-0 draw against Greece last week, fans of the Blue Samurai shrugged off disappointment and cleaned up after themselves inside the stadium following the final whistle. It's a class act that has its roots in Japan's values of being respectful of hosts and protecting the environment. Japan's 1-4 loss to Colombia on Tuesday eliminated the team from the World Cup. A Japan fan helps collect litter from the stadium after the Japan and Colombia match on Tuesday. Adam Pretty / Getty Images — The Associated Press Japan and Senegal recorded stunning wins at the World Cup on Tuesday, and you'd expect their fans to be out celebrating. But before all that fun, supporters stayed back to tidy up their sections of the stadiums in videos that have gone viral. SEE ALSO: Someone brought an IRL World Cup meme to a soccer match Here are Senegalese fans collecting garbage after their match against Poland at Spartak Stadium in Moscow. #TyCSportsMundial Senegal consiguió un triunfo histórico. Pero sus hinchas en lugar de festejar a minutos de terminado el partido, se encargan de limpiar su sector antes de retirarse. #RESPECT. pic.twitter.com/RiKovpfmoT — TyC Sports (@TyCSports) June 19, 2018 While Japanese fans can be seen doing their bit alongside Columbian supporters at Mordovia Arena in Saransk. Classy supporters: Japanese fans cleanup after match while Colombians congratulate them on their victory! 🇯🇵❤️🇨🇴 #TheBeautifulGame pic.twitter.com/vts0RWvRhd — 433 (@official433) June 19, 2018 This is discipline!! And citizen responsibility. Japanese fans cleaning their places after the football game. In #Russia The World Cup pic.twitter.com/t4MnuUlSBg — Danu Motta (@shadanka) June 20, 2018 For the Japanese fans, the act isn't certainly an isolated one. They were also spotted cleaning up the stadium after a game against the Ivory Coast during the 2014 World Cup in Brazil. And of course, for those who've been to Japan, you'll know how clean public places are in the country. Summary:<|im_end|><|im_start|>assistant<|im_sep|>"
+  ],
+  "category": "Summarization, Moderate"
+}

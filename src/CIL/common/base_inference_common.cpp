@@ -14,8 +14,9 @@ void BaseInferenceCommon::LogTime(
 }
 
 BaseInferenceCommon::BaseInferenceCommon(const std::string& model_path,
+                                         const std::string& model_name,
                                          Logger logger)
-    : model_path_(model_path), logger_(logger) {}
+    : model_path_(model_path), model_name_(model_name), logger_(logger) {}
 
 std::string BaseInferenceCommon::GetDeviceType() const { return device_type_; }
 

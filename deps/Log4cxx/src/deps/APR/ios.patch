@@ -1,0 +1,20 @@
+diff --git a/misc/unix/errorcodes.c b/misc/unix/errorcodes.c
+index 60ea2f7bd..2b8c1a125 100644
+--- a/misc/unix/errorcodes.c
++++ b/misc/unix/errorcodes.c
+@@ -379,12 +379,9 @@ const char *strerror_r(apr_status_t, char *, apr_size_t);
+ static char *native_strerror(apr_status_t statcode, char *buf,
+                              apr_size_t bufsize)
+ {
+-    const char *msg;
+-
+-    buf[0] = '\0';
+-    msg = strerror_r(statcode, buf, bufsize);
+-    if (buf[0] == '\0') { /* libc didn't use our buffer */
+-        return stuffbuffer(buf, bufsize, msg);
++    if (strerror_r(statcode, buf, bufsize) < 0) {
++        return stuffbuffer(buf, bufsize, 
++                           "APR does not understand this error code");
+     }
+     else {
+         return buf;

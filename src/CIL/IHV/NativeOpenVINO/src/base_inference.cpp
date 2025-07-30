@@ -62,10 +62,10 @@ namespace IHV {
 namespace infer {
 
 BaseInference::BaseInference(
-    const std::string& model_path,
+    const std::string& model_path, const std::string& model_name,
     const NativeOpenVINOExecutionProviderSettings& ep_settings,
     cil::Logger logger, const std::string& deps_dir)
-    : BaseInferenceCommon(model_path, logger), ep_settings_(ep_settings) {
+    : BaseInferenceCommon(model_path, model_name, logger), ep_settings_(ep_settings) {
   plugins_location_ = getPluginsLocation(deps_dir);
   if (plugins_location_.empty()) {
     error_message_ = "Plugins file not found: " + plugins_location_;

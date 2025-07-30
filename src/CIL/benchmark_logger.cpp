@@ -3,9 +3,10 @@
 #include <log4cxx/fileappender.h>
 #include <log4cxx/logger.h>
 
+#include <fstream>
+
 #include "benchmark_result.h"
-#include "system_info_provider_macos.h"
-#include "system_info_provider_windows.h"
+#include "system_info_provider.h"
 #include "utils.h"
 
 using namespace log4cxx;
@@ -60,18 +61,9 @@ struct DataFileResults {
 }  // namespace
 
 BenchmarkLogger::BenchmarkLogger(const std::string& output_dir)
-    : config_verified_(false),
-      filename_(output_dir.empty() ? "Logs/results.json"
+    : filename_(output_dir.empty() ? "Logs/results.json"
                                    : output_dir + "/results.json"),
-#ifdef WIN32
-      system_info_provider_(std::make_unique<SystemInfoProviderWindows>())
-#else
-      system_info_provider_(std::make_unique<SystemInfoProviderMacOS>())
-#endif
-
-{
-  if (system_info_provider_) system_info_provider_->FetchInfo();
-
+      system_info_provider_(SystemInfoProvider::Instance()) {
   if (!output_dir.empty()) {
     auto appender = log4cxx::cast<log4cxx::FileAppender>(
         loggerResults->getAppender("ResultsFileAppender"));
@@ -184,7 +176,9 @@ void BenchmarkLogger::DisplayAllResults() {
   oss << "\nBenchmark Results " << utils::GetCurrentDateTimeString() << ":\n\n";
 
   oss << "== Application Version: " << application_version_string_ << " ==\n";
-  if (config_verified_) {
+  if (config_experimental_) {
+    oss << "== Configuration is experimental ==\n\n";
+  } else if (config_verified_) {
     oss << "== Configuration tested by MLCommons ==\n\n";
   } else {
     oss << "== Configuration NOT tested by MLCommons ==\n\n";
@@ -280,8 +274,7 @@ void BenchmarkLogger::DisplayAllResults() {
                   << perf_result.average_generated_tokens << "\n";
             }
           } else {
-            oss << Indent(3)
-                << ", Avg Inference Duration: "
+            oss << Indent(3) << ", Avg Inference Duration: "
                 << DumpRoundedDouble(exec_result.duration, 9) << " s\n";
           }
         }
@@ -299,9 +292,17 @@ void BenchmarkLogger::DisplayAllResults() {
           } else {
             oss << Indent(3) << "Error: " << exec_result.ep_error_messages;
           }
+          std::string scenario_logs_location;
+          if (exec_result.scenario_name == "Llama2") {
+            scenario_logs_location = "Logs/llama2_executor.log";
+          } else if (exec_result.scenario_name == "Llama3") {
+            scenario_logs_location = "Logs/llama3_executor.log";
+          } else if (exec_result.scenario_name == "Phi3.5") {
+            scenario_logs_location = "Logs/phi3_5_executor.log";
+          }
           oss << Indent(3) << "Check Logs/error.log"
-              << (exec_result.scenario_name == "Llama2"
-                      ? " and Logs/llama2_executor.log"
+              << (!scenario_logs_location.empty()
+                      ? (" and " + scenario_logs_location)
                       : "")
               << " for more details.\n";
         }
@@ -328,6 +329,14 @@ void BenchmarkLogger::SetConfigVerified(bool is_verified) {
   config_verified_ = is_verified;
 }
 
+void BenchmarkLogger::SetConfigExperimental(bool is_experimental) {
+  config_experimental_ = is_experimental;
+}
+
+const std::vector<BenchmarkResult>& BenchmarkLogger::GetResults() const {
+  return results_;
+}
+
 nlohmann::ordered_json BenchmarkLogger::BenchmarkResultToJson(
     const BenchmarkResult& result) {
   nlohmann::ordered_json json_obj;
@@ -337,6 +346,8 @@ nlohmann::ordered_json BenchmarkLogger::BenchmarkResultToJson(
   } else {
     json_obj["Config"] = "Configuration NOT tested by MLCommons";
   }
+
+  json_obj["Config Is Experimental"] = config_experimental_;
   json_obj["ConfigFile"] = result.config_file_name;
   json_obj["ConfigHash"] = result.config_file_hash;
   json_obj["Scenario Name"] = result.scenario_name;
@@ -357,6 +368,7 @@ nlohmann::ordered_json BenchmarkLogger::BenchmarkResultToJson(
   json_obj["Avg Inference Duration"] = RoundDouble(result.duration, 3);
   json_obj["Benchmark Duration"] = result.benchmark_duration;
   json_obj["Results Verified"] = result.results_verified;
+  json_obj["Skipped Prompts"] = result.skipped_prompts;
   if (!result.ep_error_messages.empty()) {
     if (result.error_message.empty()) {
       json_obj["Error Message"] = result.ep_error_messages;
@@ -437,7 +449,7 @@ nlohmann::ordered_json BenchmarkLogger::BenchmarkResultToJson(
     gpu_names.push_back(info.name);
     gpu_vendors.push_back(info.vendor);
     gpu_driver_versions.push_back(info.driver_version);
-    gpu_memory_sizes.push_back(info.memory_size);
+    gpu_memory_sizes.push_back(info.dedicated_memory_size);
   }
   json_obj["SysInfo_GPUCount"] = gpu_info.size();
   json_obj["SysInfo_GPUNames"] = gpu_names;
@@ -466,4 +478,128 @@ std::vector<BenchmarkResult> BenchmarkLogger::GetResults(
   return res_vector;
 }
 
+std::vector<BenchmarkResult> BenchmarkLogger::ReadResultsFromFile(
+    const std::string& filename) {
+  std::ifstream results_file(filename);
+  if (!results_file.is_open()) {
+    LOG4CXX_ERROR(loggerBenchmarkLogger, "Failed to open " << filename);
+    return {};
+  }
+
+  std::vector<BenchmarkResult> results;
+  std::string line;
+  while (std::getline(results_file, line)) {
+    if (line.empty()) {
+      continue;
+    }
+
+    nlohmann::json item;
+    try {
+      item = nlohmann::json::parse(line);
+    } catch (const std::exception& e) {
+      LOG4CXX_ERROR(loggerBenchmarkLogger,
+                    "Failed to parse results file line: " << line << "as json, "
+                                                          << e.what());
+      continue;
+    }
+    BenchmarkResult result;
+    result.scenario_name = item.value("Scenario Name", "");
+    result.execution_provider_name = item.value("Execution Provider Name", "");
+    result.benchmark_success = item.value("Benchmark Success", false);
+    result.benchmark_start_time = item.value("Benchmark Start Time", "");
+    result.results_verified = item.value("Results Verified", false);
+    result.config_verified =
+        item.value("Config", "") == "Configuration tested by MLCommons";
+    result.config_experimental = item.value("Config Is Experimental", false);
+    result.device_type = item.value("Device Type", "");
+    result.error_message = item.value("Error Message", "");
+    result.config_file_name = item.value("ConfigFile", "");
+    if (item.contains("Data File Names"))
+      result.data_file_names =
+          item["Data File Names"].get<std::vector<std::string>>();
+
+    std::string device_name;
+    if (item.contains("EP Configuration")) {
+      if (result.device_type.empty())
+        result.device_type = item["EP Configuration"].value("device_type", "");
+      device_name = item["EP Configuration"].value("device_name", "");
+    }
+
+    if (item.contains("overall_results") &&
+        item["overall_results"].contains(
+            "Geomean 2nd+ Token Generation Rate") &&
+        item["overall_results"].contains("Geomean Time to First Token")) {
+      result.performance_results["Overall"].token_generation_rate =
+          item["overall_results"].value("Geomean 2nd+ Token Generation Rate",
+                                        0.0);
+      result.performance_results["Overall"].time_to_first_token_duration =
+          item["overall_results"].value("Geomean Time to First Token", 0.0);
+    }
+
+    for (const auto& [category, value] : item["category_results"].items()) {
+      PerformanceResult category_result;
+      category_result.token_generation_rate =
+          value.value("Avg 2nd+ Token Generation Rate", 0.0);
+      category_result.time_to_first_token_duration =
+          value.value("Avg Time to First Token", 0.0);
+      result.performance_results[category] = category_result;
+    }
+    result.system_info.os_name = item.value("SysInfo_OSName", "unknown");
+    result.system_info.cpu_model = item.value("SysInfo_CPUModel", "unknown");
+    result.system_info.cpu_architecture =
+        item.value("SysInfo_CPUArchitecture", "unknown");
+    result.system_info.ram =
+        item.value("SysInfo_RAMTotal", static_cast<size_t>(0));
+    // Get GPU data
+    if (!device_name.empty()) {
+      std::vector<std::string> gpu_names =
+          item.value("SysInfo_GPUNames", std::vector<std::string>{});
+      for (size_t i = 0; i < gpu_names.size(); i++) {
+#ifndef __APPLE__
+        if (device_name.find(gpu_names[i]) == std::string::npos) continue;
+#endif
+        result.system_info.gpu_name = gpu_names[i];
+        std::vector<size_t> gpu_memories =
+            item.value("SysInfo_GPUMemorySizes", std::vector<size_t>{});
+        if (gpu_memories.size() > i)
+          result.system_info.gpu_ram = gpu_memories[i];
+        break;
+      }
+    }
+    results.push_back(result);
+  }
+
+  return results;
+}
+
+void BenchmarkLogger::RemoveResultsFromFile(
+    const std::string& filename,
+    const std::unordered_set<int>& rows_to_remove) {
+  std::ifstream results_in_file(filename);
+  if (!results_in_file.is_open()) {
+    LOG4CXX_ERROR(loggerBenchmarkLogger, "Failed to open " << filename);
+    return;
+  }
+
+  std::vector<std::string> lines;
+  std::string line;
+  while (std::getline(results_in_file, line)) {
+    if (!line.empty()) {
+      lines.push_back(line);
+    }
+  }
+  results_in_file.close();
+
+  std::ofstream results_out_file(filename, std::ios::trunc);
+  if (!results_out_file.is_open()) {
+    LOG4CXX_ERROR(loggerBenchmarkLogger,
+                  "Failed to open " << filename << " for writing");
+    return;
+  }
+  for (size_t i = 0; i < lines.size(); ++i) {
+    if (rows_to_remove.find(i) == rows_to_remove.end()) {
+      results_out_file << lines[i] << "\n";
+    }
+  }
+}
 }  // namespace cil

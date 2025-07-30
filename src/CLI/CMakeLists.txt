@@ -32,6 +32,8 @@ message(STATUS "version file content: ${VERSION_H}")
 # Set the project name and version
 project(CLI VERSION "${MAJOR_VERSION}.${MINOR_VERSION}.${PATCH_VERSION}")
 
+if(NOT IOS)
+
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 # Force use of the release runtime library in all configurations
@@ -55,6 +57,8 @@ file(GLOB_RECURSE HEADERS "*.h")
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} PREFIX "Source files" FILES ${SOURCES})
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} PREFIX "Header files" FILES ${HEADERS})
 
+
+# Create the console executable
 add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
 
 set_target_properties(${PROJECT_NAME} PROPERTIES CXX_CLANG_TIDY "${CLANG_TIDY_COMMAND}")
@@ -83,7 +87,7 @@ if(WIN32)
 set(EXTRA_LIBRARIES Ws2_32.lib Rpcrt4.lib dxcore.lib)
 target_link_options(${PROJECT_NAME} PRIVATE "/INCREMENTAL:NO")
 else()
-set(EXTRA_LIBRARIES "-framework Cocoa")
+set(EXTRA_LIBRARIES "IOReport -framework Cocoa -framework IOKit")
 endif()
 
 target_link_libraries(${PROJECT_NAME} PRIVATE CIL PUBLIC ${LOG4CXX_LIBRARY} ${EXTRA_LIBRARIES} nlohmann_json::nlohmann_json)
@@ -101,3 +105,5 @@ if(WIN32)
 else()
     set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "mlperf-mac")
 endif()
+
+endif()# NOT IOS

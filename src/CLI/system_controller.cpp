@@ -23,24 +23,24 @@ const LoggerPtr loggerSystemController(Logger::getLogger("SystemController"));
 
 namespace cli {
 
-const std::vector<std::string> SystemController::kSupportedModels = {"llama2"};
-
 std::atomic<bool> SystemController::interrupt_(false);
 
 SystemController::SystemController(const std::string& json_config_path,
                                    std::shared_ptr<cil::Unpacker> unpacker,
                                    const std::string& output_dir,
-                                   const std::string& data_dir)
+                                   const std::string& data_dir,
+                                   const bool skip_failed_prompts)
     : json_config_path_(json_config_path),
       unpacker_(unpacker),
       output_dir_(output_dir),
-      data_dir_(data_dir.empty() ? "data" : data_dir) {
+      data_dir_(data_dir.empty() ? "data" : data_dir),
+      skip_failed_prompts_(skip_failed_prompts) {
   std::signal(SIGINT, &SystemController::InterruptHandler);
 }
 
 SystemController::~SystemController() = default;
 
-bool SystemController::Config() {
+bool SystemController::Config(bool temp_dir_overriden) {
   using enum cil::Unpacker::Asset;
 
   if (!cil::ExecutionConfig::isConfigFileValid(json_config_path_)) {
@@ -82,7 +82,7 @@ bool SystemController::Config() {
                  "Configuration NOT tested by MLCommons");
   }
 
-  if (!config_->GetSystemConfig().IsTempPathCorrect()) {
+  if (!temp_dir_overriden && !config_->GetSystemConfig().IsTempPathCorrect()) {
     LOG4CXX_ERROR(loggerSystemController,
                   "Temp path is not valid, aborting...");
     return false;
@@ -93,33 +93,33 @@ bool SystemController::Config() {
     return false;
   }
 
-  auto temp_path = config_->GetSystemConfig().GetTempPath();
-  if (temp_path.empty()) {
-    temp_path = unpacker_->GetDepsDir();
-    LOG4CXX_WARN(
-        loggerSystemController,
-        "Temp path is not set in the config; using default system temp path: "
-            << temp_path);
-  } else {
-    LOG4CXX_INFO(loggerSystemController, "Temp path: " << temp_path);
-    // create the temp directory if it does not exist
-    if (!fs::exists(temp_path) && !utils::CreateDirectory(temp_path)) {
-      LOG4CXX_ERROR(loggerSystemController,
-                    "Failed to create temp directory, aborting...");
-      return false;
+  if (!temp_dir_overriden) {
+    auto temp_path = config_->GetSystemConfig().GetTempPath();
+    if (temp_path.empty()) {
+      temp_path = unpacker_->GetDepsDir();
+      LOG4CXX_WARN(
+          loggerSystemController,
+          "Temp path is not set in the config; using default system temp path: "
+              << temp_path);
+    } else {
+      LOG4CXX_INFO(loggerSystemController, "Temp path: " << temp_path);
+      // create the temp directory if it does not exist
+      if (!fs::exists(temp_path) && !utils::CreateDirectory(temp_path)) {
+        LOG4CXX_ERROR(loggerSystemController,
+                      "Failed to create temp directory, aborting...");
+        return false;
+      }
+      unpacker_->SetDepsDir(temp_path);
     }
-    unpacker_->SetDepsDir(temp_path);
   }
 
   std::unordered_map<std::string, std::string> eps_dependencies_dest;
-  bool has_llama2_scenario = false;
+  bool has_llm_scenario = false;
   for (const auto& model : config_->GetScenarios()) {
     const auto& model_name = model.GetName();
-    if (utils::StringToLowerCase(model_name) == "llama2")
-      has_llama2_scenario = true;
+    has_llm_scenario = cil::BenchmarkRunner::IsLLMModel(model_name);
 
-    if (std::find(kSupportedModels.begin(), kSupportedModels.end(),
-                  model_name) == kSupportedModels.end()) {
+    if (!cil::BenchmarkRunner::IsSupportedModel(model_name)) {
       LOG4CXX_ERROR(loggerSystemController,
                     "Model "
                         << model_name
@@ -142,15 +142,13 @@ bool SystemController::Config() {
         return false;
       }
 
-      auto is_ep_known_ihv = cil::IsEPFromKnownIHV(ep_name);
-
+      auto is_valid_ep = cil::IsValidEP(ep_name);
       auto empty_library_path = ep.GetLibraryPath().empty();
 
       // We use internal dependencies from JSON if it's a known IHV and
-      // the library path was not provided
-      auto internal_ep_dependencies = empty_library_path && is_ep_known_ihv;
+      // the library path was not provided.
 
-      if (internal_ep_dependencies)
+      if (empty_library_path && is_valid_ep)
         eps_dependencies_dest.insert(
             {ep.GetName(), cil::GetExecutionProviderParentLocation(
                                ep, unpacker_->GetDepsDir())
@@ -173,10 +171,10 @@ bool SystemController::Config() {
     return false;
   }
 
-  if (has_llama2_scenario && !unpacker_->UnpackAsset(kLlama2InputFileSchema,
-                                                     input_file_schema_path_)) {
+  if (has_llm_scenario &&
+      !unpacker_->UnpackAsset(kLLMInputFileSchema, input_file_schema_path_)) {
     LOG4CXX_ERROR(loggerSystemController,
-                  "Failed to unpack llama2 input file schema, aborting...");
+                  "Failed to unpack LLM input file schema, aborting...");
     return false;
   }
 
@@ -252,7 +250,7 @@ bool SystemController::Run(const Logger& logger, bool enumerate_devices,
   // Custom progress handler for console output using percentages when
   // applicable
   auto progress_handler =
-      std::make_unique<cli::ProgressTrackerHandler>(interrupt_);
+      std::make_unique<cil::ProgressTrackerHandler>(interrupt_);
 
   const auto& download_behaviour_option_value = GetSystemDownloadBehavior();
 
@@ -270,6 +268,7 @@ bool SystemController::Run(const Logger& logger, bool enumerate_devices,
   params.data_verification_file_schema_path =
       data_verification_file_schema_path_;
   params.input_file_schema_path = input_file_schema_path_;
+  params.skip_failed_prompts = skip_failed_prompts_;
 
   try {
     auto benchmark_runner = std::make_unique<cil::BenchmarkRunner>(params);

@@ -1,6 +1,8 @@
 ﻿// Licensed under the MIT License.
 #include <gsl/narrow>
+#include <fstream>
 
+#include "../filesystem.h"
 #include "token_bpe.h"
 
 namespace tfm {
@@ -11,10 +13,12 @@ const char kModel_CLIP[] = "CLIP";
 const char kModel_CodeGen[] = "CodeGen";
 const char kModel_Llama[] = "Llama";
 const char KModel_Gemma[] = "Gemma";
+const char kModel_Llama3[] = "Llama3";  // Used for models with tiktoken encoding
 
 bool BPETokenizer::IsSupportedModel(const std::string_view& model_name) {
   return model_name == kModel_GPT2 || model_name == kModel_Roberta || model_name == kModel_CLIP ||
-         model_name == kModel_CodeGen || model_name == kModel_Llama || model_name == KModel_Gemma;
+         model_name == kModel_CodeGen || model_name == kModel_Llama || model_name == KModel_Gemma ||
+         model_name == kModel_Llama3;
 }
 
 void BPETokenizer::CreateByteEncoder() {
@@ -44,10 +48,13 @@ std::string_view BPETokenizer::ModelName() const { return model_name_; }
 BpeModelType BPETokenizer::ModelType() const {
   auto name = ModelName();
   auto type = BpeModelType::kBmtGPT2;
+  
   if (name == kModel_Llama || name == KModel_Gemma) {
     type = BpeModelType::kBmtSPM;
   } else if (name == kModel_CLIP) {
     type = BpeModelType::kBmtCLIP;
+  } else if (name == kModel_Llama3) {
+    type = BpeModelType::kBmtTKTM;
   }
 
   return type;
@@ -74,53 +81,77 @@ void BPETokenizer::LoadPredefinedTokens(const TokenConfig& config) {
   all_special_ids_.emplace(eos_token_id_);
   all_special_ids_.emplace(pad_token_id_);
 
-  if (ModelName() == kModel_Llama) {
+  auto model_name = ModelName();
+  auto model_type = ModelType();
+
+  if (model_name == kModel_Llama) {
     add_dummpy_prefix_ = true;
   }
 
-  if (ModelType() != BpeModelType::kBmtGPT2) {
+  if (model_type != BpeModelType::kBmtGPT2) {
     add_bos_token_ = true;
     add_eos_token_ = true;
   }
 
-  if (ModelType() == BpeModelType::kBmtSPM) {
+  if (model_type == BpeModelType::kBmtSPM) {
+    add_eos_token_ = false;
+  }
+  
+  if (model_type == BpeModelType::kBmtTKTM) {
+    add_bos_token_ = true;
     add_eos_token_ = false;
   }
 }
 
 TfmStatus BPETokenizer::DecodeExtraArgs(const simdjson::dom::element& root) {
-  simdjson::dom::element decoder_obj;
-  auto error = root.at_key("decoder").get(decoder_obj);
-  if (error != simdjson::SUCCESS && error != simdjson::NO_SUCH_FIELD) {
+  auto decoder_result = root.at_key("decoder");
+  if (decoder_result.error() != simdjson::SUCCESS && decoder_result.error() != simdjson::NO_SUCH_FIELD) {
     return {kTfmErrorInvalidFile, "Cannot parse the decoder section in the the tokenizer.json"};
   }
-  TryToGetJson(decoder_obj, "add_prefix_space", decode_extra_args_.add_prefix_space);
+  
+  if (decoder_result.error() == simdjson::SUCCESS) {
+    simdjson::dom::element decoder_obj = decoder_result.value();
+    TryToGetJson(decoder_obj, "add_prefix_space", decode_extra_args_.add_prefix_space);
+  }
+  
   return TfmStatus::OK();
 }
 
 TfmStatus BPETokenizer::OnLoad() {
+  auto& config = *GetConfig();
+  
+  if (config.tokenizer_class_ == "PreTrainedTokenizerFast") {
+    model_name_ = kModel_Llama3;
+  } else {
+    model_name_ = std::string_view(config.tokenizer_class_.c_str(), config.tokenizer_class_.find("Tokenizer"));
+  }
+  
+  std::string tokenizer_file = GetDataDir() + "/tokenizer.json";
+  if (!fs::exists(tokenizer_file)) {
+    return {kTfmErrorInvalidFile, "Failed to find tokenizer.json"};
+  }
+  
   simdjson::dom::parser parser;
   simdjson::dom::element root;
-  std::string tokenizer_file = GetDataDir() + "/tokenizer.json";
-  auto error = parser.load(tokenizer_file).get(root);
-  if (error) {
-    return {kTfmErrorInvalidFile, "Failed to parse tokenizer.json"};
+  auto error = parser.load(tokenizer_file);
+  if (error.error() != simdjson::SUCCESS) {
+    return {kTfmErrorInvalidFile, "Failed to load tokenizer.json"};
   }
-
-  auto& config = *GetConfig();
-  model_name_ = std::string_view(config.tokenizer_class_.c_str(), config.tokenizer_class_.find("Tokenizer"));
+  root = error.value();
+  
   auto status = bbpe_encoder_.Load(root, config);
   if (!status.ok()) {
     return status;
   }
-
+  
   CreateByteEncoder();
-
-  simdjson::dom::element added_tokens_obj;
-  if (error = root["added_tokens"].get(added_tokens_obj); !error) {
+  
+  error = root["added_tokens"];
+  if (error.error() == simdjson::SUCCESS) {
+    simdjson::dom::element added_tokens_obj = error.value();
     status = extended_token_.LoadAddedTokens(added_tokens_obj, added_tokens_);
+    bbpe_encoder_.UpdateAddedTokensMap(added_tokens_);
   } else {
-    // Get AddedTokens from config
     std::string_view added_tokens[] = {config.unk_token_.content_, config.eos_token_.content_,
                                        config.bos_token_.content_, config.pad_token_};
     size_t num_added_tokens = sizeof(added_tokens) / sizeof(added_tokens[0]);
@@ -138,19 +169,18 @@ TfmStatus BPETokenizer::OnLoad() {
 
     status = extended_token_.LoadAddedTokens(added_tokens, ids.data(), num_added_tokens);
   }
-
+  
   if (!status.ok()) {
     return status;
   }
-
+  
   LoadPredefinedTokens(config);
   arr_vocab_ = bbpe_encoder_.BuildDecoder();
   status = DecodeExtraArgs(root);
-
+  
   return status;
 }
 
-// Note: the following logic comes from CPython: unicodetype_db.h (_PyUnicode_IsWhitespace)
 static bool IsUnicodeSpace(char32_t ch) {
   const std::set<char32_t> unicode_spaces = {
       0x0009,  // CHARACTER TABULATION
@@ -228,8 +258,11 @@ std::vector<tfmTokenId_t> BPETokenizer::Encode(std::string_view sv_input, int64_
 
   std::u32string input = FromUTF8(sv_input);
 
+  auto model_type = ModelType();
+  auto model_name = ModelName();
+
   bool clean_up_spaces = false;
-  if (ModelName() == kModel_CLIP) {
+  if (model_name == kModel_CLIP) {
     clean_up_spaces = true;
     // Merges consecutive '\s+' for CLIP
     /*
@@ -251,8 +284,7 @@ std::vector<tfmTokenId_t> BPETokenizer::Encode(std::string_view sv_input, int64_
     input = str;
   }
 
-  if (AllSpaceUstring(input) && ModelName() == kModel_CLIP) {
-    // Add BOS and EOS token to result
+  if (AllSpaceUstring(input) && model_name == kModel_CLIP) {
     res.push_back(bos_token_id_);
     res.push_back(eos_token_id_);
     return res;
@@ -262,7 +294,7 @@ std::vector<tfmTokenId_t> BPETokenizer::Encode(std::string_view sv_input, int64_
     // Add BOS token to result
     res.push_back(bos_token_id_);
   }
-  if (ModelName() == kModel_CLIP) {
+  if (model_name == kModel_CLIP) {
     // Convert to lowercase
     std::transform(input.begin(), input.end(), input.begin(),
                    [](char32_t c) { return static_cast<char32_t>(ToLower(c)); });
@@ -288,7 +320,7 @@ std::vector<tfmTokenId_t> BPETokenizer::Encode(std::string_view sv_input, int64_
     OffsetMappingType offset_mapping;
 
     if (compute_offset_mapping) {
-      if (ModelName() != kModel_GPT2) {
+      if (model_name != kModel_GPT2) {
         // Add offset mapping for BOS token
         offset_mapping.emplace_back(0, 0);
       }
@@ -355,7 +387,7 @@ std::vector<tfmTokenId_t> BPETokenizer::Encode(std::string_view sv_input, int64_
     }
 
     if (compute_offset_mapping) {
-      if (ModelName() != kModel_GPT2) {
+      if (model_name != kModel_GPT2) {
         // Add offset mapping for EOS token
         offset_mapping.emplace_back(std::make_pair(0, 0));
       }
@@ -371,8 +403,6 @@ std::vector<tfmTokenId_t> BPETokenizer::Encode(std::string_view sv_input, int64_
 
   return res;
 }
-
-static const char spm_underscore[] = "\xe2\x96\x81";
 
 static std::string ReplaceAll(std::string_view s, const std::string& search, const std::string& replace) {
   std::string result;
@@ -390,6 +420,8 @@ static std::string ReplaceAll(std::string_view s, const std::string& search, con
   return result;
 }
 
+static const char spm_underscore[] = "\xe2\x96\x81";
+
 std::vector<tfmTokenId_t> BPETokenizer::SpmEncode(std::string_view sv_input, int64_t max_length,
                                                   bool /*compute_offset_mapping */,
                                                   std::list<OffsetMappingType>& /* offset_map */) const {
@@ -397,7 +429,6 @@ std::vector<tfmTokenId_t> BPETokenizer::SpmEncode(std::string_view sv_input, int
   std::list<std::pair<uint32_t, uint32_t>> byte_list;
 
   if (add_bos_token_) {
-    // Add BOS token to result
     res.push_back(bos_token_id_);
   }
 
@@ -431,10 +462,9 @@ std::vector<tfmTokenId_t> BPETokenizer::SpmEncode(std::string_view sv_input, int
         byte_list.emplace_back(static_cast<tfmTokenId_t>(byte_id), gsl::narrow<uint32_t>(utf8s.length()));
       }
     }
-    // Perform BPE
+    
     bbpe_encoder_.PerformBPE(byte_list);
 
-    // Add output to result
     for (const auto& p : byte_list) {
       if (static_cast<int64_t>(res.size()) >= max_length) {
         break;
@@ -442,10 +472,9 @@ std::vector<tfmTokenId_t> BPETokenizer::SpmEncode(std::string_view sv_input, int
 
       res.push_back(p.first);
     }
-  }  // for (auto& seg_id : special_token_split_res)
+  }
 
   if (add_eos_token_) {
-    // Add EOS token to result
     res.push_back(eos_token_id_);
   }
 
@@ -455,11 +484,69 @@ std::vector<tfmTokenId_t> BPETokenizer::SpmEncode(std::string_view sv_input, int
 TfmStatus BPETokenizer::Encode(std::string_view sv_input, std::vector<tfmTokenId_t>& ids) const {
   std::list<OffsetMappingType> offset_map;
   auto max_length = padding_length_ < 0 ? std::numeric_limits<uint32_t>::max() : padding_length_;
-  std::vector<tfmTokenId_t> res = ModelType() == BpeModelType::kBmtSPM
-                                      ? SpmEncode(sv_input, max_length, false, offset_map)
-                                      : Encode(sv_input, max_length, false, offset_map);
-  ids = res;
-  return {};
+  
+  if (ModelType() == BpeModelType::kBmtTKTM) {
+    ids = TKTMEncode(sv_input, max_length, false, offset_map);
+  } else if (ModelType() == BpeModelType::kBmtSPM) {
+    ids = SpmEncode(sv_input, max_length, false, offset_map);
+  } else {
+    ids = Encode(sv_input, max_length, false, offset_map);
+  }
+  
+  return TfmStatus::OK();
+}
+
+TfmStatus BPETokenizer::Decode(const span<tfmTokenId_t const>& ids, std::string& text) const {
+  // Handle standard decoder types
+  bool f_special_last = false;
+  std::vector<tfmTokenId_t> ids_copy(ids.begin(), ids.end());
+
+  auto model_type = ModelType();
+
+  if (model_type == BpeModelType::kBmtTKTM) {
+    // Remove special tokens
+    ids_copy.erase(
+      std::remove_if(
+        ids_copy.begin(), ids_copy.end(),
+        [this](tfmTokenId_t id) { return id >= bbpe_encoder_.GetMaxTokenId(); }
+      ),
+      ids_copy.end()
+    );
+  }
+
+  auto count = static_cast<size_t>(ids_copy.size());
+  auto p_ids = ids_copy.data();
+
+  auto& args = decode_extra_args_;
+  for (size_t tok_idx = 0; tok_idx < count; ++tok_idx) {
+    const auto id = *(p_ids + tok_idx);
+    std::string decoded_token;
+    auto status = model_type == BpeModelType::kBmtSPM
+                     ? SpmId2Token(id, decoded_token, f_special_last)
+                     : Id2Token(id, decoded_token, args.skip_special_tokens_, f_special_last);
+
+    if (!status.ok()) {
+      return status;
+    }
+
+    bool f_special = all_special_ids_.count(id) ? true : false;
+
+    if (args.whitespace_token_ && f_special && (tok_idx > 0 && !f_special_last)) {
+      text.push_back(' ');
+    }
+
+    text.append(decoded_token);
+
+    if (args.whitespace_token_ && f_special && tok_idx != count - 1) {
+      text.push_back(' ');
+    }
+  }
+
+  if (model_type == BpeModelType::kBmtCLIP && !text.empty() && text.back() == ' ') {
+    text.pop_back();
+  }
+
+  return TfmStatus::OK();
 }
 
 TfmStatus BPETokenizer::Id2Token(tfmTokenId_t id, std::string& token, bool skip_special_tokens,
@@ -467,7 +554,7 @@ TfmStatus BPETokenizer::Id2Token(tfmTokenId_t id, std::string& token, bool skip_
   bool f_special = all_special_ids_.count(id) ? true : false;
   if (skip_special_tokens && f_special) {
     f_special_last = f_special;
-    return {};
+    return TfmStatus::OK();
   }
 
   if (added_tokens_.count(id)) {
@@ -486,7 +573,7 @@ TfmStatus BPETokenizer::Id2Token(tfmTokenId_t id, std::string& token, bool skip_
   } else {
     if (skip_special_tokens) {
       f_special_last = f_special;
-      return {};
+      return TfmStatus::OK();
     } else {
       token = unk_token_;
     }
@@ -503,7 +590,7 @@ TfmStatus BPETokenizer::Id2Token(tfmTokenId_t id, std::string& token, bool skip_
   }
 
   f_special_last = f_special;
-  return {};
+  return TfmStatus::OK();
 }
 
 TfmStatus BPETokenizer::SpmId2Token(tfmTokenId_t id, std::string& token, bool& f_special_last) const {
@@ -527,44 +614,8 @@ TfmStatus BPETokenizer::SpmId2Token(tfmTokenId_t id, std::string& token, bool& f
   return {};
 }
 
-TfmStatus BPETokenizer::Decode(const span<tfmTokenId_t const>& ids, std::string& text) const {
-  bool f_special_last = false;
-  auto count = static_cast<size_t>(ids.size());
-  auto p_ids = ids.data();
-
-  auto& args = decode_extra_args_;
-  for (size_t tok_idx = 0; tok_idx < count; ++tok_idx) {
-    const auto id = *(p_ids + tok_idx);
-    std::string decoded_token;
-    auto status = ModelType() == BpeModelType::kBmtSPM
-                      ? SpmId2Token(id, decoded_token, f_special_last)
-                      : Id2Token(id, decoded_token, args.skip_special_tokens_, f_special_last);
-
-    if (!status.ok()) {
-      return status;
-    }
-
-    bool f_special = all_special_ids_.count(id) ? true : false;
-
-    if (args.whitespace_token_ && f_special && (tok_idx > 0 && !f_special_last)) {
-      text.push_back(' ');
-    }
-
-    text.append(decoded_token);
-
-    if (args.whitespace_token_ && f_special && tok_idx != count - 1) {
-      text.push_back(' ');
-    }
-  }
-
-  if (ModelType() == BpeModelType::kBmtCLIP && !text.empty() && text.back() == ' ') {
-    text.pop_back();
-  }
-
-  return {};
-}
-
 TfmStatus BPETokenizer::Id2Token(tfmTokenId_t id, std::string& token, DecoderState** state) const {
+  // Standard implementation for all tokenizer types
   auto bpe_state = static_cast<BPEDeocerState*>(*state);
   std::unique_ptr<BPEDeocerState> bpe_state_ptr;
   bool is_first = false;
@@ -583,35 +634,96 @@ TfmStatus BPETokenizer::Id2Token(tfmTokenId_t id, std::string& token, DecoderSta
     if (bpe_state_ptr) {
       *state = bpe_state_ptr.release();
     }
-    // bpe_state->f_special_last is already update for next iteration, so it is current.
-    bool f_special = bpe_state->f_special_last;
-    if (decode_extra_args_.whitespace_token_) {
-      if (f_special && (is_first && !f_special_last)) {
-        token = std::string(" ") + token;
-      }
-
-      if (f_special && id != eos_token_id_) {
-        token.push_back(' ');
-      }
-    }  // end case of whitespace_token_
-
-    bpe_state->incomplete_utf8_ += token;
-    token.clear();
-    std::string& s_utf8 = bpe_state->incomplete_utf8_;
-    size_t utf8_len = 1;
-    size_t utf8_all_len = 0;
-    for (size_t i = 0; i < s_utf8.size(); i += utf8_len) {
-      utf8_len = UTF8Len(s_utf8[i]);
-      if (utf8_len <= s_utf8.size() - i) {
-        utf8_all_len += utf8_len;
-        auto _t = s_utf8.substr(i, utf8_len);
-        token += ValidateUTF8(_t) ? _t : "";
-      }
-    }
-    s_utf8 = s_utf8.substr(utf8_all_len);
   }
 
   return status;
+}
+
+// Implementation for Llama3 with tiktoken encoding (TKTM)
+std::vector<tfmTokenId_t> BPETokenizer::TKTMEncode(
+    std::string_view sv_input, int64_t max_length, bool compute_offset_mapping,
+    std::list<OffsetMappingType>& offset_map) const {
+  
+  std::vector<tfmTokenId_t> res;
+  if (sv_input.empty()) {
+    return res;
+  }
+
+  std::u32string input = FromUTF8(sv_input);
+
+  if (decode_extra_args_.add_prefix_space && (input.empty() || input.front() != U' ')) {
+    input.insert(input.begin(), U' ');
+  }
+
+  if (add_bos_token_) {
+    res.push_back(bos_token_id_);
+  }
+
+  OffsetMappingType offset_mapping;
+  size_t offset = 0;
+  if (compute_offset_mapping && add_bos_token_) {
+    offset_mapping.emplace_back(0, 0);
+  }
+
+  auto special_token_split_res = extended_token_.Split(input);
+  bpe::TokenWithRegularExp regcmp;
+
+  for (auto& seg_id : special_token_split_res) {
+    if (static_cast<int64_t>(res.size()) >= max_length) {
+      break;
+    }
+
+    // If this segment is a special token, just emit its ID
+    if (seg_id.second != bpe::kInvalidTokenId) {
+      res.push_back(seg_id.second);
+      if (compute_offset_mapping) {
+        offset_mapping.emplace_back(0, 0);
+      }
+      continue;
+    }
+
+    // Otherwise, run the tiktoken regex split on this segment
+    std::u32string seg_str(seg_id.first);
+    regcmp.Set(seg_str);
+
+    while (static_cast<int64_t>(res.size()) < max_length) {
+      auto [ok, tok] = regcmp.GetNextToken();
+      if (!ok) break;
+
+      std::string utf8_token = ToUTF8(std::u32string(tok));
+
+      std::list<std::pair<uint32_t, uint32_t>> byte_list;
+      for (unsigned char c : utf8_token) {
+        byte_list.emplace_back(byte_encoder_[c], 1);
+      }
+
+      bbpe_encoder_.PerformBPE(byte_list);
+
+      for (const auto& p : byte_list) {
+        if (static_cast<int64_t>(res.size()) >= max_length) {
+          break;
+        }
+        res.push_back(p.first);
+        if (compute_offset_mapping) {
+          offset_mapping.emplace_back(offset, offset + p.second);
+          offset += p.second;
+        }
+      }
+    }
+  }
+
+  if (add_eos_token_ && static_cast<int64_t>(res.size()) < max_length) {
+    res.push_back(eos_token_id_);
+    if (compute_offset_mapping) {
+      offset_mapping.emplace_back(0, 0);
+    }
+  }
+
+  if (compute_offset_mapping) {
+    offset_map.emplace_back(offset_mapping);
+  }
+
+  return res;
 }
 
 }  // namespace tfm

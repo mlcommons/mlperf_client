@@ -79,6 +79,24 @@ class ProgressableTask {
    */
   virtual int GetProgress() const = 0;
   /**
+   * @brief Get the total number of steps in the task.
+   *
+   * This method returns the total number of steps required to complete the
+   * task.
+   *
+   * @return int The total number of steps, or 0 if the total steps are unknown.
+   */
+  virtual int GetTotalSteps() const { return 0; }
+  /**
+   * @brief Get the current step of the task.
+   *
+   * This method returns the number of steps that have been completed so far.
+   *
+   * @return int The current completed step count, or 0 if the progress is
+   * unknown.
+   */
+  virtual int GetCurrentStep() const { return 0; }
+  /**
    * @enum Status
    * @brief The status of the task.
    */

@@ -54,10 +54,11 @@ class BpeEncoder {
     }
 
     simdjson::dom::object vocab_obj;
-    auto error = model_node.at_key("vocab").get(vocab_obj);
-    if (error) {
+    auto vocab_result = model_node.at_key("vocab").get_object();
+    if (vocab_result.error() != simdjson::SUCCESS) {
       return TfmStatus{kTfmErrorInvalidFile, "Cannot find the vocab key in the the tokenizer.json"};
     }
+    vocab_obj = vocab_result.value();
 
     bool is_gemma = IsGemmaModel(config);
     std::string spm_byte;
@@ -96,6 +97,9 @@ class BpeEncoder {
       auto id = gsl::narrow<uint32_t>(vocab_map_.size());
       vocab_map_[unk_token] = id;
       unk_id_ = id;
+      if (id > max_token_id_) {
+          max_token_id_ = id;
+      }
     }
 
     simdjson::dom::element merges_node = model_node.at_key("merges");
@@ -222,6 +226,23 @@ class BpeEncoder {
 
   const std::string& GetEndWordSuffix() const { return end_of_word_suffix_; }
 
+  uint32_t GetMaxTokenId() const { return max_token_id_; }
+
+  uint32_t GetAddedTokenId(const std::string& key) const {
+    auto it = added_tokens_map_.find(key);
+    if (it != end(added_tokens_map_)) {
+      return it->second;
+    } else {
+      return unk_id_;
+    }
+  }
+
+  void UpdateAddedTokensMap(const std::map<int64_t, std::string>& new_added_tokens_map) {
+    for (const auto& [id, str] : new_added_tokens_map) {
+      added_tokens_map_[str] = static_cast<uint32_t>(id);
+    }
+  }
+
  private:
   struct BpeNode {
     uint32_t id;
@@ -236,6 +257,7 @@ class BpeEncoder {
  private:
   std::map<uint64_t, BpeNode> bpe_rank_;
   std::unordered_map<std::string, uint32_t> vocab_map_;
+  std::unordered_map<std::string, uint32_t> added_tokens_map_;
 
   uint32_t unk_id_ = std::numeric_limits<uint32_t>::max();
   uint32_t max_token_id_ = 0;

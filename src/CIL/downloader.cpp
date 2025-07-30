@@ -41,11 +41,63 @@ bool CheckDiskSpace(const std::string& destination_path, uint64_t file_size) {
   return true;
 }
 
-void Downloader::download_chunk(const std::string& host_name,
-                    const std::string& host_file_path, uint64_t start,
-                    uint64_t end, const std::string& output_file_path,
-                    std::atomic<uint64_t>& progress,
-                    std::atomic<bool>& has_failed, int retry = 3) {
+// Template function to set proxy if available
+template <typename ClientType>
+void Downloader::SetProxyIfAvailable(ClientType& client) const {
+  const char* http_proxy = std::getenv("HTTP_PROXY");
+  const char* https_proxy = std::getenv("HTTPS_PROXY");
+
+  if (http_proxy) {
+    const auto [host, port] = ParseProxy(http_proxy);
+    client.set_proxy(host.c_str(), port);
+  }
+  if (https_proxy) {
+    auto [host, port] = ParseProxy(https_proxy);
+    client.set_proxy(host.c_str(), port);
+  }
+
+  const char* proxy_user = std::getenv("PROXY_USER");
+  const char* proxy_pass = std::getenv("PROXY_PASS");
+
+  if (proxy_user && proxy_pass) {
+    client.set_proxy_basic_auth(proxy_user, proxy_pass);
+  }
+
+  if (http_proxy || https_proxy) {
+    LOG4CXX_INFO(loggerDownloader,
+                 "http_proxy: " << http_proxy
+                                << " | https_proxy: " << https_proxy
+                                << " | proxy_user: " << proxy_user);
+  }
+}
+
+// Function to parse proxy URL
+std::pair<std::string, int> Downloader::ParseProxy(
+    const std::string_view& proxy) const {
+  std::string host;
+  int port = 8080;
+  size_t pos = proxy.find("://");
+  if (pos != std::string::npos) {
+    host = proxy.substr(pos + 3);
+  } else {
+    host = proxy;
+  }
+
+  pos = host.find(':');
+  if (pos != std::string::npos) {
+    port = std::stoi(host.substr(pos + 1));
+    host = host.substr(0, pos);
+  }
+  return std::make_pair(host, port);
+}
+
+void Downloader::DownloadChunk(const std::string& host_name,
+                               const std::string& host_file_path,
+                               uint64_t start, uint64_t end,
+                               const std::string& output_file_path,
+                               std::atomic<uint64_t>& progress,
+                               std::atomic<bool>& has_failed,
+                               int retry = 3) const {
   // Retry if the download fails
   for (int i = 0; i < retry; ++i) {
     // Fail fast if the download has already failed
@@ -53,6 +105,7 @@ void Downloader::download_chunk(const std::string& host_name,
       return;
     }
     httplib::Client client(host_name);
+    SetProxyIfAvailable(client);
     client.set_connection_timeout(60, 0);
     client.set_read_timeout(60, 0);
     httplib::Headers headers = {{"Range", "bytes=" + std::to_string(start) +
@@ -61,8 +114,9 @@ void Downloader::download_chunk(const std::string& host_name,
     uint64_t downloaded_size = 0;
     auto res = client.Get(host_file_path.c_str(), headers,
                           [&](const char* data, size_t data_length) -> bool {
-                            if(stop_download.load()) {
-                              LOG4CXX_ERROR(loggerDownloader, "Download stopped by user.");
+                            if (stop_download.load()) {
+                              LOG4CXX_ERROR(loggerDownloader,
+                                            "Download stopped by user.");
                               return false;
                             }
                             output_file.write(data, data_length);
@@ -99,12 +153,12 @@ void Downloader::download_chunk(const std::string& host_name,
   has_failed = true;
 }
 
-bool Downloader::download_remote_file(const std::string& host_name,
-                          const std::string& host_file_path,
-                          const std::string& destination_file_path,
-                          int num_threads,
-                          const DownloadProgressCallback& progress_callback) {
+bool Downloader::DownloadRemoteFile(
+    const std::string& host_name, const std::string& host_file_path,
+    const std::string& destination_file_path, int num_threads,
+    const DownloadProgressCallback& progress_callback) const {
   httplib::Client client(host_name);
+  SetProxyIfAvailable(client);
   client.set_follow_location(true);
   ProgressNotifier progress_notifier;
   // Send request to get the content length of the file
@@ -173,9 +227,9 @@ bool Downloader::download_remote_file(const std::string& host_name,
     uint64_t end =
         (i == num_threads - 1) ? file_size - 1 : (start + chunk_size - 1);
     std::string temp_file = destination_file_path + ".part" + std::to_string(i);
-    threads.emplace_back(&Downloader::download_chunk,this, host_name, host_file_path, start, end,
-                         temp_file, std::ref(progress), std::ref(has_failed),
-                         5);
+    threads.emplace_back(&Downloader::DownloadChunk, this, host_name,
+                         host_file_path, start, end, temp_file,
+                         std::ref(progress), std::ref(has_failed), 5);
   }
 
   const double download_progress_interval = 1.0 - num_threads * 0.02;
@@ -240,7 +294,7 @@ Downloader::Downloader(const std::string& destination_file_path)
 Downloader::~Downloader() = default;
 
 bool Downloader::operator()(const std::string& file_url,
-                            const DownloadProgressCallback& progress_callback) {
+    const DownloadProgressCallback& progress_callback) const {
   std::regex file_url_regex(R"(^file://)");
   if (std::regex_search(file_url, file_url_regex)) {
     return CopyFileWithProgress(file_url.substr(7), destination_file_path_,
@@ -273,8 +327,8 @@ bool Downloader::operator()(const std::string& file_url,
                (unsigned int)max_num_threads);
 
   bool download_success =
-      download_remote_file(host_name, host_file_path, temp_download_path,
-                           num_threads, progress_callback);
+      DownloadRemoteFile(host_name, host_file_path, temp_download_path,
+                         num_threads, progress_callback);
   if (!download_success) {
     // remove the temp file if exists
     std::remove(temp_download_path.c_str());
@@ -380,8 +434,6 @@ bool Downloader::ParseFileUrl(const std::string& file_url,
   return true;
 }
 
-void Downloader::StopDownload() {
-  stop_download.store(true);
-}
+void Downloader::StopDownload() { stop_download.store(true); }
 
 }  // namespace cil

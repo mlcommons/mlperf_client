@@ -35,6 +35,8 @@ class DownloadStage : public StageBase {
 
   std::string GetName() const override { return "Download"; }
 
+  static void ClearCache(std::string deps_dir);
+
  private:
   const std::string data_dir_;
 

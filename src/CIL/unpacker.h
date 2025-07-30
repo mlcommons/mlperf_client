@@ -44,18 +44,31 @@ class Unpacker {
     // in the benchmark like models, input data, and
     // assets.
     kDataVerificationFileSchema,  // This file is used to validate the data
-    // verification file.
+    // config verification file.
     kConfigVerificationFile,  // This file is used to detect whether
     // the configuration file is tested or not.
-    kLlama2InputFileSchema,  // This file is used to validate the Llama2 input
+    // config experimental verification file.
+    kConfigExperimentalVerificationFile,  // This file is used to detect whether
+                                          // the config is experimental or not
+    kLLMInputFileSchema,  // This file is used to validate the Llama2 input
     // file.
     kEPDependenciesConfig,  // This file is used to define the dependencies of
     // the execution providers.
     kEPDependenciesConfigSchema,  // This file is used to validate the execution
     // provider dependencies configuration file.
+    kVendorsDefault,  // This file is a .zip file which contains vendors default
+                      // configurations
     kNativeOpenVINO,  // This file is used to run benchmarks with Native
                       // OpenVINO DLLs.
     kOrtGenAI,  // This file is used to run benchmarks with ORT Gen-AI DLLs.
+    kOrtGenAIRyzenAI,   // This file is used to run benchmarks with ORT Gen-AI RyzenAI DLLs.
+    kWindowsML,  // This file is used to run benchmarks with WindowsML DLLs.
+    kGGML_EPs,       // This file is used to run benchmarks with GGML
+    kGGML_Vulkan,    // This file is used to run benchmarks with GGML Vulkan
+    kGGML_CUDA,      // This file is used to run benchmarks with GGML CUDA
+    kGGML_Metal,     // This file is used to run benchmarks with GGML Metal
+    kNativeQNN,  // This file is used to run benchmarks with Native QNN
+    kMLX,            // This file is used to run benchmarks with MLX
   };
 
   Unpacker();
@@ -65,7 +78,7 @@ class Unpacker {
    *
    * @param deps_dir The directory path.
    */
-  void SetDepsDir(const std::string& deps_dir);
+  void SetDepsDir(const std::string& deps_dir, bool remove_old = true);
   /**
    * @brief Get the directory where the unpacked files will be stored.
    *
@@ -100,6 +113,8 @@ class Unpacker {
    *
    * @param zip_file The path to the ZIP file.
    * @param dest_dir The destination directory.
+   * @param return_relative_paths If true, the function returns paths relative
+   * to the dest_dir
    * @param timeout_ms Timeout duration in milliseconds for the unpacking
    * process.
    *                  - (<0):  Default timeout based on file size
@@ -109,7 +124,7 @@ class Unpacker {
    */
   static std::vector<std::string> UnpackFilesFromZIP(
       const std::string& zip_file, const std::string& dest_dir,
-      int64_t timeout_ms = -1);
+      bool return_relative_paths = false, int64_t timeout_ms = -1);
 
  private:
   bool ExtractFileFromMemory(const unsigned char* data[], size_t data_size,

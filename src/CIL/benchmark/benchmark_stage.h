@@ -16,11 +16,13 @@ class BenchmargStage : public StageBase {
                  EPDependenciesManager& ep_dependencies_manager,
                  BenchmarkLogger& results_logger,
                  const std::string& output_results_schema_path,
-                 const std::string& input_file_schema_path)
+                 const std::string& input_file_schema_path,
+                 bool skip_failed_prompts)
       : StageBase(logger, config, unpacker, ep_dependencies_manager),
         results_logger_(results_logger),
         output_results_schema_path_(output_results_schema_path),
-        input_file_schema_path_(input_file_schema_path) {}
+        input_file_schema_path_(input_file_schema_path),
+        skip_failed_prompts_(skip_failed_prompts) {}
 
   /**
    * @brief Benchmarks the specified scenarios.
@@ -48,18 +50,17 @@ class BenchmargStage : public StageBase {
  private:
   void BenchmarkTask(const std::string& ep_name,
                      const nlohmann::json& ep_config,
-                     const std::string& model_file_path,
                      const std::string& model_source_path,
                      const std::string& display_model_name,
                      const ScenarioConfig& scenario_config,
                      std::shared_ptr<infer::ExecutorBase> executor,
                      bool& task_executed);
-  ;
 
   BenchmarkLogger& results_logger_;
 
   const std::string& output_results_schema_path_;
   const std::string& input_file_schema_path_;
+  const bool skip_failed_prompts_;
 
   static const std::chrono::milliseconds kProgressInterval;
 };

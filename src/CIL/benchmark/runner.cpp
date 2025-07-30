@@ -4,18 +4,35 @@
 #include "data_verification_stage.h"
 #include "download_stage.h"
 #include "preparation_stage.h"
+#include "utils.h"
 
 using namespace log4cxx;
 namespace fs = std::filesystem;
 
+namespace {
+
+const std::unordered_set<std::string> kSupportedLLMModels {
+    "llama2", "llama3", "phi3.5", "phi4"
+  };
+
+} // namespace
+
+const std::unordered_map<std::string, std::string> kModelFullNames = {
+    {"llama2", "Llama 2 7B Chat"},
+    {"llama3", "Llama 3.1 8B Instruct"},
+    {"phi3.5", "Phi 3.5 Mini Instruct"},
+    {"phi4", "Phi 4 Reasoning 14B"}};
+
 namespace cil {
+
 BenchmarkRunner::BenchmarkRunner(Params& params)
     : progress_handler_(params.progress_handler),
       config_(params.config),
       unpacker_(params.unpacker),
       ep_dependencies_manager_(params.ep_dependencies_manager),
       results_logger_(std::make_unique<BenchmarkLogger>(params.output_dir)),
-      logger_(params.logger) {
+      logger_(params.logger),
+      enumerate_only_(params.enumerate_only) {
   if (!logger_) {
     throw std::invalid_argument("Logger is not provided.");
   }
@@ -55,7 +72,7 @@ BenchmarkRunner::BenchmarkRunner(Params& params)
     auto benchmark_stage = std::make_shared<BenchmargStage>(
         logger_, *config_, *unpacker_, *ep_dependencies_manager_,
         *results_logger_, params.output_results_schema_path,
-        params.input_file_schema_path);
+        params.input_file_schema_path, params.skip_failed_prompts);
     stages_[benchmark_stage->GetName()] = benchmark_stage;
   }
 
@@ -65,7 +82,36 @@ BenchmarkRunner::BenchmarkRunner(Params& params)
   on_failed_stage_ = [](const std::string_view&, int) { return false; };
 }
 
-BenchmarkRunner::~BenchmarkRunner() = default;
+const std::unordered_set<std::string> BenchmarkRunner::kSupportedModels = {
+    "llama2", "llama3", "phi3.5", "phi4"};
+
+bool BenchmarkRunner::IsSupportedModel(const std::string& model_name) {
+  const auto lower_model_name = utils::StringToLowerCase(model_name);
+  return kSupportedModels.contains(lower_model_name);
+}
+
+bool BenchmarkRunner::IsLLMModel(const std::string& model_name) {
+  const auto lower_model_name = utils::StringToLowerCase(model_name);
+  return kSupportedLLMModels.contains(lower_model_name);
+}
+
+void BenchmarkRunner::ClearCache(const std::string& deps_dir) {
+  DownloadStage::ClearCache(deps_dir);
+}
+
+std::vector<BenchmarkRunner::PreparedEPList> BenchmarkRunner::GetPreparedEPs()
+    const {
+  return prepared_eps_;
+}
+
+std::optional<std::string> BenchmarkRunner::GetModelFullName(
+    const std::string& model_name) {
+  const auto it = kModelFullNames.find(model_name);
+  if (it != kModelFullNames.end()) {
+    return it->second;
+  }
+  return std::nullopt;
+}
 
 bool BenchmarkRunner::ReportProgress(ProgressTracker& progress_tracker,
                                      TaskScheduler& task_scheduler) {
@@ -81,7 +127,6 @@ bool BenchmarkRunner::ReportProgress(ProgressTracker& progress_tracker,
   if (progress_handler_) {
     auto& interrupt = progress_handler_->GetInterrupt();
 
-    interrupt = false;
     while (!progress_tracker.Finished()) {
       progress_handler_->Update(progress_tracker);
       std::this_thread::sleep_for(update_internal);
@@ -91,6 +136,10 @@ bool BenchmarkRunner::ReportProgress(ProgressTracker& progress_tracker,
           continue;
         }
         task_scheduler.CancelTasks();
+        if (progress_handler_)
+          progress_handler_->StopTracking(progress_tracker);
+        else
+          progress_tracker.StopTracking();
         return false;
       }
     }
@@ -147,9 +196,18 @@ bool BenchmarkRunner::Run() {
         break;
       }
     }
+    if (enumerate_only_) prepared_eps_.push_back(scenario_data.prepared_eps);
   }
 
   return !was_error;
+}
+
+int BenchmarkRunner::GetTotalStages() const { return stage_order_.size(); }
+
+int BenchmarkRunner::GetStageIndex(const std::string& stage_name) const {
+  auto it = std::find(stage_order_.begin(), stage_order_.end(), stage_name);
+  return it == stage_order_.end() ? -1
+                                  : std::distance(stage_order_.begin(), it);
 }
 
 void BenchmarkRunner::AddCustomStage(const std::string& name,

@@ -2,7 +2,7 @@ include(FetchContent)
 
 FetchContent_Declare(
     dylib
-    GIT_REPOSITORY "https://github.com/martin-olivier/dylib"
+    GIT_REPOSITORY "https://github.com/martin-olivier/dylib.git"
     GIT_TAG "v2.2.1"
 )
 

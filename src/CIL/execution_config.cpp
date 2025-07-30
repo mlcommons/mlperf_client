@@ -18,8 +18,10 @@ namespace cil {
 
 bool ExecutionConfig::ValidateAndParse(
     const std::string& json_file_path, const std::string& schema_file_path,
-    const std::string& config_verification_file_path) {
+    const std::string& config_verification_file_path,
+    const std::string& config_experimental_verification_file_path) {
   config_verified_ = false;
+  config_experimental_ = false;
   // Load the JSON data
   nlohmann::json json_data;
   std::ifstream json_file(json_file_path);
@@ -48,38 +50,26 @@ bool ExecutionConfig::ValidateAndParse(
   }
   FromJson(json_data);
 
-  if (!config_verification_file_path.empty()) {
-    config_file_hash_ =
-        utils::ComputeFileSHA256(json_file_path, loggerExecutionConfig);
-    if (config_file_hash_.empty()) {
-      LOG4CXX_ERROR(loggerExecutionConfig,
-                    "Failed to compute the hash of the config file");
-      return true;
-    }
-    nlohmann::json config_verification_json;
-    std::ifstream config_verification_file(config_verification_file_path);
-    if (!config_verification_file.is_open()) {
-      LOG4CXX_ERROR(loggerExecutionConfig,
-                    "Failed to open config verification file");
-      return true;
-    }
-    try {
-      config_verification_file >> config_verification_json;
-    } catch (const std::exception& e) {
-      LOG4CXX_ERROR(loggerExecutionConfig,
-                    "Failed to parse config verification file.");
-      return true;
-    }
-    for (const auto& [key, value] : config_verification_json.items()) {
-      if (value == config_file_hash_) {
-        config_file_name_ = key;
-        config_verified_ = true;
-        return true;
-      }
-    }
+  config_file_name_ = fs::path(json_file_path).filename().string();
+  if (config_verification_file_path.empty() &&
+      config_experimental_verification_file_path.empty())
+    return true;
 
-    config_file_name_ = fs::path(json_file_path).filename().string();
+  config_file_hash_ =
+      utils::ComputeFileSHA256(json_file_path, loggerExecutionConfig);
+  if (config_file_hash_.empty()) {
+    LOG4CXX_ERROR(loggerExecutionConfig,
+                  "Failed to compute the hash of the config file");
+    return true;
   }
+
+  if (!config_verification_file_path.empty())
+    config_verified_ = VerifyConfigFileHash(
+        config_verification_file_path, config_file_hash_, config_file_name_);
+  if (!config_experimental_verification_file_path.empty())
+    config_experimental_ =
+        VerifyConfigFileHash(config_experimental_verification_file_path,
+                             config_file_hash_, config_file_name_);
 
   return true;
 }
@@ -94,6 +84,37 @@ void ExecutionConfig::from_json(const nlohmann::json& j, ExecutionConfig& obj) {
     scenario_config.FromJson(scenario_json, obj.system_config_.GetBaseDir());
     obj.scenarios_.emplace_back(scenario_config);
   }
+}
+
+bool ExecutionConfig::VerifyConfigFileHash(
+    std::string_view verification_file_path, std::string_view hash,
+    std::string& file_name) const {
+  nlohmann::json verification_json;
+  std::ifstream verification_file{std::string(verification_file_path)};
+
+  if (!verification_file.is_open()) {
+    LOG4CXX_ERROR(
+        loggerExecutionConfig,
+        "Failed to open config verification file: " << verification_file_path);
+    return true;
+  }
+
+  try {
+    verification_file >> verification_json;
+  } catch (const std::exception& e) {
+    LOG4CXX_ERROR(
+        loggerExecutionConfig,
+        "Failed to parse config verification file: " << verification_file_path);
+    return true;
+  }
+
+  for (const auto& [key, value] : verification_json.items())
+    if (key == hash) {
+      file_name = value;
+      return true;
+    }
+
+  return false;
 }
 
 void SystemConfig::from_json(const nlohmann::json& j, SystemConfig& obj) {
@@ -255,12 +276,16 @@ void ScenarioConfig::from_json(const nlohmann::json& j, ScenarioConfig& obj,
   for (const auto& model_json : models_json) {
     ModelConfig model;
     model.FromJson(model_json, base_dir);
-    if (utils::StringToLowerCase(obj.name_) == "llama2") {
-      // tokenizer path is required for the llama2
+    auto lower_case_model_name = utils::StringToLowerCase(obj.name_);
+    if (lower_case_model_name == "llama2" ||
+        lower_case_model_name == "llama3" ||
+        lower_case_model_name == "phi3.5" ||
+        lower_case_model_name == "phi4") {
+      // tokenizer path is required for the LLMs
       if (model.GetTokenizerPath().empty())
         LOG4CXX_ERROR(
             loggerExecutionConfig,
-            "Configuration for the llama2 model "
+            "Configuration for the " + lower_case_model_name + " model "
                 << model.GetName()
                 << " is not valid, make sure to provide TokenizerPath");
     }
@@ -278,7 +303,10 @@ void ScenarioConfig::from_json(const nlohmann::json& j, ScenarioConfig& obj,
   if (j.contains("Delay")) {
     j.at("Delay").get_to(obj.inference_delay_);
   } else {
-    obj.inference_delay_ = obj.name_ == "llama2" ? 5.0 : 0.0;  // seconds
+    obj.inference_delay_ =
+        obj.name_ == "llama2" || obj.name_ == "llama3" || obj.name_ == "phi3.5" || obj.name_ == "phi4"
+            ? 5.0
+            : 0.0;  // seconds
   }
   if (j.contains("AssetsPath")) j.at("AssetsPath").get_to(obj.assets_);
 
@@ -362,6 +390,84 @@ std::filesystem::path GetExecutionProviderParentLocation(
     dest_dir = fs::path(deps_dir) / cil::GetEPDependencySubdirPath(ep_name);
   }
   return dest_dir;
+}
+
+nlohmann::json ExecutionConfig::GetEPsConfigSchema(
+    const std::string& schema_file_path) {
+  nlohmann::json output = nlohmann::json::object();
+  try {
+    std::ifstream file(schema_file_path);
+    if (!file.is_open()) {
+      LOG4CXX_ERROR(loggerExecutionConfig,
+                    "Failed to open the schema file: " << schema_file_path);
+      return output;
+    }
+    nlohmann::json schema;
+    file >> schema;
+    if (!(schema.contains("properties") &&
+          schema["properties"].contains("Scenarios"))) {
+      LOG4CXX_ERROR(loggerExecutionConfig,
+                    "'Scenarios' field not found: " << schema_file_path);
+      return output;
+    }
+    const auto& scenarios = schema["properties"]["Scenarios"];
+    if (!(scenarios.contains("items") &&
+          scenarios["items"].contains("properties") &&
+          scenarios["items"]["properties"].contains("ExecutionProviders"))) {
+      LOG4CXX_ERROR(
+          loggerExecutionConfig,
+          "'ExecutionProviders' field not found: " << schema_file_path);
+      return output;
+    }
+    const auto& execution_providers_schema =
+        scenarios["items"]["properties"]["ExecutionProviders"];
+    if (!(execution_providers_schema.contains("type") &&
+          execution_providers_schema["type"] == "array")) {
+      LOG4CXX_ERROR(
+          loggerExecutionConfig,
+          "'ExecutionProviders' field is not an array: " << schema_file_path);
+      return output;
+    }
+    if (!execution_providers_schema.contains("items") ||
+        !execution_providers_schema["items"].contains("properties")) {
+      return output;
+    }
+
+    const auto& item_properties =
+        execution_providers_schema["items"]["properties"];
+
+    if (!execution_providers_schema["items"].contains("allOf")) {
+      return output;
+    }
+
+    for (const auto& condition : execution_providers_schema["items"]["allOf"]) {
+      if (!condition.contains("if") || !condition.contains("then")) {
+        continue;
+      }
+      if (condition["if"].contains("properties") &&
+          condition["if"]["properties"].contains("Name")) {
+        std::string name_value =
+            condition["if"]["properties"]["Name"].value("const", "");
+        nlohmann::json fields = nlohmann::json::object();
+
+        if (condition["then"].contains("properties") &&
+            condition["then"]["properties"].contains("Config") &&
+            condition["then"]["properties"]["Config"].contains("properties")) {
+          for (const auto& [prop_name, prop_schema] :
+               condition["then"]["properties"]["Config"]["properties"]
+                   .items()) {
+            fields[prop_name] = prop_schema;
+          }
+        }
+        output[name_value] = fields;
+      }
+    }
+  } catch (const std::exception& e) {
+    LOG4CXX_ERROR(loggerExecutionConfig,
+                  "Error parsing schema file: " << schema_file_path);
+  }
+
+  return output;
 }
 
 }  // namespace cil

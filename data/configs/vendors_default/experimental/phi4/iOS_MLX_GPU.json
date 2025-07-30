@@ -1,0 +1,47 @@
+{
+  "SystemConfig": {
+    "Comment": "Phi 4 Reasoning 14B, MLX, GPU, Base prompts, Experimental",
+    "TempPath": "",
+    "EPDependenciesConfigPath": ""
+  },
+  "Scenarios": [
+    {
+      "Name": "Phi4",
+      "Models": [
+        {
+          "ModelName": "phi4-reasoning-mlx-q4",
+          "FilePath": "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/phi4/models/MLX/config.json",
+          "DataFilePath": "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/phi4/models/MLX/safetensors.zip",
+          "TokenizerPath": "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/phi4/models/MLX/tokenizer.zip"
+        }
+      ],
+      "InputFilePath": [
+        "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/phi4/data/content_generation/greedy-prompt_cot.39329.json",
+        "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/phi4/data/content_generation/greedy-prompt_t0.677207.json",
+        "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/phi4/data/creative_writing/greedy-prompt_niv.123362.json",
+        "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/phi4/data/creative_writing/greedy-prompt_niv.77134.json",
+        "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/phi4/data/summarization/greedy-prompt_flan.1221607.json",
+        "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/phi4/data/summarization/greedy-prompt_flan.1221694.json",
+        "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/phi4/data/summarization2k/greedy-prompt_flan.1854150.json",
+        "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/phi4/data/summarization2k/greedy-prompt_flan.997680.json",
+        "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/phi4/data/code_analysis/command_parser_cpp_2k.json",
+        "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/phi4/data/code_analysis/performance_counter_group_cpp_2k.json"
+      ],
+      "AssetsPath": [],
+      "ResultsVerificationFile": "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/generation-greedy-results.json",
+      "DataVerificationFile": "",
+      "Iterations": 3,
+      "WarmUp": 1,
+      "Delay": 0,
+      "ExecutionProviders": [
+        {
+          "Name": "MLX",
+          "Config": {
+            "device_type": "GPU"
+          }
+        }
+      ]
+    }
+  ]
+}
+

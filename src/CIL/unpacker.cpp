@@ -12,6 +12,8 @@
 #include "scope_exit.h"
 
 #include "assets/assets.h"
+
+#include "config.h"
 #include "execution_provider.h"
 #include "minizip/mz.h"
 #include "minizip/mz_strm.h"
@@ -323,7 +325,8 @@ std::uint64_t MinizipCalculateTotalUncompressedSize(
 }
 
 std::vector<std::string> UnZipUsingMinizip(const std::string& zip_file,
-                                           const std::string& dest_dir) {
+                                           const std::string& dest_dir,
+                                           bool return_relative_paths) {
   std::vector<std::string> unzipped_files;
   int32_t err = MZ_OK;
   void* reader = mz_zip_reader_create();
@@ -434,7 +437,8 @@ std::vector<std::string> UnZipUsingMinizip(const std::string& zip_file,
             break;
           }
         }
-        unzipped_files.push_back(dest_file.string());
+        unzipped_files.push_back(return_relative_paths ? file_name
+                                                       : dest_file.string());
       }
       err = mz_zip_reader_goto_next_entry(reader);
     } while (err == MZ_OK);
@@ -482,16 +486,30 @@ static const std::map<Unpacker::Asset, std::string>& GetAssetFileMapping() {
   static const std::map<Unpacker::Asset, std::string> file_map = {
       {kLog4cxxConfig, "Log4CxxConfig.xml"},
       {kConfigSchema, "ConfigSchema.json"},
-      {kLlama2InputFileSchema, "Llama2InputSchema.json"},
+      {kLLMInputFileSchema, "LLMInputSchema.json"},
       {kOutputResultsSchema, "OutputResultsSchema.json"},
       {kDataVerificationFile, "data_verification.json"},
       {kDataVerificationFileSchema, "DataVerificationSchema.json"},
       {kConfigVerificationFile, "config_verification.json"},
+      {kConfigExperimentalVerificationFile,
+       "config_experimental_verification.json"},
       {kEPDependenciesConfig, "ep_dependencies_config.json"},
       {kEPDependenciesConfigSchema, "EPDependenciesConfigSchema.json"},
+      {kVendorsDefault, "vendors_default.zip"},
 #ifdef _WIN32
       {kNativeOpenVINO, "IHV_NativeOpenVINO.dll"},
+      {kNativeQNN, "IHV_NativeQNN.dll"},
       {kOrtGenAI, "IHV_OrtGenAI.dll"},
+      {kOrtGenAIRyzenAI, "IHV_OrtGenAI_RyzenAI.dll"},
+      {kWindowsML, "IHV_WindowsML.dll"},
+      {kGGML_EPs, "IHV_GGML_EPs.dll"},
+      {kGGML_Vulkan, "GGML_Vulkan.dll"},
+      {kGGML_CUDA, "GGML_CUDA.dll"},
+#elif !TARGET_OS_IOS
+      {kGGML_EPs, "libIHV_GGML_EPs.dylib"},
+      {kGGML_Vulkan, "libGGML_Vulkan.dylib"},
+      {kGGML_Metal, "libGGML_Metal.dylib"},
+      {kMLX, "libIHV_MLX.dylib"}
 #endif
   };
   return file_map;
@@ -514,13 +532,18 @@ GetAssetMemoryMapping() {
 
   ADD_ASSET_MAP_ENTRY(kLog4cxxConfig, Log4CxxConfig_xml);
   ADD_ASSET_MAP_ENTRY(kConfigSchema, ConfigSchema_json);
-  ADD_ASSET_MAP_ENTRY(kLlama2InputFileSchema, Llama2InputSchema_json);
+  ADD_ASSET_MAP_ENTRY(kLLMInputFileSchema, LLMInputSchema_json);
   ADD_ASSET_MAP_ENTRY(kOutputResultsSchema, OutputResultsSchema_json);
   ADD_ASSET_MAP_ENTRY(kDataVerificationFile, data_verification_json);
   ADD_ASSET_MAP_ENTRY(kDataVerificationFileSchema, DataVerificationSchema_json);
   ADD_ASSET_MAP_ENTRY(kConfigVerificationFile, config_verification_json);
+  ADD_ASSET_MAP_ENTRY(kConfigExperimentalVerificationFile,
+                      config_experimental_verification_json);
   ADD_ASSET_MAP_ENTRY(kEPDependenciesConfigSchema,
                       EPDependenciesConfigSchema_json);
+#if VENDORS_DEFAULT_PACKED
+  ADD_ASSET_MAP_ENTRY(kVendorsDefault, vendors_default_zip);
+#endif
 
 #ifdef _WIN32
 
@@ -536,18 +559,56 @@ GetAssetMemoryMapping() {
   ADD_ASSET_MAP_ENTRY(kNativeOpenVINO, IHV_NativeOpenVINO_dll);
 #endif  // WITH_IHV_NATIVE_OPENVINO
 
+#if WITH_IHV_NATIVE_QNN
+  ADD_ASSET_MAP_ENTRY(kNativeQNN, IHV_NativeQNN_dll);
+#endif  // WITH_IHV_NATIVE_QNN
+
 #if WITH_IHV_ORT_GENAI
   ADD_ASSET_MAP_ENTRY(kOrtGenAI, IHV_OrtGenAI_dll);
 #endif
+#if WITH_IHV_ORT_GENAI_RYZENAI
+  ADD_ASSET_MAP_ENTRY(kOrtGenAIRyzenAI, IHV_OrtGenAI_RyzenAI_dll);
+#endif
+#if WITH_IHV_WIN_ML
+  ADD_ASSET_MAP_ENTRY(kWindowsML, IHV_WindowsML_dll);
+#endif
+
+#if WITH_IHV_GGML
+  ADD_ASSET_MAP_ENTRY(kGGML_EPs, IHV_GGML_EPs_dll);
+#endif  // WITH_IHV_GGML
+
+#if WITH_IHV_GGML_VULKAN
+  ADD_ASSET_MAP_ENTRY(kGGML_Vulkan, GGML_Vulkan_dll);
+#endif  // WITH_IHV_GGML_VULKAN
+
+#if WITH_IHV_GGML_CUDA
+  ADD_ASSET_MAP_ENTRY(kGGML_CUDA, GGML_CUDA_dll);
+#endif  // WITH_IHV_GGML_VULKAN
 
 #else
 
-
-ADD_ASSET_MAP_ENTRY(kEPDependenciesConfig, ep_dependencies_config_macOS_json);
-
-
-
+#if TARGET_OS_IOS
+  ADD_ASSET_MAP_ENTRY(kEPDependenciesConfig, ep_dependencies_config_iOS_json);
+#else
+  ADD_ASSET_MAP_ENTRY(kEPDependenciesConfig, ep_dependencies_config_macOS_json);
 #endif
+#if WITH_IHV_GGML && !TARGET_OS_IOS
+  ADD_ASSET_MAP_ENTRY(kGGML_EPs, libIHV_GGML_EPs_dylib);
+#endif
+
+#if WITH_IHV_GGML_VULKAN
+  ADD_ASSET_MAP_ENTRY(kGGML_Vulkan, libGGML_Vulkan_dylib);
+#endif
+
+#if WITH_IHV_GGML_METAL && !TARGET_OS_IOS
+  ADD_ASSET_MAP_ENTRY(kGGML_Metal, libGGML_Metal_dylib);
+#endif
+
+#if WITH_IHV_MLX && !TARGET_OS_IOS
+  ADD_ASSET_MAP_ENTRY(kMLX, libIHV_MLX_dylib);
+#endif
+
+#endif  // TARGET_OS_IOS
 
   return memory_map;
 }
@@ -556,16 +617,26 @@ Unpacker::Unpacker() { deps_dir_ = CreateDepsDirectory(); }
 
 Unpacker::~Unpacker() = default;
 
-void Unpacker::SetDepsDir(const std::string& deps_dir) {
+void Unpacker::SetDepsDir(const std::string& deps_dir, bool remove_old) {
   auto old_dir = deps_dir_;
   if (!deps_dir.empty()) deps_dir_ = CreateDepsDirectory(deps_dir);
-  // move unpacked files from the old dir to the new dir
   if (deps_dir_ != old_dir) {
-    for (const auto& path : unpacked_files_) {
-      fs::path new_path = deps_dir_ / path.filename();
-      fs::rename(path, new_path);
+    if (remove_old) {
+      // move unpacked files from the old dir to the new dir
+      for (const auto& path : unpacked_files_) {
+        fs::path new_path = deps_dir_ / path.filename();
+        fs::rename(path, new_path);
+      }
+      if (fs::is_empty(old_dir)) fs::remove(old_dir);
+    } else {
+      // copy to new directory
+      for (const auto& path : unpacked_files_) {
+        fs::path new_path = deps_dir_ / path.filename();
+        if (!fs::exists(new_path)) {
+          fs::copy(path, new_path);
+        }
+      }
     }
-    if (fs::is_empty(old_dir)) fs::remove(old_dir);
   }
 }
 
@@ -591,9 +662,32 @@ bool Unpacker::UnpackAsset(Asset asset, std::string& path, bool forced) {
     case kNativeOpenVINO:
       adjust_for_ep(EP::kIHVNativeOpenVINO);
       break;
+    case kNativeQNN:
+      adjust_for_ep(EP::kIHVNativeQNN);
+      break;
     case kOrtGenAI:
       adjust_for_ep(EP::kIHVOrtGenAI);
       break;
+    case kOrtGenAIRyzenAI:
+      adjust_for_ep(EP::kkIHVOrtGenAIRyzenAI);
+      break;
+    case kWindowsML:
+      adjust_for_ep(EP::kIHVWindowsML);
+      break;
+    case kGGML_EPs:
+      adjust_for_ep(EP::kIHVVulkan);
+      break;
+    case kGGML_Vulkan:
+      adjust_for_ep(EP::kIHVVulkan);
+      break;
+    case kGGML_CUDA:
+      adjust_for_ep(EP::kIHVCUDA);
+      break;
+    case kGGML_Metal:
+      adjust_for_ep(EP::kIHVMetal);
+      break;
+    case kMLX:
+      adjust_for_ep(EP::kIHVMLX);
       break;
   }
 
@@ -624,7 +718,7 @@ bool Unpacker::UnpackAsset(Asset asset, std::string& path, bool forced) {
 
     const auto& [memory_ptr, file_size, file_parts, file_parts_size] =
         memory_map.at(asset);
-    ;
+
     return ExtractFileFromMemory(memory_ptr, file_size, file_parts,
                                  file_parts_size, dest_file.string());
   };
@@ -632,18 +726,46 @@ bool Unpacker::UnpackAsset(Asset asset, std::string& path, bool forced) {
   switch (asset) {
     case kLog4cxxConfig:
     case kConfigSchema:
-    case kLlama2InputFileSchema:
+    case kLLMInputFileSchema:
     case kOutputResultsSchema:
     case kDataVerificationFile:
     case kDataVerificationFileSchema:
     case kConfigVerificationFile:
+    case kConfigExperimentalVerificationFile:
     case kEPDependenciesConfig:
     case kEPDependenciesConfigSchema:
+#if VENDORS_DEFAULT_PACKED
+    case kVendorsDefault:
+#endif
 #if defined(_WIN32) && WITH_IHV_NATIVE_OPENVINO
     case kNativeOpenVINO:
 #endif  // WITH_IHV_NATIVE_OPENVINO
 #if defined(_WIN32) && WITH_IHV_ORT_GENAI
     case kOrtGenAI:
+#endif
+#if defined(_WIN32) && WITH_IHV_ORT_GENAI_RYZENAI
+    case kOrtGenAIRyzenAI:
+#endif
+#if defined(_WIN32) && WITH_IHV_WIN_ML
+    case kWindowsML:
+#endif
+#if defined(_WIN32) && WITH_IHV_NATIVE_QNN
+    case kNativeQNN:
+#endif
+#if WITH_IHV_GGML
+    case kGGML_EPs:
+#if WITH_IHV_GGML_VULKAN
+    case kGGML_Vulkan:
+#endif
+#if defined(_WIN32) && WITH_IHV_GGML_CUDA
+    case kGGML_CUDA:
+#endif
+#if !defined(_WIN32) && WITH_IHV_GGML_METAL
+    case kGGML_Metal:
+#endif
+#endif  // WITH_IHV_GGML
+#if !defined(_WIN32) && WITH_IHV_MLX
+    case kMLX:
 #endif
       return unpack_regular_file();
     default:
@@ -654,7 +776,6 @@ bool Unpacker::UnpackAsset(Asset asset, std::string& path, bool forced) {
 
 size_t Unpacker::GetAllDataSize() const {
   size_t data_size = 0;
-
   data_size += assets::Log4CxxConfig_xmlSize;
   data_size += assets::ConfigSchema_jsonSize;
   data_size += assets::OutputResultsSchema_jsonSize;
@@ -669,6 +790,8 @@ size_t Unpacker::GetAllDataSize() const {
   data_size += assets::ep_dependencies_config_windows_ARM_jsonSize;
 #endif
 
+#elif TARGET_OS_IOS
+  data_size += assets::ep_dependencies_config_iOS_jsonSize;
 #else
   data_size += assets::ep_dependencies_config_macOS_jsonSize;
 #endif
@@ -680,7 +803,7 @@ size_t Unpacker::GetAllDataSize() const {
 
 std::vector<std::string> Unpacker::UnpackFilesFromZIP(
     const std::string& zip_file, const std::string& dest_dir,
-    int64_t timeout_ms) {
+    bool return_relative_paths, int64_t timeout_ms) {
   if (!fs::exists(zip_file)) {
     LOG4CXX_ERROR(loggerUnpacker, "Zip file does not exist: " << zip_file);
     return {};
@@ -722,11 +845,11 @@ std::vector<std::string> Unpacker::UnpackFilesFromZIP(
     return total_uncompressed_size;
   };
 
-  auto unzip = [zip_file, dest_dir]() {
+  auto unzip = [zip_file, dest_dir, return_relative_paths]() {
     LOG4CXX_DEBUG(loggerUnpacker,
                   "Unpacking files from zip file: " << zip_file);
     std::vector<std::string> unzipped_files =
-        UnZipUsingMinizip(zip_file, dest_dir);
+        UnZipUsingMinizip(zip_file, dest_dir, return_relative_paths);
 
     if (unzipped_files.empty()) {
       LOG4CXX_DEBUG(loggerUnpacker, "Failed to unzip  using minizip");
@@ -841,6 +964,22 @@ bool Unpacker::ExtractFileFromMemory(const unsigned char* data[],
                                      size_t data_size, unsigned int parts,
                                      const unsigned part_sizes[],
                                      const std::string& file_path) {
+#ifdef __APPLE__
+  // dyld may fail to load an overwritten .dylib due to cached data, so remove
+  // it first before writing.
+  try {
+    fs::path path_obj(file_path);
+    if (fs::exists(path_obj) && path_obj.extension() == ".dylib") {
+      if (!fs::remove(path_obj)) {
+        LOG4CXX_ERROR(loggerUnpacker, "Failed to delete file " << file_path);
+      }
+    }
+  } catch (const fs::filesystem_error& e) {
+    LOG4CXX_ERROR(loggerUnpacker,
+                  "Failed to delete file " << file_path << " " << e.what());
+  }
+#endif  // __APPLE__
+
   std::ofstream out_file(file_path, std::ios::binary);
   size_t written = 0;
   bool success = false;

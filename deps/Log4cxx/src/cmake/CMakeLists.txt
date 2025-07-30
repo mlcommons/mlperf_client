@@ -57,11 +57,14 @@ set(APR_STATIC_LINK_LIBRARIES ${APR_LIBRARIES} ${APR_UTIL_LIBRARIES} ${APR_ICONV
 find_package_handle_standard_args(APR APR_INCLUDE_DIR APR_LIBRARIES)
 find_package_handle_standard_args(APR-Util APR_UTIL_INCLUDE_DIR APR_UTIL_LIBRARIES)
 
+if(CMAKE_OSX_SYSROOT STREQUAL "iphoneos")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++20")
+endif()
 add_subdirectory(${LOG4CXX_SOURCE_DIR} log4cxx EXCLUDE_FROM_ALL)
 
 target_link_libraries(log4cxx PRIVATE ${APR_STATIC_LINK_LIBRARIES})
 
-if(APPLE)
+if(APPLE AND NOT CMAKE_OSX_SYSROOT STREQUAL "iphoneos")
 find_package(Iconv REQUIRED)
 target_link_libraries(log4cxx PRIVATE ${Iconv_LIBRARIES})
 endif()

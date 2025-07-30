@@ -1,3 +1,66 @@
 {
-  "EPDependencies": []
+  "EPDependencies": [
+    {
+      "Name": "NativeQNN",
+      "Files": [
+        {
+          "Name": "Genie.dll",
+          "Path": "https://client.mlcommons-storage.org/deps/1.0/binaries/Windows/ARM/NativeQNN/Genie.dll"
+        },
+        {
+          "Name": "QnnHtp.dll",
+          "Path": "https://client.mlcommons-storage.org/deps/1.0/binaries/Windows/ARM/NativeQNN/QnnHtp.dll"
+        },
+        {
+          "Name": "QnnHtpNetRunExtensions.dll",
+          "Path": "https://client.mlcommons-storage.org/deps/1.0/binaries/Windows/ARM/NativeQNN/QnnHtpNetRunExtensions.dll"
+        },
+        {
+          "Name": "QnnSystem.dll",
+          "Path": "https://client.mlcommons-storage.org/deps/1.0/binaries/Windows/ARM/NativeQNN/QnnSystem.dll"
+        },
+        {
+          "Name": "QnnHtpV73Stub.dll",
+          "Path": "https://client.mlcommons-storage.org/deps/1.0/binaries/Windows/ARM/NativeQNN/QnnHtpV73Stub.dll"
+        },
+        {
+          "Name": "libQnnHtpV73Skel.so",
+          "Path": "https://client.mlcommons-storage.org/deps/1.0/binaries/Windows/ARM/NativeQNN/libQnnHtpV73Skel.so"
+        },
+        {
+          "Name": "libqnnhtpv73.cat",
+          "Path": "https://client.mlcommons-storage.org/deps/1.0/binaries/Windows/ARM/NativeQNN/libqnnhtpv73.cat"
+        },
+        {
+          "Name": "QnnGenAiTransformerCpuOpPkg.dll",
+          "Path": "https://client.mlcommons-storage.org/deps/1.0/binaries/Windows/ARM/NativeQNN/QnnGenAiTransformerCpuOpPkg.dll"
+        },
+        {
+          "Name": "QnnGenAiTransformerModel.dll",
+          "Path": "https://client.mlcommons-storage.org/deps/1.0/binaries/Windows/ARM/NativeQNN/QnnGenAiTransformerModel.dll"
+        },
+        {
+          "Name": "QnnGenAiTransformer.dll",
+          "Path": "https://client.mlcommons-storage.org/deps/1.0/binaries/Windows/ARM/NativeQNN/QnnGenAiTransformer.dll"
+        }
+      ]
+    },
+    {
+      "Name": "WindowsML",
+      "Files": [
+        {
+          "Name": "onnxruntime-genai.dll",
+          "Path": "https://client.mlcommons-storage.org/deps/1.0/binaries/Windows/ARM/WindowsML/onnxruntime-genai.dll"
+        },
+        {
+          "Name": "WinMLBootstrap.dll",
+          "Path": "https://client.mlcommons-storage.org/deps/1.0/binaries/Windows/ARM/WindowsML/WinMLBootstrap.dll"
+        },
+        {
+          "Name": "Microsoft.Windows.AI.MachineLearning.msix",
+          "Path": "https://client.mlcommons-storage.org/deps/1.0/binaries/Windows/ARM/WindowsML/Microsoft.Windows.AI.MachineLearning.msix"
+        }
+      ]
+    }
+  ]
 }

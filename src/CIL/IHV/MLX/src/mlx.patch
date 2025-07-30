@@ -1,0 +1,46 @@
+diff --git a/mlx/backend/metal/device.cpp b/mlx/backend/metal/device.cpp
+index 1321fb8d9..728aebe9a 100644
+--- a/mlx/backend/metal/device.cpp
++++ b/mlx/backend/metal/device.cpp
+@@ -1,5 +1,6 @@
+ // Copyright © 2023-2024 Apple Inc.
+ 
++#include <dlfcn.h>
+ #include <cstdlib>
+ #include <filesystem>
+ #include <sstream>
+@@ -38,6 +39,16 @@ auto get_metal_version() {
+   return metal_version_;
+ }
+ 
++static fs::path get_dylib_directory() {
++  Dl_info info{};
++  if(dladdr(reinterpret_cast<void const*>(default_mtllib_path), &info) && info.dli_fname) {
++    fs::path libFile(info.dli_fname);
++    return libFile.parent_path();
++  }
++
++  return {};
++}
++
+ auto load_device() {
+   auto devices = MTL::CopyAllDevices();
+   auto device = static_cast<MTL::Device*>(devices->object(0))
+@@ -126,6 +137,17 @@ MTL::Library* load_default_library(MTL::Device* device) {
+     return lib;
+   }
+ 
++  {
++    auto dir = get_dylib_directory();
++    if (!dir.empty()) {
++      auto dylib_path = (dir / default_mtllib_path).string();
++      std::tie(lib, error[1]) = load_library_from_path(device, dylib_path.c_str());
++      if (lib) {
++        return lib;
++      }
++    }
++  }
++
+   std::tie(lib, error[1]) = load_colocated_library(device, "Resources/mlx");
+   if (lib) {
+     return lib;

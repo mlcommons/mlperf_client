@@ -76,6 +76,9 @@ class ScenarioConfig {
   const std::vector<ExecutionProviderConfig>& GetExecutionProviders() const {
     return execution_providers_;
   }
+  void SetExecutionProviderConfig(int ep_index, const nlohmann::json& config) {
+    execution_providers_.at(ep_index).SetConfig(config);
+  }
 
   /**
    * @brief Retrieves the global and overridden model files along with their
@@ -165,17 +168,22 @@ class ExecutionConfig {
   ExecutionConfig() = default;
   ~ExecutionConfig() = default;
 
-  bool ValidateAndParse(const std::string& json_file_path,
-                        const std::string& schema_file_path,
-                        const std::string& config_verification_file_path);
+  bool ValidateAndParse(
+      const std::string& json_file_path, const std::string& schema_file_path,
+      const std::string& config_verification_file_path,
+      const std::string& config_experimental_verification_file_path = {});
 
   bool IsConfigVerified() const { return config_verified_; }
+  void SetConfigVerified(bool verified) { config_verified_ = verified; }
+
+  bool IsConfigExperimental() const { return config_experimental_; }
 
   std::string GetConfigFileName() const { return config_file_name_; }
 
   std::string GetConfigFileHash() const { return config_file_hash_; }
 
   const std::vector<ScenarioConfig>& GetScenarios() const { return scenarios_; }
+  std::vector<ScenarioConfig>& GetScenarios() { return scenarios_; }
   const SystemConfig& GetSystemConfig() const { return system_config_; }
   SystemConfig& GetSystemConfig() { return system_config_; }
 
@@ -183,8 +191,13 @@ class ExecutionConfig {
   void FromJson(const nlohmann::json& j) { from_json(j, *this); }
 
   static bool isConfigFileValid(const std::string& json_path);
+  static nlohmann::json GetEPsConfigSchema(const std::string& schema_file_path);
 
  private:
+  bool VerifyConfigFileHash(std::string_view verification_file_path,
+                            std::string_view hash,
+                            std::string& file_name) const;
+
   std::vector<ScenarioConfig> scenarios_;
   SystemConfig system_config_;
 
@@ -192,6 +205,7 @@ class ExecutionConfig {
   std::string config_file_hash_;
 
   bool config_verified_{false};
+  bool config_experimental_{false};
 };
 
 std::filesystem::path GetExecutionProviderParentLocation(

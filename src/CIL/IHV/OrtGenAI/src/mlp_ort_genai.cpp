@@ -1,7 +1,7 @@
 #pragma once
 #include "mlp_ort_genai.h"
 
-#include "Llama2/llama2_inference.h"
+#include "LLM/llm_inference.h"
 #include "mlp_ort_genai_config.h"
 
 namespace cil {
@@ -24,9 +24,10 @@ cil::IHV::OrtGenAI::OrtGenAI(const API_IHV_Setup_t& api) {
                message.c_str());
   };
 
-  if (!model_name.compare("llama2")) {
-    inference_ = std::make_shared<infer::Llama2Inference>(
-        model_path, ep_name, deps_dir, ep_settings, logger);
+  if (!model_name.compare("llama2") || !model_name.compare("llama3") || !model_name.compare("phi3.5") ||
+      !model_name.compare("phi4")) {
+    inference_ = std::make_shared<infer::LLMInference>(
+        model_path, model_name, ep_name, deps_dir, ep_settings, logger);
 
     auto error_message = inference_->GetErrorMessage();
     if (!error_message.empty()) {
@@ -52,7 +53,7 @@ bool cil::IHV::OrtGenAI::Init(const API_IHV_Init_t& api) {
   }
 
   if (auto llama2_inference =
-          std::dynamic_pointer_cast<infer::Llama2Inference>(inference_)) {
+          std::dynamic_pointer_cast<infer::LLMInference>(inference_)) {
     const std::optional<API_IHV_DeviceID_t> device_id =
       api.device_id != nullptr ?
       std::optional<API_IHV_DeviceID_t>{*api.device_id} : std::nullopt;
@@ -99,7 +100,7 @@ bool cil::IHV::OrtGenAI::Infer(API_IHV_Infer_t& api) {
   }
 
   if (auto llama2_inference =
-          std::dynamic_pointer_cast<infer::Llama2Inference>(inference_)) {
+          std::dynamic_pointer_cast<infer::LLMInference>(inference_)) {
     // Create token callback function wrapper
     if (api.io_data->callback.type != API_IHV_Callback_Type::API_IHV_CB_Token ||
         api.io_data->callback.function == nullptr ||

@@ -12,7 +12,7 @@ namespace infer {
 
 class BaseInference : public cil::infer::BaseInferenceCommon {
  public:
-  BaseInference(const std::string& model_path,
+  BaseInference(const std::string& model_path, const std::string& model_name,
                 const NativeOpenVINOExecutionProviderSettings& ep_settings,
                 cil::Logger logger, const std::string& deps_dir);
 

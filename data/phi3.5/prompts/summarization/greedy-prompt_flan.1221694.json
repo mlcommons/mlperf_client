@@ -1,0 +1,44 @@
+{
+  "model_config": {
+    "model": {
+      "bos_token_id": 1,
+      "context_length": 4096,
+      "decoder": {
+        "head_size": 128,
+        "hidden_size": 4096,
+        "inputs": {
+          "input_ids": "input_ids",
+          "attention_mask": "attention_mask",
+          "position_ids": "position_ids",
+          "past_key_names": "past_key_values.%d.key",
+          "past_value_names": "past_key_values.%d.value"
+        },
+        "outputs": {
+          "logits": "logits",
+          "present_key_names": "present.%d.key",
+          "present_value_names": "present.%d.value"
+        },
+        "num_attention_heads": 32,
+        "num_hidden_layers": 32,
+        "num_key_value_heads": 32
+      },
+      "eos_token_id": 32000,
+      "pad_token_id": 32000,
+      "vocab_size": 32011
+    },
+    "search": {
+      "method": "greedy",
+      "num_beams": 1,
+      "temperature": 0.6,
+      "top_k": 1,
+      "top_p": 0.9,
+      "stop_on_eos": true,
+      "max_length": 128,
+      "max_total_length": 1152
+    }
+  },
+  "prompts": [
+    "<|system|>You are an AI assistant. You will be given a task. You must generate a detailed and long answer.<|end|><|user|>In one sentence, describe what the following article is about:\n\nGet rid of the cooking grate, set the top aside, and open the bottom vents of the grill. You want as much air as possible to get to your charcoal in order to start an even, strong burning fire. Clean out any ash now, as it will smother your fire and keep the charcoal from lighting evenly. Aim the opening of the bag into the center of the grill when dumping out the briquettes to naturally form a pyramid. Then use your hands or a pair of long-handled tongs to stack any other pieces of charcoal along the sides on the pyramid. Start with roughly half the number of briquettes outlined below to start your grill. Once it's hot, add charcoal, 5-7 piece at a time, to get the grill up to full strength.  For a small, portable grill, you want 25-30 briquettes, or pieces of charcoal, when you start cooking. For a medium to average sized grill, you'll want roughly 40 briquettes. For a large or industrial grill, you will need 1 bag or more of charcoal to cook. You don't want to drench your charcoal in the fluid, as it takes a while to burn and will make a thick, unappetizing smoke. Simply squirt the fluid for no more than a count of \"2 Mississippi\" around the center of the pyramid, trying to get the fluid in the middle.  You can also start your pyramid, douse the inner briquets with fluid, then pile the \"top\" of the pyramid above the lighter fluid soaked briquets to make sure the whole pile gets hot. A mistake that many grillers make is using too much lighter fluid, which then imparts a petroleum-like tinge to the taste of their food. You do not need a lot of fluid, just enough to get a few pieces of charcoal smoking. These pieces will then help the rest of the pile catch. Do not light the grill immediately. Waiting allows the lighter fluid to soak into the top layer of charcoal, helping it to burn evenly. Lightly squirt the pyramid with a few bursts of lighter fluid in several places, only letting it soak in for a few seconds. This is what will \"catch,\" so you don't want to drown the charcoal in fluid or you risk a dangerous flair up. You just want a few little areas of fluid to start your fire. Though lighter fluid is not made to flare up, it should still be treated with respect. Light the pile in 2-3 places where you put the lighter fluid, aiming to get the middle of the pile lit where possible. The fire will likely start large, with big flames leaping around the charcoals, but this is just the lighter fluid burning. Once the flames die down, the center of the pile should be smoking and developing white/gray coloring. This means your fire has caught. Once you can barely see any black, the fire is ready for cooking. The inner coals of your pyramid should be glowing red. Spread the coals in your desired pattern, adding more if you plan on grilling for a long time. As a general rule of thumb, you should add a handful or two of coals every 30 minutes if you plan on continuing to grill.  You want 1-2 layers of charcoal over your entire grilling area, not patches of charcoal or solitary, exposed coals. Charcoal maintains heat by staying clustered together, much like ice in a pack stays cold longer than separated cubes. If you've added charcoal, wait 5-6 minutes for them to catch. Since the heat of the rest of the charcoals is already hot enough, it should not take long. Use a clip to seal the top of the bag if you have leftovers in the bag. The additives in the charcoal will evaporate, making them harder to light next time with or without lighter fluid.\n\nSummary: <|end|><|assistant|>"
+  ],
+  "category": "Summarization, Light"
+}

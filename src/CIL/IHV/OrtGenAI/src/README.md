@@ -38,7 +38,7 @@ ONNXRuntime GenAI and its implementation in MLperf require the entire model fold
 ```
 {
   "SystemConfig": {
-    "Comment": "ONNXRuntime GenAI example config.",
+    "Comment": "ONNX Runtime GenAI example config.",
     "TempPath": ""
   },
   "Scenarios": [
@@ -47,16 +47,16 @@ ONNXRuntime GenAI and its implementation in MLperf require the entire model fold
       "Models": [
         {
           "ModelName": "Llama2 llama-2-7b-chat-dml",
-          "FilePath": "https://client.mlcommons-storage.org/deps/0.6/scenario_files/llm/llama2/models/OrtGenAI/llama-2-7b-chat-dml/model.onnx",
-          "DataFilePath": "https://client.mlcommons-storage.org/deps/0.6/scenario_files/llm/llama2/models/OrtGenAI/llama-2-7b-chat-dml/model.onnx.data.zip",
-          "TokenizerPath": "https://client.mlcommons-storage.org/deps/0.6/scenario_files/llm/llama2/models/OrtGenAI/llama-2-7b-chat-dml/tokenizer.zip"
+          "FilePath": "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/llama2/models/OrtGenAI/model.onnx",
+          "DataFilePath": "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/llama2/models/OrtGenAI/model.onnx.data.zip",
+          "TokenizerPath": "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/llama2/models/OrtGenAI/tokenizer.zip"
         }
       ],
        "InputFilePath": [
-        "https://client.mlcommons-storage.org/deps/0.6/scenario_files/llm/llama2/data/content_generation/greedy-prompt_cot.39329.json"
+        "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/llama2/data/content_generation/greedy-prompt_cot.39329.json"
       ],
       "AssetsPath": [],
-      "ResultsVerificationFile": "https://client.mlcommons-storage.org/deps/0.6/scenario_files/llm/llama2/data/generation-test-greedy-expected-results.json",
+      "ResultsVerificationFile": "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/generation-greedy-results.json",
       "DataVerificationFile": "",
       "Iterations": 5,
       "ExecutionProviders": [

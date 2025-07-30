@@ -1,0 +1,37 @@
+{
+  "SystemConfig": {
+    "Comment": "Phi 4 Reasoning 14B, Native OpenVINO, NPU, Long prompts, Experimental",
+    "TempPath": "",
+    "EPDependenciesConfigPath": ""
+  },
+  "Scenarios": [
+    {
+      "Name": "Phi4",
+      "Models": [
+        {
+          "ModelName": "Phi-4-reasoning_ov-int4-CHw",
+          "FilePath": "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/phi4/models/NativeOpenVINO/NPU/openvino_model.xml",
+          "DataFilePath": "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/phi4/models/NativeOpenVINO/NPU/openvino_model.bin",
+          "TokenizerPath": "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/phi4/models/NativeOpenVINO/NPU/IHV-OV-tokenizers.zip"
+        }
+      ],
+      "InputFilePath": [
+        "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/phi4/data/intermediate4k/booksum_4k.json",
+        "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/phi4/data/intermediate4k/downloader_cpp_4k.json"
+      ],
+      "AssetsPath": [],
+      "ResultsVerificationFile": "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/generation-greedy-results.json",
+      "DataVerificationFile": "",
+      "Iterations": 3,
+      "Delay": 0,
+      "ExecutionProviders": [
+        {
+          "Name": "NativeOpenVINO",
+          "Config": {
+            "device_type": "NPU"
+          }
+        }
+      ]
+    }
+  ]
+}

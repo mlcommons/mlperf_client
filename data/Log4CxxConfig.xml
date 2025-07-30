@@ -1,134 +1,182 @@
 ﻿<log4j:configuration xmlns:log4j="http://jakarta.apache.org/log4j/">
-  <!-- Console Appender -->
-  <appender name="ConsoleAppender" class="MLPerfConsoleAppender">
-    <param name="Target" value="System.out"/>
-    <layout class="org.apache.log4j.PatternLayout">
-      <param name="ConversionPattern" value="%m%n"/>
-    </layout>
-    <filter class="org.apache.log4j.varia.LevelRangeFilter">
-      <param name="LevelMin" value="INFO"/>
-      <param name="LevelMax" value="FATAL"/>
-      <param name="AcceptOnMatch" value="true"/>
-    </filter>
-  </appender>
+	<!-- Console Appender -->
+	<appender name="ConsoleAppender" class="MLPerfConsoleAppender">
+		<param name="Target" value="System.out"/>
+		<layout class="org.apache.log4j.PatternLayout">
+			<param name="ConversionPattern" value="%m%n"/>
+		</layout>
+		<filter class="org.apache.log4j.varia.LevelRangeFilter">
+			<param name="LevelMin" value="INFO"/>
+			<param name="LevelMax" value="FATAL"/>
+			<param name="AcceptOnMatch" value="true"/>
+		</filter>
+	</appender>
 
-  <!-- File Appender for Debug Messages -->
-  <appender name="DebugFileAppender" class="org.apache.log4j.FileAppender">
-    <param name="File" value="Logs/debug.log"/>
-    <param name="ImmediateFlush" value="true"/>
-    <layout class="org.apache.log4j.PatternLayout">
-      <param name="ConversionPattern" value="[%d{yyyy-MM-dd HH:mm:ss}] %c %-5p - %m%n"/>
-    </layout>
-    <filter class="org.apache.log4j.varia.LevelMatchFilter">
-      <param name="LevelToMatch" value="DEBUG"/>
-      <param name="AcceptOnMatch" value="true"/>
-    </filter>
-  </appender>
+	<!-- File Appender for Debug Messages -->
+	<appender name="DebugFileAppender" class="org.apache.log4j.FileAppender">
+		<param name="File" value="Logs/debug.log"/>
+		<param name="ImmediateFlush" value="true"/>
+		<layout class="org.apache.log4j.PatternLayout">
+			<param name="ConversionPattern" value="[%d{MM-dd-yyyy HH:mm:ss.SSS}] %c %-5p - %m%n"/>
+		</layout>
+		<filter class="org.apache.log4j.varia.LevelMatchFilter">
+			<param name="LevelToMatch" value="DEBUG"/>
+			<param name="AcceptOnMatch" value="true"/>
+		</filter>
+	</appender>
 
-  <!-- File Appender for Error Messages -->
-  <appender name="ErrorFileAppender" class="org.apache.log4j.FileAppender">
-    <param name="File" value="Logs/error.log"/>
-    <param name="ImmediateFlush" value="true"/>
-    <layout class="org.apache.log4j.PatternLayout">
-      <param name="ConversionPattern" value="[%d{yyyy-MM-dd HH:mm:ss}] %c %-5p - %m%n"/>
-    </layout>
-    <filter class="org.apache.log4j.varia.LevelRangeFilter">
-      <param name="LevelMin" value="ERROR"/>
-      <param name="LevelMax" value="FATAL"/>
-      <param name="AcceptOnMatch" value="true"/>
-    </filter>
-  </appender>
+	<!-- File Appender for Error Messages -->
+	<appender name="ErrorFileAppender" class="org.apache.log4j.FileAppender">
+		<param name="File" value="Logs/error.log"/>
+		<param name="ImmediateFlush" value="true"/>
+		<layout class="org.apache.log4j.PatternLayout">
+			<param name="ConversionPattern" value="[%d{MM-dd-yyyy HH:mm:ss.SSS}] %c %-5p - %m%n"/>
+		</layout>
+		<filter class="org.apache.log4j.varia.LevelRangeFilter">
+			<param name="LevelMin" value="ERROR"/>
+			<param name="LevelMax" value="FATAL"/>
+			<param name="AcceptOnMatch" value="true"/>
+		</filter>
+	</appender>
 
-  <!-- File Appender for Downloader Messages -->
-  <appender name="DownloaderFileAppender" class="org.apache.log4j.FileAppender">
-    <param name="File" value="Logs/downloader.log"/>
-    <param name="ImmediateFlush" value="true"/>
-    <layout class="org.apache.log4j.PatternLayout">
-      <param name="ConversionPattern" value="[%d{yyyy-MM-dd HH:mm:ss}] %c %-5p - %m%n"/>
-    </layout>
-  </appender>
+	<!-- File Appender for Downloader Messages -->
+	<appender name="DownloaderFileAppender" class="org.apache.log4j.FileAppender">
+		<param name="File" value="Logs/downloader.log"/>
+		<param name="ImmediateFlush" value="true"/>
+		<layout class="org.apache.log4j.PatternLayout">
+			<param name="ConversionPattern" value="[%d{MM-dd-yyyy HH:mm:ss.SSS}] %c %-5p - %m%n"/>
+		</layout>
+	</appender>
 
   <!-- File Appender for Llama2Executor Messages -->
   <appender name="Llama2ExecutorFileAppender" class="org.apache.log4j.FileAppender">
     <param name="File" value="Logs/llama2_executor.log"/>
     <param name="ImmediateFlush" value="true"/>
     <layout class="org.apache.log4j.PatternLayout">
-      <param name="ConversionPattern" value="[%d{yyyy-MM-dd HH:mm:ss}] %c %-5p - %m%n"/>
+      <param name="ConversionPattern" value="[%d{MM-dd-yyyy HH:mm:ss.SSS}] %c %-5p - %m%n"/>
     </layout>
   </appender>
 
-  <!-- File Appender for Results -->
-  <appender name="ResultsFileAppender" class="org.apache.log4j.FileAppender">
-    <param name="File" value="Logs/results.json"/>
-    <param name="ImmediateFlush" value="true"/>
-    <layout class="org.apache.log4j.PatternLayout">
-      <param name="ConversionPattern" value="%m%n"/>
-    </layout>
-  </appender>
+	<!-- File Appender for Llama3Executor Messages -->
+	<appender name="Llama3ExecutorFileAppender" class="org.apache.log4j.FileAppender">
+		<param name="File" value="Logs/llama3_executor.log"/>
+		<param name="ImmediateFlush" value="true"/>
+		<layout class="org.apache.log4j.PatternLayout">
+			<param name="ConversionPattern" value="[%d{MM-dd-yyyy HH:mm:ss.SSS}] %c %-5p - %m%n"/>
+		</layout>
+	</appender>
 
-  <!-- Root Logger -->
-  <root>
-    <priority value="DEBUG"/>
-    <appender-ref ref="DebugFileAppender"/>
-    <appender-ref ref="ErrorFileAppender"/>
-  </root>
+	<!-- File Appender for Phi3_5Executor Messages -->
+	<appender name="Phi3_5ExecutorFileAppender" class="org.apache.log4j.FileAppender">
+		<param name="File" value="Logs/phi3_5_executor.log"/>
+		<param name="ImmediateFlush" value="true"/>
+		<layout class="org.apache.log4j.PatternLayout">
+			<param name="ConversionPattern" value="[%d{MM-dd-yyyy HH:mm:ss.SSS}] %c %-5p - %m%n"/>
+		</layout>
+	</appender>
 
-  <!-- Logger for Downloader -->
-  <logger name="SystemController" additivity="false">
-    <level value="ALL"/>
-    <appender-ref ref="ConsoleAppender"/>
-    <appender-ref ref="DebugFileAppender"/>
-    <appender-ref ref="ErrorFileAppender"/>
-  </logger>
+	<!-- File Appender for Phi4Executor Messages -->
+	<appender name="Phi4ExecutorFileAppender" class="org.apache.log4j.FileAppender">
+		<param name="File" value="Logs/phi4_executor.log"/>
+		<param name="ImmediateFlush" value="true"/>
+		<layout class="org.apache.log4j.PatternLayout">
+			<param name="ConversionPattern" value="[%d{MM-dd-yyyy HH:mm:ss.SSS}] %c %-5p - %m%n"/>
+		</layout>
+	</appender>
 
-  <logger name="main" additivity="false">
-    <level value="ALL"/>
-    <appender-ref ref="ConsoleAppender"/>
-    <appender-ref ref="DebugFileAppender"/>
-    <appender-ref ref="ErrorFileAppender"/>
-  </logger>
+	<!-- File Appender for Results -->
+	<appender name="ResultsFileAppender" class="org.apache.log4j.FileAppender">
+		<param name="File" value="Logs/results.json"/>
+		<param name="ImmediateFlush" value="true"/>
+		<layout class="org.apache.log4j.PatternLayout">
+			<param name="ConversionPattern" value="%m%n"/>
+		</layout>
+	</appender>
 
-  <!-- Logger for Downloader -->
-  <logger name="Downloader" additivity="false">
-    <level value="ALL"/>
-    <appender-ref ref="DownloaderFileAppender"/>
-    <appender-ref ref="ErrorFileAppender"/>
-  </logger>
+	<!-- Root Logger -->
+	<root>
+		<priority value="DEBUG"/>
+		<appender-ref ref="DebugFileAppender"/>
+		<appender-ref ref="ErrorFileAppender"/>
+	</root>
 
-  <!-- Logger for Llama2Executor -->
-  <logger name="Llama2Executor" additivity="false">
-    <level value="ALL"/>
-    <appender-ref ref="Llama2ExecutorFileAppender"/>
-    <appender-ref ref="ErrorFileAppender"/>
-  </logger>
-  
-  <!-- Logger for ExecutionConfig -->
-  <logger name="ExecutionConfig" additivity="false">
-    <level value="ALL"/>
-    <appender-ref ref="ConsoleAppender"/>
-    <appender-ref ref="DebugFileAppender"/>
-    <appender-ref ref="ErrorFileAppender"/>
-  </logger>
+	<!-- Logger for Downloader -->
+	<logger name="SystemController" additivity="false">
+		<level value="ALL"/>
+		<appender-ref ref="ConsoleAppender"/>
+		<appender-ref ref="DebugFileAppender"/>
+		<appender-ref ref="ErrorFileAppender"/>
+	</logger>
 
-  <!-- Logger for ProgressTracker -->
-  <logger name="ProgressTracker" additivity="false">
-    <level value="ALL"/>
-    <appender-ref ref="ConsoleAppender"/>
-    <appender-ref ref="DebugFileAppender"/>
-    <appender-ref ref="ErrorFileAppender"/>
-  </logger>
+	<logger name="main" additivity="false">
+		<level value="ALL"/>
+		<appender-ref ref="ConsoleAppender"/>
+		<appender-ref ref="DebugFileAppender"/>
+		<appender-ref ref="ErrorFileAppender"/>
+	</logger>
 
-  <!-- Logger for Results -->
-  <logger name="Results" additivity="false">
-    <level value="ALL"/>
-    <appender-ref ref="ResultsFileAppender"/>
-  </logger>
-  
-    <!-- Logger for Results Display -->
-  <logger name="DisplayRecentResults" additivity="false">
-    <level value="ALL"/>
-    <appender-ref ref="ConsoleAppender"/>
-    <appender-ref ref="DebugFileAppender"/>
-  </logger>
+	<!-- Logger for Downloader -->
+	<logger name="Downloader" additivity="false">
+		<level value="ALL"/>
+		<appender-ref ref="DownloaderFileAppender"/>
+		<appender-ref ref="ErrorFileAppender"/>
+	</logger>
+
+	<!-- Logger for Llama2Executor -->
+	<logger name="Llama2Executor" additivity="false">
+		<level value="ALL"/>
+		<appender-ref ref="Llama2ExecutorFileAppender"/>
+		<appender-ref ref="ErrorFileAppender"/>
+	</logger>
+
+	<!-- Logger for Llama3Executor -->
+	<logger name="Llama3Executor" additivity="false">
+		<level value="ALL"/>
+		<appender-ref ref="Llama3ExecutorFileAppender"/>
+		<appender-ref ref="ErrorFileAppender"/>
+	</logger>
+
+	<!-- Logger for Llama3_5Executor -->
+	<logger name="Phi3_5Executor" additivity="false">
+		<level value="ALL"/>
+		<appender-ref ref="Phi3_5ExecutorFileAppender"/>
+		<appender-ref ref="ErrorFileAppender"/>
+	</logger>
+
+	<!-- Logger for Llama4Executor -->
+	<logger name="Phi4Executor" additivity="false">
+		<level value="ALL"/>
+		<appender-ref ref="Phi4ExecutorFileAppender"/>
+		<appender-ref ref="ErrorFileAppender"/>
+	</logger>
+
+	<!-- Logger for ExecutionConfig -->
+	<logger name="ExecutionConfig" additivity="false">
+		<level value="ALL"/>
+		<appender-ref ref="ConsoleAppender"/>
+		<appender-ref ref="DebugFileAppender"/>
+		<appender-ref ref="ErrorFileAppender"/>
+	</logger>
+
+	<!-- Logger for ProgressTracker -->
+	<logger name="ProgressTracker" additivity="false">
+		<level value="ALL"/>
+		<appender-ref ref="ConsoleAppender"/>
+		<appender-ref ref="DebugFileAppender"/>
+		<appender-ref ref="ErrorFileAppender"/>
+	</logger>
+
+	<!-- Logger for Results -->
+	<logger name="Results" additivity="false">
+		<level value="ALL"/>
+		<appender-ref ref="ResultsFileAppender"/>
+	</logger>
+
+	<!-- Logger for Results Display -->
+	<logger name="DisplayRecentResults" additivity="false">
+		<level value="ALL"/>
+		<appender-ref ref="ConsoleAppender"/>
+		<appender-ref ref="DebugFileAppender"/>
+	</logger>
 
 </log4j:configuration>

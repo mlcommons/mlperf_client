@@ -39,7 +39,9 @@ class SystemController {
    */
   SystemController(const std::string& json_config_path,
                    std::shared_ptr<cil::Unpacker> unpacker,
-                   const std::string& output_dir, const std::string& data_dir);
+                   const std::string& output_dir,
+                   const std::string& data_dir,
+                   const bool skip_failed_prompts);
   ~SystemController();
   /**
    * @brief Loads and verifies the tool configuration.
@@ -50,7 +52,7 @@ class SystemController {
    * @return True if the configuration is loaded and verified successfully,
    * false otherwise.
    */
-  bool Config();
+  bool Config(bool temp_dir_overriden);
   /**
    * @brief Custom stage which displays the results of all the benchmarked
    * scenarios.
@@ -146,14 +148,6 @@ class SystemController {
   bool Run(const Logger& logger, bool enumerate_devices = false,
            std::optional<int> device_id = std::nullopt) const;
 
-  /**
-   * @brief List of supported model names.
-   *
-   * This constant contains the list of supported model names, any model name
-   * not in this list will be considered as unsupported.
-   */
-  static const std::vector<std::string> kSupportedModels;
-
  private:
   static void InterruptHandler(int sig);
 
@@ -170,6 +164,7 @@ class SystemController {
 
   const std::string output_dir_;
   const std::string data_dir_;
+  const bool skip_failed_prompts_;
 };
 
 }  // namespace cli

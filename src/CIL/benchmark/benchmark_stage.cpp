@@ -102,14 +102,14 @@ bool BenchmargStage::Run(const ScenarioConfig& scenario_config,
       if (tokenizer_path.empty())
         tokenizer_path = model_config.GetTokenizerPath();
 
-      scenario_data_providers->SetLlama2TokenizerPath(
+      scenario_data_providers->SetLLMTokenizerPath(
           scenario_data.source_to_path_map[tokenizer_path]);
 
       auto executor = infer::ExecutorFactory::Create(
           scenario_config.GetName(), model_file_path, scenario_data_providers,
           library_path, ep_name, ep_config, scenario_config.GetIterations(),
           scenario_config.GetIterationsWarmUp(),
-          scenario_config.GetInferenceDelay());
+          scenario_config.GetInferenceDelay(), skip_failed_prompts_);
 
       if (!executor) {
         LOG4CXX_ERROR(logger_, "Failed to run benchmark for "
@@ -126,9 +126,8 @@ bool BenchmargStage::Run(const ScenarioConfig& scenario_config,
       std::string task_name = "Benchmark " + ep_name;
 
       scheduler.ScheduleTask(task_name, [=, &task_executed]() {
-        BenchmarkTask(ep_name, ep_config, model_file_path, model_source_path,
-                      display_model_name, scenario_config, executor,
-                      task_executed);
+        BenchmarkTask(ep_name, ep_config, model_source_path, display_model_name,
+                      scenario_config, executor, task_executed);
       });
       progress_tracker.AddTask(executor);
       executors.push_back(executor);
@@ -169,14 +168,16 @@ bool BenchmargStage::Run(const ScenarioConfig& scenario_config,
 
 void BenchmargStage::BenchmarkTask(
     const std::string& ep_name, const nlohmann::json& ep_config,
-    const std::string& model_file_path, const std::string& model_source_path,
-    const std::string& display_model_name,
+    const std::string& model_source_path, const std::string& display_model_name,
     const ScenarioConfig& scenario_config,
     std::shared_ptr<infer::ExecutorBase> executor, bool& task_executed) {
-  LOG4CXX_INFO(logger_, "\nmodel "
-                            << scenario_config.GetName()
-                            << ", Preparing to run the benchmark for the EP "
+  LOG4CXX_INFO(logger_, "\nPreparing to run the benchmark for the EP "
                             << ep_name << ep_config);
+
+  // MLPerf Power - "power_begin", "value": "02-25-2025 17:38:15.269"
+  LOG4CXX_INFO(logger_, "power_begin - start " << scenario_config.GetName()
+                                               << " " << ep_name << " "
+                                               << ep_config);
 
   auto start_time = std::chrono::high_resolution_clock::now();
 
@@ -184,7 +185,9 @@ void BenchmargStage::BenchmarkTask(
   task_executed = true;
 
   auto res = executor->GetBenchmarkResult();
-  results_logger_.SetConfigVerified(config_.IsConfigVerified());
+  results_logger_.SetConfigVerified(
+      skip_failed_prompts_ ? false : config_.IsConfigVerified());
+  results_logger_.SetConfigExperimental(config_.IsConfigExperimental());
   results_logger_.SetApplicationVersionString(
       std::string(APP_VERSION_STRING) + " " + std::string(APP_BUILD_NAME));
   res.model_name = display_model_name;
@@ -198,6 +201,10 @@ void BenchmargStage::BenchmarkTask(
   res.results_file = scenario_config.GetResultsFile();
   auto end_time = std::chrono::high_resolution_clock::now();
   res.benchmark_duration = utils::FormatDuration(end_time - start_time);
+
+  // MLPerf Power - "power_end", "value": "02-25-2025 17:39:15.269"
+  LOG4CXX_INFO(logger_, "power_end - end " << scenario_config.GetName() << " "
+                                           << ep_name << " " << ep_config);
 
   try {
     bool passed = results_logger_.AppendBenchmarkResult(res);

@@ -2,6 +2,7 @@
 #define BENCHMARK_RUNNER_H
 
 #include <string_view>
+#include <optional>
 
 #include "stage.h"
 
@@ -37,6 +38,8 @@ class BenchmarkRunner {
     std::string output_results_schema_path;
     std::string data_verification_file_schema_path;
     std::string input_file_schema_path;
+
+    bool skip_failed_prompts = false;  // skip failed prompts during benchmarking
   };
 
   /**
@@ -45,7 +48,7 @@ class BenchmarkRunner {
    * @param params Parameters for the BenchmarkRunner.
    */
   explicit BenchmarkRunner(Params& params);
-  ~BenchmarkRunner();
+  ~BenchmarkRunner() = default;
 
   BenchmarkLogger& GetResultsLogger() const;
 
@@ -76,6 +79,28 @@ class BenchmarkRunner {
    */
   bool Run();
 
+  /**
+   * @brief List of supported model names.
+   *
+   * This constant contains the list of supported model names, any model name
+   * not in this list will be considered as unsupported.
+   */
+  static const std::unordered_set<std::string> kSupportedModels;
+
+  static bool IsSupportedModel(const std::string& model_name);
+  static bool IsLLMModel(const std::string& model_name);
+
+  static void ClearCache(const std::string& deps_dir);
+
+  int GetTotalStages() const;
+  int GetStageIndex(const std::string& stage_name) const;
+
+  using PreparedEPList =
+      std::vector<std::pair<ExecutionProviderConfig, std::string>>;
+  std::vector<PreparedEPList> GetPreparedEPs() const;
+
+  static std::optional<std::string> GetModelFullName(const std::string& model_name);
+
  private:
   bool ReportProgress(ProgressTracker& progress_tracker,
                       TaskScheduler& task_scheduler);
@@ -93,6 +118,9 @@ class BenchmarkRunner {
 
   OnFailedStageCb on_failed_stage_;
   OnEnterStageCb on_enter_stage_;
+
+  std::vector<PreparedEPList> prepared_eps_;
+  bool enumerate_only_;
 };
 
 }  // namespace cil

@@ -23,7 +23,7 @@ set(APR_HAS_LDAP OFF)
 
 add_subdirectory(${APR_UTIL_SOURCE_DIR} apr-util)
 
-# Fix Importing of APR as shared, given we arel lingking with the static version or APR
+# Fix Importing of APR as shared, given we are linking with the static version or APR
 # Get the existing compile definitions for libaprutil-1
 get_target_property(libaprutil-1-compile_defs libaprutil-1 COMPILE_DEFINITIONS)
 
@@ -52,26 +52,42 @@ if(NOT BUILDCONF_RESULT EQUAL "0")
     message(FATAL_ERROR "buildconf failed")
 endif()
 
-# Define your full path and the base directory
-set(FullPath )
-set(BaseDir )
+if(TARGET_IOS)
+    execute_process(
+        COMMAND sh -c "cmake -E env ./configure \
+            --prefix=${CMAKE_INSTALL_PREFIX} \
+            --build=aarch64-apple-darwin20 \
+            --host=arm64-apple-darwin \
+            --with-apr=${APR_INSTALL_DIR} \
+            CFLAGS=\"-arch arm64 -isysroot $(xcrun --sdk iphoneos --show-sdk-path) -miphoneos-version-min=18.0\" \
+            LDFLAGS=\"-arch arm64 -isysroot $(xcrun --sdk iphoneos --show-sdk-path)\""
+        WORKING_DIRECTORY ${APR_UTIL_SOURCE_DIR}
+        RESULT_VARIABLE CONFIGURE_RESULT
+    )
 
-# Calculate the relative path of FullPath with respect to BaseDir
-file(RELATIVE_PATH RelativePath ${APR_UTIL_SOURCE_DIR} ${APR_ICONV_SOURCE_DIR}/src)
+    if(NOT CONFIGURE_RESULT EQUAL "0")
+        message(FATAL_ERROR "Configuration of APR-Util for iOS failed.")
+    endif()
+else()
+    # Define your full path and the base directory
+    set(FullPath )
+    set(BaseDir )
 
-# Output the relative path
-message(STATUS "Relative path: ${RelativePath}")
+    # Calculate the relative path of FullPath with respect to BaseDir
+    file(RELATIVE_PATH RelativePath ${APR_UTIL_SOURCE_DIR} ${APR_ICONV_SOURCE_DIR}/src)
+
+    # Output the relative path
+    message(STATUS "Relative path: ${RelativePath}")
 
 
-execute_process(
-    COMMAND ${CMAKE_COMMAND} -E env "CC=${CMAKE_C_COMPILER}"  ./configure --with-apr=${APR_INSTALL_DIR} --with-apr-iconv=${RelativePath} --prefix=${CMAKE_INSTALL_PREFIX}
-    WORKING_DIRECTORY ${APR_UTIL_SOURCE_DIR}
-    RESULT_VARIABLE CONFIGURE_RESULT
-)
-
-
-if(NOT CONFIGURE_RESULT EQUAL "0")
-    message(FATAL_ERROR "Configuration failed")
+    execute_process(
+        COMMAND ${CMAKE_COMMAND} -E env "CC=${CMAKE_C_COMPILER}"  ./configure --with-apr=${APR_INSTALL_DIR} --with-apr-iconv=${RelativePath} --prefix=${CMAKE_INSTALL_PREFIX}
+        WORKING_DIRECTORY ${APR_UTIL_SOURCE_DIR}
+        RESULT_VARIABLE CONFIGURE_RESULT
+    )
+    if(NOT CONFIGURE_RESULT EQUAL "0")
+        message(FATAL_ERROR "Configuration failed")
+    endif()
 endif()
 
 add_custom_target(BuildExternal

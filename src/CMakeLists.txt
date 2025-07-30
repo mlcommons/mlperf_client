@@ -30,6 +30,9 @@ set(list_of_targets "")
 # Projects
 add_subdirectory(cil)
 add_subdirectory(cli)
+if(MLPERF_BUILD_GUI)
+    add_subdirectory(gui)
+endif()
 
 option(BUILD_TESTS "Build the tests" ON)
 if(BUILD_TESTS)

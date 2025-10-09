@@ -1,6 +1,6 @@
 # These owners will be the default owners for everything in the repo.
 # Unless a later match takes precedence,they will be requested for review when someone opens a pull request.
-* @mlcommons/client-developers @mlcommons/client-wg
+* @mlcommons/client-developers @mlcommons/wg-client @mlcommons/mlperf-management
 
 /.github/CODEOWNERS @mlcommons/systems
 

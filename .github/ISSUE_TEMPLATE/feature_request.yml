@@ -1,0 +1,105 @@
+name: 💡 Feature request
+description: Suggest an improvement or new capability for MLPerf Client
+title: "[Feature]: "
+labels: [enhancement]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for contributing ideas to improve MLPerf Client!
+        Please describe your feature request clearly so we can evaluate it.
+
+  - type: input
+    id: summary
+    attributes:
+      label: Summary
+      description: Briefly describe the feature or enhancement you'd like to see.
+      placeholder: Add support for AMD ROCm backend...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: interface
+    attributes:
+      label: Interface type
+      description: Which version of the application does this request apply to?
+      options:
+        - Command-line interface (CLI)
+        - Graphical user interface (GUI)
+        - Both
+        - Other / Not sure
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Application version
+      description: What version are you currently using?
+      placeholder: v2.1.0 or commit hash
+    validations:
+      required: false
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      description: OS name and version, if relevant.
+      placeholder: Ubuntu 24.04 LTS, Windows 11 Pro 23H2, etc.
+    validations:
+      required: false
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: Explain why this feature would be useful. What problem does it solve or improve?
+      placeholder: |
+        Running inference benchmarks on integrated GPUs would help validate smaller systems used in classrooms.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution or approach
+      description: Describe your idea in detail. Include mockups, command examples, or workflow suggestions if possible.
+      placeholder: |
+        Add a new `--device auto` flag that detects the available accelerator (CUDA, ROCm, or CPU).
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: List other solutions or workarounds you've tried or considered.
+      placeholder: |
+        - Manually selecting `--device cpu`
+        - Building a custom configuration file
+
+  - type: textarea
+    id: hardware
+    attributes:
+      label: Hardware configuration (optional)
+      description: Describe your typical test system to help us evaluate hardware impact.
+      placeholder: |
+        Example:
+        - System type: Laptop
+        - CPU: Intel Core i9-13900H
+        - GPU: NVIDIA RTX 4070 Laptop GPU
+        - RAM: 32 GB DDR5
+    validations:
+      required: false
+
+  - type: input
+    id: contact
+    attributes:
+      label: Contact information (optional)
+      description: Provide a way to reach you if we need clarification.
+      placeholder: your.email@example.com
+    validations:
+      required: false
+

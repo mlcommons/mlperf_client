@@ -1,24 +1,44 @@
 #include "api_handler.h"
 
+#include <chrono>
 #include <sstream>
+#include <thread>
 
-#include "../CLI/version.h"
 #include "dylib.hpp"
+#include "version.h"
+
+#ifdef _WIN32
+#include <windows.h>
+#include <psapi.h>
+#endif
 
 #define MAX_DEVICE_TYPE_LENGTH 16
 
 namespace cil {
 
-API_Handler::API_Handler(Type type, const std::string& library_path,
-                         Logger logger)
-    : type_(type), library_path_(library_path), logger_(logger) {
+API_Handler::API_Handler(const std::string& library_path, Logger logger,
+                         bool force_unload_ep)
+    : library_path_(library_path),
+      logger_(logger),
+      force_unload_ep_(force_unload_ep) {
   if (library_path_.empty()) {
-    logger(LogLevel::kFatal, "No " + LibraryName() + " library path provided.");
+    logger(LogLevel::kFatal, "No IHV library path provided.");
     return;
   }
 
   library_path_directory_ =
       fs::absolute(fs::path(library_path_).parent_path()).string();
+
+
+#ifdef _WIN32
+  // On Windows, temporarily set DLL directory to ensure this EP's dependencies
+  // are loaded from its own directory, preventing conflicts with other EPs
+  WCHAR previousDllDirectory[MAX_PATH] = {0};
+  GetDllDirectoryW(MAX_PATH, previousDllDirectory);
+  SetDllDirectoryW(
+      std::filesystem::path(library_path_directory_).wstring().c_str());
+#endif
+
   library_path_handle_ = utils::AddLibraryPath(library_path_directory_);
   try {
     library_ = std::make_unique<dylib>(library_path_.c_str(),
@@ -47,6 +67,12 @@ API_Handler::API_Handler(Type type, const std::string& library_path,
     library_.reset();  // in case it was loaded
     logger(LogLevel::kFatal, ex.what());
   }
+
+#ifdef _WIN32
+  // Restore previous DLL directory
+  SetDllDirectoryW(previousDllDirectory[0] != 0 ? previousDllDirectory
+                                                : nullptr);
+#endif
 }
 
 API_Handler::~API_Handler() {
@@ -58,8 +84,134 @@ API_Handler::~API_Handler() {
       utils::RemoveLibraryPath(library_path_handle_);
     }
   } catch (...) {
-    logger_(LogLevel::kFatal, "Failed to free " + LibraryName() + " library.");
+    logger_(LogLevel::kFatal, "Failed to free IHV library.");
   }
+
+#ifdef WIN32
+  if (!force_unload_ep_) {
+    return;
+  }
+
+  // Unload execution provider resources to prevent DLL conflicts when switching
+  // EPs
+  logger_(LogLevel::kInfo, std::string("Unloading EP resources for: ") +
+                               library_path_directory_);
+  // On Windows, unload all DLLs from the EP's directory
+  // to prevent conflicts when switching to a different EP
+  logger_(LogLevel::kInfo,
+          std::string("Attempting to force unload DLLs from: ") +
+              library_path_directory_);
+
+  // First, collect all modules from this EP's directory
+  std::vector<std::wstring> modulesToUnload;
+  HMODULE hMods[1024];
+  DWORD cbNeeded;
+  HANDLE hProcess = GetCurrentProcess();
+
+  if (EnumProcessModules(hProcess, hMods, sizeof(hMods), &cbNeeded)) {
+    unsigned int totalModules = cbNeeded / sizeof(HMODULE);
+    logger_(LogLevel::kInfo, std::string("Found ") +
+                                 std::to_string(totalModules) +
+                                 std::string(" total loaded modules"));
+
+    for (unsigned int i = 0; i < totalModules; i++) {
+      WCHAR szModPath[MAX_PATH];
+      if (GetModuleFileNameExW(hProcess, hMods[i], szModPath,
+                               sizeof(szModPath) / sizeof(WCHAR))) {
+        std::wstring modPath(szModPath);
+        // Normalize both paths to use consistent separators
+        std::filesystem::path depsPathNormalized =
+            std::filesystem::path(library_path_directory_);
+        std::filesystem::path modPathNormalized =
+            std::filesystem::path(modPath);
+
+        std::wstring depsPathWstr = depsPathNormalized.wstring();
+        std::wstring modPathWstr = modPathNormalized.wstring();
+
+        // Log all DLL paths containing "MLPerf" or "IHV" for debugging
+        std::string modPathStr = modPathNormalized.string();
+        if (modPathStr.find("MLPerf") != std::string::npos ||
+            modPathStr.find("IHV") != std::string::npos ||
+            modPathStr.find("openvino") != std::string::npos ||
+            modPathStr.find("onnxruntime") != std::string::npos) {
+          logger_(LogLevel::kInfo,
+                  std::string("Checking module: ") + modPathStr);
+        }
+
+        // Check if this module is from our EP's directory (normalized path
+        // comparison)
+        if (modPathWstr.find(depsPathWstr) != std::wstring::npos) {
+          logger_(LogLevel::kInfo,
+                  std::string("MATCH - Will unload: ") + modPathStr);
+          modulesToUnload.push_back(modPath);
+        }
+        // Also check for WindowsAppRuntime OpenVINO EP DLLs that might conflict
+        else if (modPathStr.find("WindowsApps") != std::string::npos &&
+                 modPathStr.find("OpenVINO") != std::string::npos) {
+          logger_(LogLevel::kInfo,
+                  std::string(
+                      "MATCH (WindowsApp OpenVINO) - Will attempt unload: ") +
+                      modPathStr);
+          modulesToUnload.push_back(modPath);
+        }
+      }
+    }
+
+    logger_(LogLevel::kInfo,
+            std::string("Found ") + std::to_string(modulesToUnload.size()) +
+                std::string(" modules to unload from EP directory"));
+
+    // Now try to unload each module aggressively
+    for (const auto& modPath : modulesToUnload) {
+      std::string modPathStr = std::filesystem::path(modPath).string();
+      logger_(LogLevel::kInfo,
+              std::string("Attempting to unload: ") + modPathStr);
+
+      // Get a fresh handle to the module
+      HMODULE hMod = GetModuleHandleW(modPath.c_str());
+      if (hMod != nullptr) {
+        // Try to free the library many times (Windows reference counts DLL
+        // loads)
+        int unloadAttempts = 0;
+        const int MAX_UNLOAD_ATTEMPTS = 1000;  // Increased limit
+
+        while (unloadAttempts < MAX_UNLOAD_ATTEMPTS) {
+          if (!FreeLibrary(hMod)) {
+            // FreeLibrary failed, module might be unloaded or error occurred
+            break;
+          }
+          unloadAttempts++;
+
+          // Check if module is still loaded
+          if (GetModuleHandleW(modPath.c_str()) == nullptr) {
+            logger_(LogLevel::kInfo,
+                    std::string("Successfully unloaded after ") +
+                        std::to_string(unloadAttempts) +
+                        std::string(" attempts: ") + modPathStr);
+            break;
+          }
+        }
+
+        if (unloadAttempts >= MAX_UNLOAD_ATTEMPTS) {
+          logger_(LogLevel::kWarning,
+                  std::string("Module still loaded after ") +
+                      std::to_string(unloadAttempts) +
+                      std::string(" attempts: ") + modPathStr);
+        }
+      } else {
+        logger_(LogLevel::kInfo,
+                std::string("Module already unloaded: ") + modPathStr);
+      }
+    }
+
+    logger_(LogLevel::kInfo, std::string("Completed DLL unload attempts"));
+  } else {
+    logger_(LogLevel::kWarning,
+            std::string("Failed to enumerate process modules"));
+  }
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(500));
+#endif
 }
 
 bool API_Handler::IsLoaded() const { return library_.get() != nullptr; }
@@ -71,7 +223,7 @@ bool API_Handler::Setup(const std::string& ep_name,
                         const nlohmann::json& ep_settings,
                         std::string& device_type_out) {
   if (!IsLoaded()) {
-    logger_(LogLevel::kFatal, LibraryName() + " library is not loaded.");
+    logger_(LogLevel::kFatal, "IHV library is not loaded.");
     return false;
   }
 
@@ -92,8 +244,7 @@ bool API_Handler::Setup(const std::string& ep_name,
 
     if (!ihv_struct_ || ihv_struct_->device_type == nullptr ||
         strnlen(ihv_struct_->device_type, MAX_DEVICE_TYPE_LENGTH) == 0) {
-      logger_(LogLevel::kFatal, "Failed to setup " + LibraryName() +
-                                    " library. Invalid device type.");
+      logger_(LogLevel::kFatal, "Failed to setup IHV library. Invalid device type.");
       return false;
     }
 
@@ -101,14 +252,14 @@ bool API_Handler::Setup(const std::string& ep_name,
 
     return true;
   } catch (...) {
-    logger_(LogLevel::kFatal, "Failed to setup " + LibraryName() + " library.");
+    logger_(LogLevel::kFatal, "Failed to setup IHV library.");
     return false;
   }
 }
 
 bool API_Handler::EnumerateDevices(API_Handler::DeviceListPtr& device_list) {
   if (!IsLoaded()) {
-    logger_(LogLevel::kFatal, LibraryName() + " library is not loaded.");
+    logger_(LogLevel::kFatal, "IHV library is not loaded.");
     return false;
   }
 
@@ -117,19 +268,18 @@ bool API_Handler::EnumerateDevices(API_Handler::DeviceListPtr& device_list) {
   try {
     if (enumerate_devices_(&api) != API_IHV_RETURN_SUCCESS) {
       logger_(LogLevel::kFatal,
-              LibraryName() + " unsuccessful device enumeration.");
+              "IHV unsuccessful device enumeration.");
       return false;
     }
     if (nullptr == api.device_list) {
-      logger_(LogLevel::kFatal, LibraryName() + " no device list provided.");
+      logger_(LogLevel::kFatal, "IHV no device list provided.");
       return false;
     }
 
     device_list = api.device_list;
     return true;
   } catch (const std::exception& e) {
-    logger_(LogLevel::kFatal, "Failed to call EnumerateDevices() for " +
-                                  LibraryName() + " library. " + e.what());
+    logger_(LogLevel::kFatal, std::string("Failed to call EnumerateDevices() for IHV library. ") + e.what());
     return false;
   }
 }
@@ -137,7 +287,7 @@ bool API_Handler::EnumerateDevices(API_Handler::DeviceListPtr& device_list) {
 bool API_Handler::Init(const std::string& model_config,
                        std::optional<API_IHV_DeviceID_t> device_id) {
   if (!IsLoaded()) {
-    logger_(LogLevel::kFatal, LibraryName() + " library is not loaded.");
+    logger_(LogLevel::kFatal, "IHV library is not loaded.");
     return false;
   }
 
@@ -148,14 +298,14 @@ bool API_Handler::Init(const std::string& model_config,
     return init_(&api) == API_IHV_RETURN_SUCCESS;
   } catch (...) {
     logger_(LogLevel::kFatal,
-            "Failed to initialize " + LibraryName() + " library.");
+            "Failed to initialize IHV library.");
     return false;
   }
 }
 
 bool API_Handler::Infer(API_IHV_IO_Data_t& io_data) {
   if (!IsLoaded()) {
-    logger_(LogLevel::kFatal, LibraryName() + " library is not loaded.");
+    logger_(LogLevel::kFatal, "IHV library is not loaded.");
     return false;
   }
 
@@ -166,8 +316,7 @@ bool API_Handler::Infer(API_IHV_IO_Data_t& io_data) {
 
     if (ret != API_IHV_RETURN_SUCCESS) {
       logger_(LogLevel::kError,
-              LibraryName() +
-                  " library inference returned error: " + std::to_string(ret));
+                  "IHV library inference returned error: " + std::to_string(ret));
       return false;
     }
 
@@ -175,21 +324,21 @@ bool API_Handler::Infer(API_IHV_IO_Data_t& io_data) {
          api.io_data->callback.type) &&
         (api.io_data->output_size == 0 || api.io_data->output == nullptr)) {
       logger_(LogLevel::kError,
-              LibraryName() + " library inference returned no output data.");
+              "IHV library inference returned no output data.");
       return false;
     }
 
     return true;
   } catch (...) {
     logger_(LogLevel::kFatal,
-            "Failed to call Infer() for " + LibraryName() + " library.");
+            "Failed to call Infer() for IHV library.");
     return false;
   }
 }
 
 bool API_Handler::Deinit() {
   if (!IsLoaded()) {
-    logger_(LogLevel::kFatal, LibraryName() + " library is not loaded.");
+    logger_(LogLevel::kFatal, "IHV library is not loaded.");
     return false;
   }
 
@@ -199,19 +348,19 @@ bool API_Handler::Deinit() {
     return deinit_(&api) == API_IHV_RETURN_SUCCESS;
   } catch (...) {
     logger_(LogLevel::kFatal,
-            "Failed to deinitialize " + LibraryName() + " library.");
+            "Failed to deinitialize IHV library.");
     return false;
   }
 }
 
 bool API_Handler::Release() {
   if (!IsLoaded()) {
-    logger_(LogLevel::kFatal, LibraryName() + " library is not loaded.");
+    logger_(LogLevel::kFatal, "IHV library is not loaded.");
     return false;
   }
 
   if (ihv_struct_ == nullptr) {
-    logger_(LogLevel::kFatal, "Invalid " + LibraryName() + " library struct.");
+    logger_(LogLevel::kFatal, "Invalid IHV library struct.");
     return false;
   }
 
@@ -225,14 +374,14 @@ bool API_Handler::Release() {
     return true;
   } catch (...) {
     logger_(LogLevel::kFatal,
-            "Failed to release " + LibraryName() + " library.");
+            "Failed to release IHV library.");
     return false;
   }
 }
 
 bool API_Handler::Prepare() {
   if (!IsLoaded()) {
-    logger_(LogLevel::kFatal, LibraryName() + " library is not loaded.");
+    logger_(LogLevel::kFatal, "IHV library is not loaded.");
     return false;
   }
 
@@ -242,14 +391,14 @@ bool API_Handler::Prepare() {
     return prepare_(&api) == API_IHV_RETURN_SUCCESS;
   } catch (...) {
     logger_(LogLevel::kFatal,
-            "Failed to call Prepare() for " + LibraryName() + " library.");
+            "Failed to call Prepare() for IHV library.");
     return false;
   }
 }
 
 bool API_Handler::Reset() {
   if (!IsLoaded()) {
-    logger_(LogLevel::kFatal, LibraryName() + " library is not loaded.");
+    logger_(LogLevel::kFatal, "IHV library is not loaded.");
     return false;
   }
 
@@ -259,17 +408,12 @@ bool API_Handler::Reset() {
     return reset_(&api) == API_IHV_RETURN_SUCCESS;
   } catch (...) {
     logger_(LogLevel::kFatal,
-            "Failed to call Reset() for " + LibraryName() + " library.");
+            "Failed to call Reset() for IHV library.");
     return false;
   }
 }
 
-std::string API_Handler::LibraryName() const {
-  return "IHV";
-}
-
-std::string API_Handler::CanBeLoaded(API_Handler::Type type,
-                                     const std::string& library_path) {
+std::string API_Handler::CanBeLoaded(const std::string& library_path) {
   std::stringstream ss;
 
   Logger logger = [&ss](LogLevel level, std::string message) {
@@ -292,19 +436,15 @@ std::string API_Handler::CanBeLoaded(API_Handler::Type type,
     ss << message;
   };
 
-  auto api_handler = std::make_unique<API_Handler>(type, library_path, logger);
+  auto api_handler = std::make_unique<API_Handler>(library_path, logger, false);
 
   return ss.str();
 }
 
 API_Handler::DeviceList API_Handler::EnumerateDevices(
-    API_Handler::Type type,
-                              const std::string& library_path,
-                              const std::string& ep_name,
-                              const std::string& model_name,
-                              const nlohmann::json& ep_settings,
-                              std::string& error,
-                              std::string& log) {
+    const std::string& library_path, const std::string& ep_name,
+    const std::string& model_name, const nlohmann::json& ep_settings,
+    std::string& error, std::string& log) {
   std::stringstream ss;
   std::stringstream ss_err;
 
@@ -331,7 +471,7 @@ API_Handler::DeviceList API_Handler::EnumerateDevices(
     }
   };
 
-  auto api_handler = std::make_unique<API_Handler>(type, library_path, logger);
+  auto api_handler = std::make_unique<API_Handler>(library_path, logger, false);
 
   auto deps_dir = fs::absolute(fs::path(library_path).parent_path()).string();
 

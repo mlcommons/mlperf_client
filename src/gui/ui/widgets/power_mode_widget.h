@@ -5,13 +5,23 @@
 
 class ResultComponentWrapperWidget;
 
+/**
+ * @class PowerModeWidget
+ * @brief Widget for displaying power mode status.
+ */
 class PowerModeWidget : public QLabel {
   Q_OBJECT
+
  public:
   explicit PowerModeWidget(const QString &title, const QIcon &icon,
                            const QString tooltip_text,
                            QWidget *parent = nullptr);
+
+  /**
+   * @brief Gets the wrapper widget.
+   */
   ResultComponentWrapperWidget *wrapper() const { return wrapper_widget_; }
+
   void SetMode(const QString &mode);
 
  private:

@@ -8,18 +8,30 @@
 
 namespace gui {
 namespace controllers {
+/**
+ * @class AbstractController
+ * @brief A base interface for all controllers in the GUI, managing the associated view
+ * and page change signaling.
+ */
 class AbstractController : public QObject {
   Q_OBJECT
  public:
   explicit AbstractController(QObject* parent = nullptr) : QObject(parent) {}
   virtual ~AbstractController() = default;
 
-  // Disable copy and assignment
+  /**
+   * @brief Deleted copy constructor to prevent copying.
+   */
   AbstractController(const AbstractController&) = delete;
+
+  /**
+   * @brief Deleted assignment operator to prevent assignment.
+   */
   AbstractController& operator=(const AbstractController&) = delete;
 
-  // Add view to the controller
+  
   void SetView(gui::views::AbstractView* view);
+
   gui::views::AbstractView* view() const { return view_; }
 
  signals:

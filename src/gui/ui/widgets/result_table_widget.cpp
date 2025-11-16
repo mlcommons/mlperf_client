@@ -58,8 +58,8 @@ HeaderCell::HeaderCell(const HeaderInfo& header, QWidget* parent)
       QPixmap(":/icons/resources/icons/action_info-16.png").scaled(14, 14));
 
   QString verification_text;
-  if (header.is_experimental)
-    verification_text = "experimental";
+  if (!header.config_category.isEmpty())
+    verification_text = header.config_category;
   else
     verification_text = header.tested_by_ml_commons ? "tested by MLCommons"
                                                     : "not tested by MLCommons";
@@ -73,7 +73,7 @@ HeaderCell::HeaderCell(const HeaderInfo& header, QWidget* parent)
   QWidget* tested_by_widget = new QWidget(this);
   tested_by_widget->setLayout(tested_by_layout);
   tested_by_widget->setObjectName("testedByMLCommonsLabel");
-  if (!header.tested_by_ml_commons || header.is_experimental)
+  if (!header.tested_by_ml_commons || header.config_category == "experimental")
     tested_by_widget->setProperty("tested", "false");
 
   date_icon_label_ = new QLabel(this);
@@ -107,7 +107,8 @@ HeaderCell::HeaderCell(const HeaderInfo& header, QWidget* parent)
 
   ep_label_ = new QLabel(ep_name_display, this);
   ep_label_->setProperty("class", "large_strong_label");
-
+  if (!header.config_file_comment.isEmpty())
+    ep_label_->setToolTip(header.config_file_comment);
   device_label_ = new QLabel(header.device, this);
   device_label_->setProperty("class", "large_strong_label");
   device_icon_label_ = new QLabel(this);

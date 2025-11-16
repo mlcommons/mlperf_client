@@ -1,12 +1,12 @@
 ## Usage
-QAIRT GENAI and its implementation in MLPerf require the llama_cpu.bin file generated from running instructions mentioned in [<code><b><path/to/mlperf_client_dev/tools/IHV/NativeQNN/CPU_MODEL_GENERATION/README.md></b></code>](../../../../../tools/IHV/NativeQNN/CPU_MODEL_GENERATION/README.md) 
+QAIRT GENAI and its implementation in MLPerf require the cpu file generated from running instructions mentioned in [<code><b><path/to/mlperf_client_dev/tools/IHV/NativeQNN/CPU_MODEL_GENERATION/README.md></b></code>](../../../../../tools/IHV/NativeQNN/CPU_MODEL_GENERATION/README.md) 
 and npu bin file generated from running instructions mentioned in [<code><b><path/to/mlperf_client_dev/tools/IHV/NativeQNN/NPU_MODEL_GENERATION/README.md></b></code>](../../../../../tools/IHV/NativeQNN/NPU_MODEL_GENERATION/README.md)
 
 ### Llama2 sample config
 ```
 {
   "SystemConfig": {
-    "Comment": "Default Llama2 NativeQNN Qualcomm Config",
+    "Comment": "Llama 2 7B Chat, Native QNN, NPU CPU, Base prompts",
     "TempPath": "",
     "EPDependenciesConfigPath": ""
   },
@@ -15,27 +15,27 @@ and npu bin file generated from running instructions mentioned in [<code><b><pat
       "Name": "Llama2",
       "Models": [
         {
-          "ModelName": "Llama2",
-          "FilePath": "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/llama2/models/NativeQNN/llama2_cpu.bin",
-          "DataFilePath": "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/llama2/models/NativeQNN/llama2_npu.zip",
+          "ModelName": "llama-2-7b-chat-hf-qti",
+          "FilePath": "file://models/llama2_cpu.bin",
+          "DataFilePath": "file://models/llama2_npu.zip",
           "TokenizerPath": "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/llama2/models/NativeQNN/tokenizer-v1.zip"
         }
       ],
       "InputFilePath": [
-        "https://client.mlcommons-storage.org/deps/0.5/scenario_files/llm/llama2/data/content_generation/greedy-prompt_cot.39329.json"
+        "https://mlperf-public-files.s3.us-east-1.amazonaws.com/scenario_files/llm/llama2/data/prompts/content_generation/greedy-prompt_cot.39329.json"
       ],
       "AssetsPath": [],
       "ResultsVerificationFile": "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/generation-greedy-results.json",
       "DataVerificationFile": "",
       "Iterations": 3,
+      "WarmUp": 1,
       "Delay": 5,
       "ExecutionProviders": [
         {
           "Name": "NativeQNN",
           "Config": {
             "device_type": "NPU_CPU"
-          },
-          "LibraryPath": ""
+          }
         }
       ]
     }
@@ -47,7 +47,7 @@ and npu bin file generated from running instructions mentioned in [<code><b><pat
 ```
 {
   "SystemConfig": {
-    "Comment": "Default Llama3 NativeQNN Qualcomm Config",
+    "Comment": "Llama 3.1 8B Instruct, Native QNN, NPU CPU, Base prompts",
     "TempPath": "",
     "EPDependenciesConfigPath": ""
   },
@@ -56,27 +56,27 @@ and npu bin file generated from running instructions mentioned in [<code><b><pat
       "Name": "Llama3",
       "Models": [
         {
-          "ModelName": "Llama3",
-          "FilePath": "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/llama3/models/NativeQNN/llama3_cpu.bin",
-          "DataFilePath": "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/llama3/models/NativeQNN/llama3_npu.zip",
+          "ModelName": "llama-3.1-8B-Instruct-qti",
+          "FilePath": "file://models/llama3_cpu.bin",
+          "DataFilePath": "file://models/llama3_npu.zip",
           "TokenizerPath": "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/llama3/models/NativeQNN/tokenizer.zip"
         }
       ],
       "InputFilePath": [
-        "https://client.mlcommons-storage.org/deps/0.5/scenario_files/llm/llama3/data/content_generation/greedy-prompt_cot.39329.json"
+        "https://mlperf-public-files.s3.us-east-1.amazonaws.com/scenario_files/llm/llama3/data/prompts/content_generation/greedy-prompt_cot.39329.json"
       ],
       "AssetsPath": [],
       "ResultsVerificationFile": "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/generation-greedy-results.json",
       "DataVerificationFile": "",
       "Iterations": 3,
+      "WarmUp": 1,
       "Delay": 5,
       "ExecutionProviders": [
         {
           "Name": "NativeQNN",
           "Config": {
             "device_type": "NPU_CPU"
-          },
-          "LibraryPath": ""
+          }
         }
       ]
     }
@@ -88,7 +88,7 @@ and npu bin file generated from running instructions mentioned in [<code><b><pat
 ```
 {
   "SystemConfig": {
-    "Comment": "Default Phi3.5 NativeQNN Qualcomm Config",
+    "Comment": "Phi 3.5 Mini Instruct, Native QNN, NPU CPU, Base prompts",
     "TempPath": "",
     "EPDependenciesConfigPath": ""
   },
@@ -97,35 +97,36 @@ and npu bin file generated from running instructions mentioned in [<code><b><pat
       "Name": "Phi3.5",
       "Models": [
         {
-          "ModelName": "",
-          "FilePath": "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/phi3.5/models/NativeQNN/phi3_5_cpu.bin",
-          "DataFilePath": "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/phi3.5/models/NativeQNN/phi3_5_npu.zip",
+          "ModelName": "Phi-3.5-mini-instruct-qti",
+          "FilePath": "file://models/phi3_5_cpu.bin",
+          "DataFilePath": "file://models/phi3_5_npu.zip",
           "TokenizerPath": "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/phi3.5/models/NativeQNN/tokenizer.zip"
         }
       ],
       "InputFilePath": [
-        "https://client.mlcommons-storage.org/deps/0.5/scenario_files/llm/phi3.5/data/content_generation/greedy-prompt_cot.39329.json"
+        "https://mlperf-public-files.s3.us-east-1.amazonaws.com/scenario_files/llm/phi3.5/data/prompts/content_generation/greedy-prompt_cot.39329.json"
       ],
       "AssetsPath": [],
       "ResultsVerificationFile": "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/generation-greedy-results.json",
       "DataVerificationFile": "",
       "Iterations": 3,
+      "WarmUp": 1,
       "Delay": 5,
       "ExecutionProviders": [
         {
           "Name": "NativeQNN",
           "Config": {
             "device_type": "NPU_CPU"
-          },
-          "LibraryPath": ""
+          }
         }
       ]
     }
   ]
 }
+
 ```
 
-An example config with files downloaded from web is available at `\data\configs\vendors_default\Llama2\Qualcomm_NativeQNN-NPU_CPU.json`. if using `LibraryPath` is used, it should be mentioned as `IHV/NativeQNN/IHV_NativeQNN.dll`. 
+An example config for Llama2, Llama3 and Phi3.5 with files downloaded from web is available at `\data\configs\vendors_default\{model_name}\Qualcomm_NativeQNN_NPU-CPU.json`. if using `LibraryPath` is used, it should be mentioned as `IHV/NativeQNN/IHV_NativeQNN.dll`. 
 
 ## FAQ
 

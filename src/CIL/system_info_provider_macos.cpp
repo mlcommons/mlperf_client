@@ -1,7 +1,9 @@
 #include "system_info_provider_macos.h"
 
+#if !MLPERF_PUBLISHING
 #include "io_report_reader.h"
 #include "smc_reader.h"
+#endif
 
 #ifdef USE_OPENCL
 #include <OpenCL/opencl.h>
@@ -34,7 +36,11 @@ static std::string cpu_architecture_name(
 }
 
 SystemInfoProviderMacOS::SystemInfoProviderMacOS()
-    : smc_reader_(nullptr), io_report_reader_(nullptr) {
+#if !MLPERF_PUBLISHING
+    : smc_reader_(nullptr),
+      io_report_reader_(nullptr)
+#endif
+{
   performance_info_.cpu_usage = -1;
 }
 
@@ -142,11 +148,11 @@ void SystemInfoProviderMacOS::FetchPerformanceInfo() {
   if (performance_info_.gpu_info.empty()) {
     std::string gpu_name = gpu_info_.front().name;
     performance_info_.gpu_info[gpu_name] =
-        NPUGPUPerformanceInfo{gpu_name, 0, 0.0, 0, 0};
+        NPUGPUPerformanceInfo{gpu_name, 0, false, 0.0, false, 0, 0, false};
   }
   if (performance_info_.npu_info.name.empty())
-    performance_info_.npu_info =
-        NPUGPUPerformanceInfo{npu_info_.name, 0, 0.0, 0, 0};
+    performance_info_.npu_info = NPUGPUPerformanceInfo{
+        npu_info_.name, 0, false, 0.0, false, 0, 0, false};
 
   FetchNpuGpuUsages();
   FetchCpuGpuTemperatures();
@@ -205,15 +211,20 @@ void SystemInfoProviderMacOS::FetchMemoryUsage() {
 }
 
 void SystemInfoProviderMacOS::FetchNpuGpuUsages() {
+#if !MLPERF_PUBLISHING
   if (!io_report_reader_)
     io_report_reader_ = std::make_shared<IOReportReader>();
 
   auto gpu_npu_usage = io_report_reader_->GetGpuAndNpuUsage();
   performance_info_.gpu_info.begin()->second.usage = gpu_npu_usage.first;
+  performance_info_.gpu_info.begin()->second.usage_is_available = true;
   performance_info_.npu_info.usage = gpu_npu_usage.second;
+  performance_info_.npu_info.usage_is_available = true;
+#endif
 }
 
 void SystemInfoProviderMacOS::FetchCpuGpuTemperatures() {
+#if !MLPERF_PUBLISHING
   if (!smc_reader_) {
     smc_reader_ = std::make_shared<SMCReader>();
     smc_reader_->Open();
@@ -227,7 +238,7 @@ void SystemInfoProviderMacOS::FetchCpuGpuTemperatures() {
   int gpu_sensor_count = 0;
 
   for (const auto& [key, value] : temps) {
-    if (value == 0) continue;
+    if (value < 10.0f) continue;
     if (key.rfind("Tp", 0) == 0) {
       cpu_temp_sum += value;
       cpu_sensor_count++;
@@ -237,13 +248,14 @@ void SystemInfoProviderMacOS::FetchCpuGpuTemperatures() {
     }
   }
 
-  performance_info_.cpu_temperature =
-      cpu_sensor_count > 0 ? cpu_temp_sum / cpu_sensor_count : 50.0;
+  if (cpu_sensor_count > 0)
+    performance_info_.cpu_temperature = cpu_temp_sum / cpu_sensor_count;
   performance_info_.cpu_temperature_is_available = true;
 
   auto& gpu_info = performance_info_.gpu_info.begin()->second;
-  gpu_info.temperature =
-      gpu_sensor_count > 0 ? gpu_temp_sum / gpu_sensor_count : 0;
+  if (gpu_sensor_count > 0)
+    gpu_info.temperature = gpu_temp_sum / gpu_sensor_count;
   gpu_info.temperature_is_available = true;
+#endif
 }
 }  // namespace cil

@@ -33,21 +33,20 @@ void LLMInference::ClearErrorMessage() {
 
 void LLMInference::Init(const std::string& config) {
   if (!api_handler_->IsLoaded()) {
-    SetErrorMessage(api_handler_->LibraryName() +
-                    " not loaded!: " + library_path_);
+    SetErrorMessage("IHV not loaded!: " + library_path_);
     return;
   }
 
   auto init_start_time = std::chrono::high_resolution_clock::now();
 
   if (!api_handler_->Init(config)) {
-    SetErrorMessage("Failed to initialize " + api_type_);
+    SetErrorMessage("Failed to initialize IHV");
     return;
   }
 
   auto init_end_time = std::chrono::high_resolution_clock::now();
 
-  LogTime(api_type_ + " Init (Session creation) time: ", init_start_time,
+  LogTime("IHV Init (Session creation) time: ", init_start_time,
           init_end_time);
 
   SetErrorMessage("");
@@ -62,8 +61,7 @@ void LLMInference::TokenCallback(void* object, Token token) {
 LLMInference::Result LLMInference::Run(
     std::span<const Token> input_data) {
   if (!api_handler_->IsLoaded()) {
-    SetErrorMessage(api_handler_->LibraryName() +
-                    " not loaded!: " + library_path_);
+    SetErrorMessage("IHV not loaded!: " + library_path_);
     return {};
   }
 
@@ -83,7 +81,7 @@ LLMInference::Result LLMInference::Run(
 
   const auto start_time = Clock::now();
   if (!api_handler_->Infer(io_data)) {
-    SetErrorMessage("Failed to run inference for " + api_type_);
+    SetErrorMessage("Failed to run inference for IHV");
     return {};
   }
   const auto end_time = Clock::now();
@@ -133,13 +131,12 @@ LLMInference::Result LLMInference::Run(
 
 void LLMInference::Deinit() {
   if (!api_handler_->IsLoaded()) {
-    SetErrorMessage(api_handler_->LibraryName() +
-                    " not loaded!: " + library_path_);
+    SetErrorMessage("IHV not loaded!: " + library_path_);
     return;
   }
 
   if (!api_handler_->Deinit()) {
-    SetErrorMessage("Failed to deinitialize " + api_type_);
+    SetErrorMessage("Failed to deinitialize IHV");
     return;
   }
 
@@ -148,13 +145,12 @@ void LLMInference::Deinit() {
 
 void LLMInference::Prepare() {
   if (!api_handler_->IsLoaded()) {
-    SetErrorMessage(api_handler_->LibraryName() +
-                    " not loaded!: " + library_path_);
+    SetErrorMessage("IHV not loaded!: " + library_path_);
     return;
   }
 
   if (!api_handler_->Prepare()) {
-    SetErrorMessage("Failed to prepare " + api_type_);
+    SetErrorMessage("Failed to prepare IHV");
     return;
   }
 
@@ -163,13 +159,12 @@ void LLMInference::Prepare() {
 
 void LLMInference::Reset() {
   if (!api_handler_->IsLoaded()) {
-    SetErrorMessage(api_handler_->LibraryName() +
-                    " not loaded!: " + library_path_);
+    SetErrorMessage("IHV not loaded!: " + library_path_);
     return;
   }
 
   if (!api_handler_->Reset()) {
-    SetErrorMessage("Failed to reset " + api_type_);
+    SetErrorMessage("Failed to reset IHV");
     return;
   }
 

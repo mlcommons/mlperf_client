@@ -104,6 +104,16 @@ class SystemController {
   void SetSystemDownloadBehavior(const std::string& download_behavior);
 
   /*
+   * @brief Sets the allowed prompts type for the benchmark.
+   *
+   * This method specifies which type of prompts should be included when running
+   * the benchmark. The type can be "base", "extended", or "both".
+   *
+   * @param type The allowed prompts type.
+   */
+  void SetAllowedPromptsType(const std::string& type);
+
+  /*
    * @brief Retrieves the value for CacheLocalFiles parameter from the config
    *
    * If it is set to false local files specified in the config will not be

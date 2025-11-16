@@ -1,3 +1,14 @@
+/**
+ * @file main.cpp
+ * @brief Entry point for the MLPerf GUI application.
+ *
+ * This file contains the main function and application startup logic for the
+ * MLPerf GUI client. It is responsible for initializing the application,
+ * loading resources (such as stylesheets and fonts), handling single-instance
+ * enforcement, and launching the main window. Command-line options and
+ * platform-specific initialization are also handled here.
+ */
+
 #include <QApplication>
 #include <QDebug>
 #include <QFile>
@@ -76,9 +87,9 @@ int main(int argc, char* argv[]) {
   // working directory to the application's Documents directory. This ensures
   // that files can be saved and are also accessible through the file explorer
   // for easier access and review.
-  chdir(cil::ios_utils::GetDocumentsDirectoryPath().c_str());
+  chdir(cil::apple_utils::GetDocumentsDirectoryPath().c_str());
 #endif
-  CommandParser command_parser("mlperf-macos-gui", app_description);
+  CommandParser command_parser("MLPerf Client", app_description);
 #endif
   //@todo: Serve these options from the command line parser
   generate_command_options(command_parser);

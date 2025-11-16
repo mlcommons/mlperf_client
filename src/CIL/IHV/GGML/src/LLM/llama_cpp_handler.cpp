@@ -173,9 +173,10 @@ bool cil::IHV::LlamaCppHandler::Deinit(const API_IHV_Deinit_t& api) {
 const API_IHV_Struct_t* API_IHV_Setup(const API_IHV_Setup_t* api) {
   std::string ep_name = api->ep_name;
 
-  if (ep_name != "IHV Metal" && ep_name != "IHV Vulkan" &&
-      ep_name != "IHV CUDA" && ep_name != "Metal" &&
-      ep_name != "Vulkan" && ep_name != "CUDA") {
+  if (ep_name != "Metal" && ep_name != "IHV Metal" && 
+      ep_name != "Vulkan" && ep_name != "IHV Vulkan" &&
+      ep_name != "CUDA"  && ep_name != "IHV CUDA" &&
+      ep_name != "ROCm" && ep_name != "IHV ROCm") {
     auto error = "EP " + ep_name + " is not supported by this IHV";
     api->logger(api->context, API_IHV_LogLevel::API_IHV_FATAL, error.c_str());
     return nullptr;

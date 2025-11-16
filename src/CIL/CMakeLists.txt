@@ -1,11 +1,38 @@
 cmake_minimum_required(VERSION 3.15)
 cmake_policy(SET CMP0135 NEW)
 
+file(READ "${CMAKE_SOURCE_DIR}/version.json" VERSION_JSON)
+string(JSON MAJOR_VERSION GET ${VERSION_JSON} major)
+string(JSON MINOR_VERSION GET ${VERSION_JSON} minor)
+string(JSON PATCH_VERSION GET ${VERSION_JSON} patch)
+string(JSON VERSION_SUFFIX GET ${VERSION_JSON} suffix)
+# calculate the build number
+execute_process(
+        COMMAND git rev-parse --short HEAD
+		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        OUTPUT_VARIABLE GIT_COMMIT_HASH
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+string(STRIP "${VERSION_SUFFIX}" STRIPPED_SUFFIX)
+if(STRIPPED_SUFFIX STREQUAL "")
+    set(VERSION_STRING "${MAJOR_VERSION}.${MINOR_VERSION}.${PATCH_VERSION}.${GIT_COMMIT_HASH}")
+else()
+    set(VERSION_STRING "${MAJOR_VERSION}.${MINOR_VERSION}.${PATCH_VERSION}-${VERSION_SUFFIX}.${GIT_COMMIT_HASH}")
+endif()
+set(VERSION_SHORT_STRING "${MAJOR_VERSION}.${MINOR_VERSION}.${PATCH_VERSION}")
+message(STATUS "Git commit hash: ${GIT_COMMIT_HASH}")
+configure_file(./version.h.in "${CMAKE_CURRENT_BINARY_DIR}/version.h" @ONLY)
+#  add custom command to make sure cmake will track the changes in version.json
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/version.json")
+set_property(GLOBAL PROPERTY APP_VERSION_STRING ${VERSION_STRING})
+set_property(GLOBAL PROPERTY APP_VERSION_SHORT_STRING ${VERSION_SHORT_STRING})
+# read the content of the version.h and display it
+file(READ "${CMAKE_CURRENT_BINARY_DIR}/version.h" VERSION_H)
+message(STATUS "version file content: ${VERSION_H}")
 # Set the project name and version
 project(CIL VERSION 1.0)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
-
 
 set(DEPS_PACKER_BUILD_DIR ${CMAKE_BINARY_DIR}/_deps/deps_packer)
 if(WIN32)
@@ -25,6 +52,16 @@ elseif(IOS)
     # DepsPacker should run on the host macOS
 	set(DEPS_PACKER_TOOLCHAIN_FILE "${CMAKE_CURRENT_SOURCE_DIR}/../../toolchain/macos_arm64.toolchain.cmake")
 	set(DEPS_PACKER_GENERATOR_PLATFORM_COMMAND "-DCMAKE_TOOLCHAIN_FILE=${DEPS_PACKER_TOOLCHAIN_FILE}")
+elseif(UNIX AND NOT APPLE)  # Linux and other Unix-like systems
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
+        set(DEPS_PACKER_GENERATOR_PLATFORM_COMMAND "-DCMAKE_SYSTEM_PROCESSOR=x86_64")
+        set(DEPS_PACKER_GENERATOR_PLATFORM x86_64)
+    elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
+        set(DEPS_PACKER_GENERATOR_PLATFORM_COMMAND "-DCMAKE_SYSTEM_PROCESSOR=aarch64")
+        set(DEPS_PACKER_GENERATOR_PLATFORM aarch64)
+    else()
+        message(FATAL_ERROR "Unsupported system processor: ${CMAKE_SYSTEM_PROCESSOR}")
+    endif()
 endif()
 
 set(DEPS_PACKER_RUNTIME_OUTPUT_DIRECTORY ${DEPS_PACKER_BUILD_DIR}/${DEPS_PACKER_GENERATOR_PLATFORM})
@@ -45,6 +82,14 @@ add_subdirectory(IHV)
 # Force use of the release runtime library in all configurations
 if(MSVC)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:>")
+    # Only set these flags for MSVC targets
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
+elseif(UNIX AND NOT APPLE)  # Linux specific
+    # For Linux, we want to ensure position-independent code
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
+    # Add Linux-specific compiler flags
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
 endif()
 
 # Define the source files for the library
@@ -61,6 +106,8 @@ endif()
 if(APPLE)
 	list(FILTER HEADERS EXCLUDE REGEX "system_info_provider_windows.h")
 	list(FILTER SOURCES EXCLUDE REGEX "system_info_provider_windows.cpp")
+	list(FILTER HEADERS EXCLUDE REGEX "system_info_provider_linux.h")
+	list(FILTER SOURCES EXCLUDE REGEX "system_info_provider_linux.cpp")
 	list(FILTER HEADERS EXCLUDE REGEX "performance_query.h")
 	list(FILTER SOURCES EXCLUDE REGEX "performance_query.cpp")
 	list(FILTER HEADERS EXCLUDE REGEX "performance_counter_data.h")
@@ -72,17 +119,41 @@ endif()
 if(WIN32 OR IOS)
 	list(FILTER HEADERS EXCLUDE REGEX "system_info_provider_macos.h")
 	list(FILTER SOURCES EXCLUDE REGEX "system_info_provider_macos.cpp")
+	list(FILTER HEADERS EXCLUDE REGEX "system_info_provider_linux.h")
+	list(FILTER SOURCES EXCLUDE REGEX "system_info_provider_linux.cpp")
+endif()
+if (WIN32 OR IOS)
 	list(FILTER HEADERS EXCLUDE REGEX "smc_reader.h")
 	list(FILTER SOURCES EXCLUDE REGEX "smc_reader.cpp")
 	list(FILTER HEADERS EXCLUDE REGEX "io_report_reader.h")
 	list(FILTER SOURCES EXCLUDE REGEX "io_report_reader.cpp")	
 endif()
 
+if(UNIX AND NOT APPLE)  # Linux
+	list(FILTER HEADERS EXCLUDE REGEX "system_info_provider_windows.h")
+	list(FILTER SOURCES EXCLUDE REGEX "system_info_provider_windows.cpp")
+	list(FILTER HEADERS EXCLUDE REGEX "performance_query.h")
+	list(FILTER SOURCES EXCLUDE REGEX "performance_query.cpp")
+	list(FILTER HEADERS EXCLUDE REGEX "performance_counter_data.h")
+	list(FILTER SOURCES EXCLUDE REGEX "performance_counter_data.cpp")
+	list(FILTER HEADERS EXCLUDE REGEX "performance_counter_group.h")
+	list(FILTER SOURCES EXCLUDE REGEX "performance_counter_group.cpp")
+	list(FILTER HEADERS EXCLUDE REGEX "system_info_provider_macos.h")
+	list(FILTER SOURCES EXCLUDE REGEX "system_info_provider_macos.cpp")
+	list(FILTER HEADERS EXCLUDE REGEX "io_report_reader.h")
+	list(FILTER SOURCES EXCLUDE REGEX "io_report_reader.cpp")		
+	list(FILTER HEADERS EXCLUDE REGEX "smc_reader.h")
+	list(FILTER SOURCES EXCLUDE REGEX "smc_reader.cpp")
+endif()
+
 if(NOT IOS)
 	list(FILTER HEADERS EXCLUDE REGEX "system_info_provider_ios.h")
 	list(FILTER SOURCES EXCLUDE REGEX "system_info_provider_ios.mm")
-    list(FILTER SOURCES EXCLUDE REGEX "ios/")
-    list(FILTER HEADERS EXCLUDE REGEX "ios/")
+endif()
+
+if (NOT APPLE)
+    list(FILTER SOURCES EXCLUDE REGEX "apple/")
+    list(FILTER HEADERS EXCLUDE REGEX "apple/")
 endif()
 
 list(FILTER SOURCES EXCLUDE REGEX "deps_packer/")
@@ -183,34 +254,39 @@ set(DATA_VERIFICATION_SCHEMA_JSON "${CMAKE_SOURCE_DIR}/data/DataVerificationSche
 
 set(VENDORS_DEFAULT_CONFIGS_DIR "${CMAKE_SOURCE_DIR}/data/configs/vendors_default")
 
-set(CONFIG_VERIFICATION_JSON "${CMAKE_BINARY_DIR}/config_verification.json")
-set(CONFIG_EXPERIMENTAL_VERIFICATION_JSON "${CMAKE_BINARY_DIR}/config_experimental_verification.json")
-
 file(GLOB_RECURSE VENDORS_ALL_CONFIGS CONFIGURE_DEPENDS "${VENDORS_DEFAULT_CONFIGS_DIR}/*.json")
+set(CONFIG_VERIFICATION_FILES "")
+set(CONFIG_VERIFICATION_TARGETS "")
 
-set(VENDORS_DEFAULT_CONFIGS "")
-set(VENDORS_EXPERIMENTAL_CONFIGS "")
-
-foreach(CONFIG_FILE ${VENDORS_ALL_CONFIGS})
-	list(APPEND VENDORS_DEFAULT_CONFIGS "${CONFIG_FILE}")
-    if(CONFIG_FILE MATCHES "vendors_default/experimental")
-        list(APPEND VENDORS_EXPERIMENTAL_CONFIGS "${CONFIG_FILE}")
+function(add_vendors_config_group CATEGORY)
+    if("${CATEGORY}" STREQUAL "")
+        # Special case: ALL
+        set(OUTPUT_FILE "${CMAKE_BINARY_DIR}/config_verification.json")
+        set(FILES "${VENDORS_ALL_CONFIGS}")
+        set(TARGET_NAME compute_configs_hashes)
+        set(MSG "Computing hashes for vendor default configs")
+    else()
+        set(OUTPUT_FILE "${CMAKE_BINARY_DIR}/config_${CATEGORY}_verification.json")
+        set(FILES "${VENDORS_ALL_CONFIGS}")
+        list(FILTER FILES INCLUDE REGEX "/vendors_default/${CATEGORY}/")
+        set(TARGET_NAME compute_${CATEGORY}_configs_hashes)
+        set(MSG "Computing hashes for vendor ${CATEGORY} configs")
     endif()
-endforeach()
+    add_custom_target(
+        ${TARGET_NAME}
+        ALL
+        COMMAND ${CMAKE_COMMAND} -DFILES_TO_HASH="${FILES}" -DOUTPUT_FILE="${OUTPUT_FILE}" -P "${CMAKE_CURRENT_SOURCE_DIR}/compute_hashes.cmake"
+	BYPRODUCTS "${OUTPUT_FILE}"
+    )
+    list(APPEND CONFIG_VERIFICATION_FILES "${OUTPUT_FILE}")
+    list(APPEND CONFIG_VERIFICATION_TARGETS "${TARGET_NAME}")
+    set(CONFIG_VERIFICATION_FILES "${CONFIG_VERIFICATION_FILES}" PARENT_SCOPE)
+    set(CONFIG_VERIFICATION_TARGETS "${CONFIG_VERIFICATION_TARGETS}" PARENT_SCOPE)
+endfunction()
 
-message(STATUS "Computing hashes for vendor default configs")
-add_custom_target(
-	compute_configs_hashes
-	ALL
-	COMMAND ${CMAKE_COMMAND} -DFILES_TO_HASH="${VENDORS_DEFAULT_CONFIGS}" -DOUTPUT_FILE="${CONFIG_VERIFICATION_JSON}" -P "${CMAKE_CURRENT_SOURCE_DIR}/compute_hashes.cmake"
-)
-
-message(STATUS "Computing hashes for vendor experimental configs")
-add_custom_target(
-    compute_experimental_configs_hashes
-    ALL
-    COMMAND ${CMAKE_COMMAND} -DFILES_TO_HASH="${VENDORS_EXPERIMENTAL_CONFIGS}" -DOUTPUT_FILE="${CONFIG_EXPERIMENTAL_VERIFICATION_JSON}" -P "${CMAKE_CURRENT_SOURCE_DIR}/compute_hashes.cmake"
-)
+add_vendors_config_group("")
+add_vendors_config_group("experimental")
+add_vendors_config_group("extended")
 
 if(MLPERF_PACK_VENDORS_DEFAULT)
     set(VENDORS_DEFAULT_ZIP "${CMAKE_BINARY_DIR}/vendors_default.zip")
@@ -237,10 +313,26 @@ elseif(IOS)
     set(EP_DEPENDENCIES_CONFIG_JSON_FILENAME "ep_dependencies_config_iOS.json")
 elseif(APPLE)#APPLE but not IOS
     set(EP_DEPENDENCIES_CONFIG_JSON_FILENAME "ep_dependencies_config_macOS.json")
+elseif(UNIX AND NOT APPLE)
+	if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
+		set(EP_DEPENDENCIES_CONFIG_JSON_FILENAME "ep_dependencies_config_linux_x64.json")
+	elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
+		set(EP_DEPENDENCIES_CONFIG_JSON_FILENAME "ep_dependencies_config_linux_ARM.json")
+	else()
+		message(FATAL_ERROR "Unsupported system processor: ${CMAKE_SYSTEM_PROCESSOR}")
+	endif()
+else()
+	message(FATAL_ERROR "Unsupported platform ${CMAKE_SYSTEM_PROCESSOR}")
 endif()
 set(EP_DEPENDENCIES_CONFIG_JSON "${CMAKE_SOURCE_DIR}/data/${EP_DEPENDENCIES_CONFIG_JSON_FILENAME}")
 set(EP_DEPENDENCIES_CONFIG_SCHEMA_JSON "${CMAKE_SOURCE_DIR}/data/EPDependenciesConfigSchema.json")
-set(EP_IHVS_NATIVE_OPENVINO_LIB "${CMAKE_BINARY_DIR}/IHV/NativeOpenVINO/bin/$<CONFIG>/IHV_NativeOpenVINO.dll")
+
+if(WIN32)
+	set(EP_IHVS_NATIVE_OPENVINO_LIB "${CMAKE_BINARY_DIR}/IHV/NativeOpenVINO/bin/$<CONFIG>/IHV_NativeOpenVINO.dll")
+else() # Linux
+	set(EP_IHVS_NATIVE_OPENVINO_LIB "${CMAKE_BINARY_DIR}/IHV/NativeOpenVINO/Build/libIHV_NativeOpenVINO.so")
+endif()
+
 set(EP_IHVS_ORT_GENAI_LIB "${CMAKE_BINARY_DIR}/IHV/OrtGenAI/bin/$<CONFIG>/IHV_OrtGenAI.dll")
 set(EP_IHVS_ORT_GENAI_RYZENAI_LIB "${CMAKE_BINARY_DIR}/IHV/OrtGenAI-RyzenAI/bin/$<CONFIG>/IHV_OrtGenAI_RyzenAI.dll")
 set(EP_IHVS_WIN_ML_LIB "${CMAKE_BINARY_DIR}/IHV/WindowsML/bin/$<CONFIG>/IHV_WindowsML.dll")
@@ -253,12 +345,14 @@ else()
 endif()
 set(EP_IHVS_GGML_VULKAN_LIB "${CMAKE_BINARY_DIR}/IHV/GGML/Vulkan/bin/$<CONFIG>/${CMAKE_SHARED_LIBRARY_PREFIX}GGML_Vulkan${CMAKE_SHARED_LIBRARY_SUFFIX}")
 set(EP_IHVS_GGML_CUDA_LIB "${CMAKE_BINARY_DIR}/IHV/GGML/CUDA/bin/$<CONFIG>/${CMAKE_SHARED_LIBRARY_PREFIX}GGML_CUDA${CMAKE_SHARED_LIBRARY_SUFFIX}")
+set(EP_IHVS_GGML_ROCM_LIB "${CMAKE_BINARY_DIR}/IHV/GGML/ROCm/bin/$<CONFIG>/${CMAKE_SHARED_LIBRARY_PREFIX}GGML_ROCm${CMAKE_SHARED_LIBRARY_SUFFIX}")
 set_property(GLOBAL PROPERTY  EP_IHVS_GGML_LIB ${EP_IHVS_GGML_LIB})
 set_property(GLOBAL PROPERTY  EP_IHVS_GGML_METAL_LIB ${EP_IHVS_GGML_METAL_LIB})
 set(EP_IHVS_NATIVE_QNN_LIB "${CMAKE_BINARY_DIR}/IHV/NativeQNN/bin/$<CONFIG>/${CMAKE_SHARED_LIBRARY_PREFIX}IHV_NativeQNN${CMAKE_SHARED_LIBRARY_SUFFIX}")
 
+
 include(deps_packer/pack_as_binary.cmake)
-set (IHV_FILES_TO_SIGN "")
+set (IHV_FILES_TO_PUBLISH "")
 
 set(ASSETS_LIST 
 	${LOG4CXXCONFIG_XML}
@@ -269,9 +363,9 @@ set(ASSETS_LIST
 	${DATA_VERIFICATION_SCHEMA_JSON}
 	${EP_DEPENDENCIES_CONFIG_JSON}
 	${EP_DEPENDENCIES_CONFIG_SCHEMA_JSON}
-	${CONFIG_VERIFICATION_JSON}
-	${CONFIG_EXPERIMENTAL_VERIFICATION_JSON}
 )
+
+list(APPEND ASSETS_LIST ${CONFIG_VERIFICATION_FILES})
 
 if(MLPERF_PACK_VENDORS_DEFAULT)
     list(APPEND ASSETS_LIST ${VENDORS_DEFAULT_ZIP})
@@ -284,11 +378,12 @@ if(MLPERF_IHV_MLX)
     if (IOS)
 	    set(EP_IHVS_MLX_LIB "${CMAKE_BINARY_DIR}/IHV/MLX/bin/$<CONFIG>/IHV_MLX.framework")
 		set(MLX_METALLIB "${CMAKE_BINARY_DIR}/IHV/MLX/build/Build/Products/${CMAKE_BUILD_TYPE}-iphoneos/mlx-swift_Cmlx.bundle/default.metallib")
-		set_property(GLOBAL PROPERTY  MLX_METALLIB ${MLX_METALLIB})
 	else()
         set(EP_IHVS_MLX_LIB "${CMAKE_BINARY_DIR}/IHV/MLX/bin/$<CONFIG>/${CMAKE_SHARED_LIBRARY_PREFIX}IHV_MLX${CMAKE_SHARED_LIBRARY_SUFFIX}")
+		set(MLX_METALLIB "${CMAKE_BINARY_DIR}/IHV/MLX/build/Build/Products/${CMAKE_BUILD_TYPE}/mlx-swift_Cmlx.bundle/Contents/Resources/default.metallib")
 	endif()
 	set_property(GLOBAL PROPERTY  EP_IHVS_MLX_LIB ${EP_IHVS_MLX_LIB})
+	set_property(GLOBAL PROPERTY  MLX_METALLIB ${MLX_METALLIB})
 	
 	list(APPEND ASSETS_LIST ${EP_IHVS_MLX_LIB})
 endif()
@@ -309,7 +404,6 @@ if(MLPERF_IHV_WINDOWSML)
 	list(APPEND ASSETS_LIST ${EP_IHVS_WIN_ML_LIB})
 endif()
 
-
 if(MLPERF_IHV_GGML)
 	list(APPEND ASSETS_LIST ${EP_IHVS_GGML_LIB})
 	if(MLPERF_IHV_GGML_VULKAN)
@@ -321,6 +415,9 @@ if(MLPERF_IHV_GGML)
 	if(MLPERF_IHV_GGML_METAL)
 		list(APPEND ASSETS_LIST ${EP_IHVS_GGML_METAL_LIB})
 	endif()
+	if(MLPERF_IHV_GGML_ROCM)
+		list(APPEND ASSETS_LIST ${EP_IHVS_GGML_ROCM_LIB})
+	endif()
 endif()
 
 if(MLPERF_IHV_NATIVE_QNN)
@@ -331,11 +428,12 @@ pack_as_binary(assets
     SOURCES
 	${ASSETS_LIST}
 )
-add_dependencies(assets compute_configs_hashes)
-add_dependencies(assets compute_experimental_configs_hashes)
+add_dependencies(assets ${CONFIG_VERIFICATION_TARGETS})
 
-set_property(GLOBAL PROPERTY IHV_FILES_TO_SIGN ${IHV_FILES_TO_SIGN})
+set_property(GLOBAL PROPERTY IHV_FILES_TO_PUBLISH ${IHV_FILES_TO_PUBLISH})
 
+
+# Place to make IHV libs dependent, so they are build before Assets
 if(MLPERF_IHV_NATIVE_OPENVINO)
 	add_dependencies(assets ihv_native_openvino)
 endif()
@@ -396,11 +494,11 @@ target_link_libraries(${PROJECT_NAME} dylib)
 add_dependencies(${PROJECT_NAME} IHVs)
 
 add_dependencies(${PROJECT_NAME} assets)
-
 target_link_libraries(${PROJECT_NAME} assets)
 
 add_dependencies(${PROJECT_NAME} minizip-ng)
 target_include_directories(${PROJECT_NAME} PRIVATE ${MINIZIP_INCLUDE_DIR})
+
 
 target_compile_definitions(${PROJECT_NAME} PUBLIC "WITH_IHV_NATIVE_OPENVINO=$<BOOL:${MLPERF_IHV_NATIVE_OPENVINO}>")
 target_compile_definitions(${PROJECT_NAME} PUBLIC "WITH_IHV_ORT_GENAI=$<BOOL:${MLPERF_IHV_ORT_GENAI}>")
@@ -410,6 +508,7 @@ target_compile_definitions(${PROJECT_NAME} PUBLIC "WITH_IHV_GGML=$<BOOL:${MLPERF
 target_compile_definitions(${PROJECT_NAME} PUBLIC "WITH_IHV_GGML_VULKAN=$<BOOL:${MLPERF_IHV_GGML_VULKAN}>")
 target_compile_definitions(${PROJECT_NAME} PUBLIC "WITH_IHV_GGML_CUDA=$<BOOL:${MLPERF_IHV_GGML_CUDA}>")
 target_compile_definitions(${PROJECT_NAME} PUBLIC "WITH_IHV_GGML_METAL=$<BOOL:${MLPERF_IHV_GGML_METAL}>")
+target_compile_definitions(${PROJECT_NAME} PUBLIC "WITH_IHV_GGML_ROCM=$<BOOL:${MLPERF_IHV_GGML_ROCM}>")
 target_compile_definitions(${PROJECT_NAME} PUBLIC "WITH_IHV_MLX=$<BOOL:${MLPERF_IHV_MLX}>")
 target_compile_definitions(${PROJECT_NAME} PUBLIC "WITH_IHV_NATIVE_QNN=$<BOOL:${MLPERF_IHV_NATIVE_QNN}>")
 target_compile_definitions(${PROJECT_NAME} PUBLIC "VENDORS_DEFAULT_PACKED=$<BOOL:${MLPERF_PACK_VENDORS_DEFAULT}>")
@@ -417,19 +516,23 @@ target_compile_definitions(${PROJECT_NAME} PUBLIC "VENDORS_DEFAULT_PACKED=$<BOOL
 option(MLPERF_SKIP_DOWNLOAD_FOR_UNSUPPORTED_EPS "Ignores model overrides and ep dependencies download for EP not supported" ON)
 target_compile_definitions(${PROJECT_NAME} PUBLIC "IGNORE_FILES_FROM_DISABLED_EPS=$<BOOL:${MLPERF_SKIP_DOWNLOAD_FOR_UNSUPPORTED_EPS}>")
 
+
 if(WIN32)
 set(EXTRA_LIBRARIES Ws2_32.lib Rpcrt4.lib wbemuuid.lib)
+elseif(APPLE)
+    find_package(Iconv REQUIRED)
+    set(EXTRA_LIBRARIES "-framework CoreFoundation" "-framework Foundation" ${Iconv_LIBRARIES})
 
-else()
-find_package(Iconv REQUIRED)
-set(EXTRA_LIBRARIES "-framework CoreFoundation" "-framework Foundation" ${Iconv_LIBRARIES})
+    if (IOS)
+		list(APPEND EXTRA_LIBRARIES "-framework Metal")
+    else()
+		list(APPEND EXTRA_LIBRARIES infoware)
+    endif()
+else() # Linux
+	set(EXTRA_LIBRARIES dl rt pthread)
+	set(APR_LIBRARIES ${LOG4CXX_LIB_DIR}/libapr-1.a ${LOG4CXX_LIB_DIR}/libapriconv-1.a ${LOG4CXX_LIB_DIR}/libaprutil-1.a ${LOG4CXX_LIB_DIR}/libexpat.a)
+endif()
 
-if (IOS)
-	list(APPEND EXTRA_LIBRARIES "-framework Metal")
-else()
-    list(APPEND EXTRA_LIBRARIES infoware)
-endif()
-endif()
 
 # Force enable exceptions for extern C functions
 target_compile_options(${PROJECT_NAME} PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/EHsc>)
@@ -444,6 +547,6 @@ include_directories(
 	"../../deps/gen-ai/"
 	"../../deps/gen-ai/tokenizer"
 )
-target_link_libraries(${PROJECT_NAME} ${HTTPLIB_LIBRARY} ${LOG4CXX_LIBRARY} ${MINIZIB_LINK_LIBS} ${EXTRA_LIBRARIES} nlohmann_json::nlohmann_json nlohmann_json_schema_validator::validator tokenizer)
-target_link_libraries(${PROJECT_NAME} ${MINIZIB_LINK_LIBS} ${EXTRA_LIBRARIES} common_cil)
+target_link_libraries(${PROJECT_NAME} ${HTTPLIB_LIBRARY} ${LOG4CXX_LIBRARY} ${MINIZIB_LINK_LIBS} ${EXTRA_LIBRARIES} ${APR_LIBRARIES} nlohmann_json::nlohmann_json nlohmann_json_schema_validator::validator tokenizer ${MINIZIB_LINK_LIBS})
+target_link_libraries(${PROJECT_NAME} ${MINIZIP_LINK_LIBS} ${EXTRA_LIBRARIES} common_cil)
 

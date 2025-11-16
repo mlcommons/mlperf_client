@@ -1,0 +1,55 @@
+{
+  "SystemConfig": {
+    "Comment": "WindowsML TensorRT RTX, GPU",
+    "TempPath": "",
+    "EPDependenciesConfigPath": ""
+  },
+  "Scenarios": [
+    {
+      "Name": "Llama3",
+      "Models": [
+        {
+          "ModelName": "Llama-3.1-8B-trt-rtx",
+          "FilePath": "https://client.mlcommons-storage.org/deps/1.5/scenario_files/llm/llama3/models/WindowsML/GPU/NvTensorRtRtx/model.onnx",
+          "DataFilePath": "https://client.mlcommons-storage.org/deps/1.5/scenario_files/llm/llama3/models/WindowsML/GPU/NvTensorRtRtx/model.onnx.data",
+          "TokenizerPath": "https://client.mlcommons-storage.org/deps/1.5/scenario_files/llm/llama3/models/WindowsML/GPU/NvTensorRtRtx/tokenizer.zip"
+        }
+      ],
+      "InputFilePath": {
+        "base": [
+          "https://client.mlcommons-storage.org/deps/1.5/scenario_files/llm/llama3/prompts/content_generation/greedy-prompt_cot.39329.json",
+          "https://client.mlcommons-storage.org/deps/1.5/scenario_files/llm/llama3/prompts/content_generation/greedy-prompt_t0.677207.json",
+          "https://client.mlcommons-storage.org/deps/1.5/scenario_files/llm/llama3/prompts/creative_writing/greedy-prompt_niv.123362.json",
+          "https://client.mlcommons-storage.org/deps/1.5/scenario_files/llm/llama3/prompts/creative_writing/greedy-prompt_niv.77134.json",
+          "https://client.mlcommons-storage.org/deps/1.5/scenario_files/llm/llama3/prompts/summarization/greedy-prompt_flan.1221607.json",
+          "https://client.mlcommons-storage.org/deps/1.5/scenario_files/llm/llama3/prompts/summarization/greedy-prompt_flan.1221694.json",
+          "https://client.mlcommons-storage.org/deps/1.5/scenario_files/llm/llama3/prompts/summarization2k/greedy-prompt_flan.1854150.json",
+          "https://client.mlcommons-storage.org/deps/1.5/scenario_files/llm/llama3/prompts/summarization2k/greedy-prompt_flan.997680.json",
+          "https://client.mlcommons-storage.org/deps/1.5/scenario_files/llm/llama3/prompts/code_analysis/command_parser_cpp_2k.json",
+          "https://client.mlcommons-storage.org/deps/1.5/scenario_files/llm/llama3/prompts/code_analysis/performance_counter_group_cpp_2k.json"
+        ],
+        "extended": [
+          "https://client.mlcommons-storage.org/deps/1.5/scenario_files/llm/llama3/prompts/intermediate4k/booksum_4k.json",
+          "https://client.mlcommons-storage.org/deps/1.5/scenario_files/llm/llama3/prompts/intermediate4k/downloader_cpp_4k.json",
+          "https://client.mlcommons-storage.org/deps/1.5/scenario_files/llm/llama3/prompts/substantial8k/booksum_8k.json",
+          "https://client.mlcommons-storage.org/deps/1.5/scenario_files/llm/llama3/prompts/substantial8k/gov_report_train_infrastructure.json"
+        ]
+      },
+      "AssetsPath": [],
+      "ResultsVerificationFile": "https://client.mlcommons-storage.org/deps/1.5/scenario_files/llm/generation-greedy-results.json",
+      "DataVerificationFile": "",
+      "Iterations": 3,
+      "Delay": 0,
+      "ExecutionProviders": [
+        {
+          "Name": "WindowsML",
+          "Config": {
+            "device_type": "GPU",
+            "device_ep": "NvTensorRtRtx",
+            "device_vendor": "NVIDIA"
+          }
+        }
+      ]
+    }
+  ]
+}

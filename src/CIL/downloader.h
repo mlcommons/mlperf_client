@@ -51,7 +51,8 @@ class Downloader {
    *
    */
 
-  bool operator()(const std::string& file_url,
+  bool operator()(const std::string& file_url, bool get_remote_size_only,
+                  uint64_t& file_size,
                   const DownloadProgressCallback& progress_callback) const;
   /**
    * @brief Interrupts the download process.
@@ -81,10 +82,17 @@ class Downloader {
                      uint64_t end, const std::string& output_file_path,
                      std::atomic<uint64_t>& progress,
                      std::atomic<bool>& has_failed, int retry) const;
+  bool GetRemoteFileSize(const std::string& file_url,
+                         uint64_t& file_size) const;
 
   template <typename ClientType>
   void SetProxyIfAvailable(ClientType& client) const;
   std::pair<std::string, int> ParseProxy(const std::string_view& proxy) const;
+
+  template <typename ClientType>
+  bool GetRemoteFileMeta(ClientType& client, const std::string& host_file_path,
+                         uint64_t& file_size,
+                         bool* accepts_range = nullptr) const;
 };
 
 }  // namespace cil

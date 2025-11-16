@@ -51,6 +51,10 @@
         <file>resources/icons/nvidia_logo.png</file>
         <file>resources/icons/qualcomm_logo.png</file>
         <file>resources/icons/amd_logo.png</file>
+        <file>resources/icons/category_base.png</file>
+        <file>resources/icons/category_experimental.png</file>
+        <file>resources/icons/category_extended.png</file>
+        <file>resources/icons/category_deprecated.png</file>
     </qresource>
     <qresource prefix="/fonts">
         <file>resources/fonts/Roboto/Roboto-Black.ttf</file>

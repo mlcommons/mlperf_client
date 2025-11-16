@@ -27,7 +27,7 @@ InformationCardWidget::InformationCardWidget(
   header_layout->addStretch();
 
   QHBoxLayout* main_layout = new QHBoxLayout();
-  main_layout->setContentsMargins(15, 15, 10, 10);
+  main_layout->setContentsMargins(15, 0, 10, 10);
   main_layout->setSpacing(10);
   main_layout->addWidget(image_label, 0, Qt::AlignTop);
   main_layout->addLayout(header_layout);

@@ -1,0 +1,18 @@
+MLPerf Client Benchmark from MLCommons
+======================================
+
+Welcome to MLPerf Client!
+
+This benchmark is developed by MLCommons to help evaluate client-side performance of machine learning models across various platforms.
+
+Full documentation and instructions for how to run the benchmark are available at:
+
+https://mlcommons.org/benchmarks/client/
+
+Please consult the web page for the latest information, setup guides, and usage instructions.
+
+Thank you for using MLPerf Client!
+
+--
+
+For license information related to the models and data sets used in MLPerf Client, please see the included license.txt file.

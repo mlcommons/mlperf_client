@@ -9,15 +9,51 @@ class SystemMonitoringWidget;
 class LogsWidget;
 
 namespace gui {
+struct BenchmarkStatus;
 namespace views {
+
+/**
+ * @class RealTimeMonitoringPage
+ * @brief Page for real-time monitoring of benchmark execution and system
+ * performance.
+ */
 class RealTimeMonitoringPage : public AbstractView {
   Q_OBJECT
  public:
   explicit RealTimeMonitoringPage(QWidget *parent = nullptr);
+
+  /**
+   * @brief Show/hide performance counters and metrics.
+   */
   void SetHideCounters(bool hide);
 
+  /**
+   * @brief Show a confirmation pop-up for data download.
+   * @param size_in_bytes size of the data to be downloaded, in bytes.
+   * @return true if the user confirms, false otherwise.
+   */
+  bool RequestDownload(uint64_t size_in_bytes);
+
+  /**
+   * @brief Show a status dialog with benchmark result details.
+   * @param action_type type of benchmark action.
+   * @param status result details of the benchmark action.
+   */
+  void ShowStatus(const QString &action_type, const BenchmarkStatus &status);
+
+  /**
+   * @brief Access execution progress widget.
+   */
   ExecutionProgressWidget *GetExecutionProgressWidget() const;
+
+  /**
+   * @brief Access logs widget.
+   */
   LogsWidget *GetLogsWidget() const;
+
+  /**
+   * @brief Access system monitoring widget.
+   */
   SystemMonitoringWidget *GetSystemMonitoringWidget() const;
 
  protected:

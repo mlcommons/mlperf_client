@@ -27,7 +27,6 @@ BaseInference::BaseInference(const std::string& model_path,
     : model_path_(model_path),
       deps_dir_(deps_dir),
       ep_(ep),
-      api_type_("IHV"),
       ep_settings_(ep_settings),
       benchmark_time_(0),
       scenario_name_(scenario_name),
@@ -53,18 +52,16 @@ BaseInference::BaseInference(const std::string& model_path,
     }
   };
 
-  api_handler_ = std::make_unique<API_Handler>(
-      API_Handler::Type::kIHV,
-      library_path, logger);
+  api_handler_ = std::make_unique<API_Handler>(library_path, logger);
 
   if (!api_handler_->Setup(EPToString(ep), scenario_name_, model_path,
                            deps_dir_, ep_settings, device_type_))
-    error_message_ = "Failed to setup " + api_type_;
+    error_message_ = "Failed to setup IHV";
 }
 
 BaseInference::~BaseInference() {
   if (!api_handler_->Release())
-    error_message_ = "Failed to release " + api_type_;
+    error_message_ = "Failed to release IHV";
 }
 
 double cil::infer::BaseInference::GetBenchmarkTime() const {

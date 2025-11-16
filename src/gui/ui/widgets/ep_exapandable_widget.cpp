@@ -2,8 +2,10 @@
 
 #include <QCheckBox>
 #include <QLayout>
+#include <QListView>
 #include <QPushButton>
 
+#include "elided_label.h"
 #include "json_schema_pair.h"
 
 #define NO_OF_WIDGETS_IN_ROW 2
@@ -100,9 +102,9 @@ nlohmann::json ContentWidget::GetConfiguration() {
 
 EPExpandableHeaderWidget::EPExpandableHeaderWidget(
     const QString &ep_name, const QString &short_description,
-    const QString &help_text, QWidget *parent)
+    const QString &help_text, const QString &category, QWidget *parent)
     : QWidget(parent) {
-  SetupUi(ep_name, short_description, help_text);
+  SetupUi(ep_name, short_description, help_text, category);
   SetupConnections();
   SetSelected(false);
 }
@@ -113,6 +115,9 @@ void EPExpandableHeaderWidget::SetDeletable(bool b) {
 
 bool EPExpandableHeaderWidget::IsSelected() const {
   return m_select_button->isChecked();
+}
+QString EPExpandableHeaderWidget::GetPromptsType() const {
+  return m_prompts_box->currentText().toLower();
 }
 
 void EPExpandableHeaderWidget::SetChecked(bool checked) const {
@@ -133,11 +138,9 @@ void EPExpandableHeaderWidget::SetEPNameWidth(int width) {
 
 void EPExpandableHeaderWidget::SetupUi(const QString &ep_name,
                                        const QString &short_description,
-                                       const QString &help_text) {
+                                       const QString &help_text,
+                                       const QString &category) {
   setFixedHeight(60);
-  m_layout = new QHBoxLayout(this);
-  m_layout->setContentsMargins(15, 5, 15, 5);
-  m_layout->setSpacing(20);
 
   m_select_button = new QCheckBox(this);
   m_select_button->setProperty("class", "primary_checkbox");
@@ -147,13 +150,55 @@ void EPExpandableHeaderWidget::SetupUi(const QString &ep_name,
   m_ep_name->setProperty("class", "ep_name_label");
   m_ep_name->setMinimumWidth(200);
 
-  m_info_icon = new QLabel(this);
-  m_info_icon->setFixedSize(16, 16);
-  m_info_icon->setPixmap(QPixmap(":/icons/resources/icons/ep_info_icon.png"));
-  m_info_icon->setToolTip(help_text);
+  QLabel *info_icon = new QLabel(this);
+  info_icon->setPixmap(
+      QIcon(":/icons/resources/icons/ep_info_icon.png").pixmap(16, 16));
+  info_icon->setToolTip(help_text);
 
-  m_short_description = new QLabel(short_description, this);
-  m_short_description->setObjectName("ep_short_description_label");
+  ElidedLabel *description_label = new ElidedLabel(short_description, this);
+  description_label->setObjectName("ep_short_description_label");
+
+  m_prompts_box = new QComboBox(this);
+  m_prompts_box->setView(new QListView());
+  m_prompts_box->addItems({"Base", "Extended", "Both"});
+  m_prompts_box->setItemData(0, "Run the benchmark on base prompts only.",
+                             Qt::ToolTipRole);
+  m_prompts_box->setItemData(
+      1, "Run the benchmark on extended (4k/8k) prompts only.",
+      Qt::ToolTipRole);
+  m_prompts_box->setItemData(
+      2, "Run the benchmark on both base and extended prompts.",
+      Qt::ToolTipRole);
+
+  // m_prompts_box->setProperty("class", "secondary_checkbox");
+  QLabel *ext_prompts_label = new QLabel("Prompts", this);
+  ext_prompts_label->setObjectName("ep_short_description_label");
+  QHBoxLayout *ext_prompts_layout = new QHBoxLayout();
+  ext_prompts_layout->setSpacing(5);
+  ext_prompts_layout->addWidget(ext_prompts_label);
+  ext_prompts_layout->addWidget(m_prompts_box);
+  m_prompts_widget = new QWidget(this);
+  m_prompts_widget->setLayout(ext_prompts_layout);
+
+  QLabel *category_icon = new QLabel(this);
+  category_icon->setPixmap(
+      QIcon(QString(":/icons/resources/icons/category_%1.png").arg(category))
+          .pixmap(16, 16));
+
+  QString category_text_upper = category;
+  if (!category_text_upper.isEmpty())
+    category_text_upper[0] = category_text_upper[0].toUpper();
+  QLabel *category_label = new QLabel(category_text_upper, this);
+  category_label->setProperty("class", "medium_normal_label");
+
+  QHBoxLayout *category_layout = new QHBoxLayout;
+  category_layout->setContentsMargins(10, 0, 10, 0);
+  category_layout->addWidget(category_icon);
+  category_layout->addWidget(category_label);
+  QWidget *category_widget = new QWidget(this);
+  category_widget->setProperty("class", "category_widget");
+  category_widget->setProperty("category", category);
+  category_widget->setLayout(category_layout);
 
   // Add and Delete buttons
   auto createBtnFn = [this](const QString &icon_normal,
@@ -174,14 +219,20 @@ void EPExpandableHeaderWidget::SetupUi(const QString &ep_name,
   m_delete_button = createBtnFn(":/icons/resources/icons/delete.png",
                                 ":/icons/resources/icons/delete_disabled.png");
 
-  m_layout->addWidget(m_select_button);
-  m_layout->addWidget(m_ep_name);
-  m_layout->addSpacing(20);
-  m_layout->addWidget(m_info_icon);
-  m_layout->addWidget(m_short_description, 1);
-  m_layout->addWidget(m_delete_button);
-  m_layout->addWidget(m_add_button);
-  setLayout(m_layout);
+  QHBoxLayout *main_layout = new QHBoxLayout(this);
+  main_layout->setContentsMargins(15, 5, 15, 5);
+  main_layout->setSpacing(5);
+  main_layout->addWidget(m_select_button);
+  main_layout->addWidget(m_ep_name);
+  main_layout->addSpacing(5);
+  main_layout->addWidget(info_icon);
+  main_layout->addWidget(description_label, 1);
+  main_layout->addWidget(category_widget);
+  main_layout->addWidget(m_prompts_widget);
+  main_layout->addWidget(m_delete_button);
+  main_layout->addSpacing(5);
+  main_layout->addWidget(m_add_button);
+  setLayout(main_layout);
 }
 
 void EPExpandableHeaderWidget::SetupConnections() {
@@ -194,6 +245,7 @@ void EPExpandableHeaderWidget::SetupConnections() {
 }
 
 void EPExpandableHeaderWidget::SetSelected(bool selected) {
+  m_prompts_widget->setVisible(selected);
   m_add_button->setVisible(selected);
   m_delete_button->setVisible(selected);
   emit SelectionChanged(selected);
@@ -201,11 +253,13 @@ void EPExpandableHeaderWidget::SetSelected(bool selected) {
 
 EPExpandableWidget::EPExpandableWidget(
     const QString &ep_name, const QString &short_description,
-    const QString &help_text, const QStringList &devices,
-    const nlohmann::json &fields, const nlohmann::json &values, QWidget *parent)
+    const QString &help_text, const QString &category,
+    const QStringList &devices, const nlohmann::json &fields,
+    const nlohmann::json &values, QWidget *parent)
 
     : ExpandableWidget(parent) {
-  SetupUi(ep_name, short_description, help_text, devices, fields, values);
+  SetupUi(ep_name, short_description, help_text, category, devices, fields,
+          values);
   SetupConnections();
 
   OnSelectionChanged(m_header_widget->IsSelected());
@@ -217,6 +271,10 @@ void EPExpandableWidget::SetDeletable(bool b) {
 
 bool EPExpandableWidget::IsSelected() const {
   return m_header_widget->IsSelected();
+}
+
+QString EPExpandableWidget::GetPromptsType() const {
+  return m_header_widget->GetPromptsType();
 }
 
 int EPExpandableWidget::GetEPNameWidthHint() const {
@@ -234,13 +292,14 @@ void EPExpandableWidget::SetEPNameWidth(int width) {
 void EPExpandableWidget::SetupUi(const QString &ep_name,
                                  const QString &short_description,
                                  const QString &help_text,
+                                 const QString &category,
                                  const QStringList &devices,
                                  const nlohmann::json &fields,
                                  const nlohmann::json &values) {
   QString description = short_description;
   if (devices.empty()) description += " (No Supported Device)";
-  m_header_widget =
-      new EPExpandableHeaderWidget(ep_name, description, help_text, this);
+  m_header_widget = new EPExpandableHeaderWidget(ep_name, description,
+                                                 help_text, category, this);
   if (devices.empty()) m_header_widget->setEnabled(false);
 
   m_content_widget = new ContentWidget(fields, values, devices, this);
@@ -269,5 +328,4 @@ void EPExpandableWidget::OnSelectionChanged(bool is_selected) {
   if (expand_button_->isChecked()) expand_button_->click();
   expand_button_->setVisible(is_selected);
   emit SelectionChanged(is_selected);
-
 }

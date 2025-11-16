@@ -28,8 +28,7 @@ std::string LlmInference::formConfigStringLlama3(
                                        {"pos-id-dim", 64},
                                        {"cpu-mask", "0xe0"},  
                                        {"kv-dim", 128},
-                                       {"rope-theta", 500000}, 
-                                       {"enable-graph-switching", false}};
+                                       {"rope-theta", 500000}};
 
     npu_engine["backend"]["extensions"] =
         model_folder_ + "/htpBackendExtConfig.json";
@@ -51,7 +50,7 @@ std::string LlmInference::formConfigStringLlama3(
     cpu_engine["backend"]["type"] = "QnnGenAiTransformer";
     cpu_engine["backend"]["QnnGenAiTransformer"] = {{"version", 1},
                                                     {"n-kv-heads", 8},
-                                                    {"use-in-memory", true},
+                                                    {"enable-in-memory-kv-share", true},
                                                     {"kv-quantization", true}};
     cpu_engine["model"]["version"] = 1;
     cpu_engine["model"]["type"] = "library";

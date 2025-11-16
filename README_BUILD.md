@@ -142,8 +142,8 @@ These steps will ensure you have all the necessary tools and components to build
 
 2. Clone the repository and navigate to the directory:
    ```
-   git clone --recurse-submodules https://github.com/mlcommons/mlperf_client_dev.git
-   cd mlperf_client_dev
+   git clone --recurse-submodules https://github.com/mlcommons/mlperf_client.git
+   cd mlperf_client
    ```
 ### macOS Build Instructions
 
@@ -195,6 +195,52 @@ The application will be located in `Bin/MacOS/Debug/mlperf-macos`.
 - Open the `MLPerf.xcodeproj` project file in Xcode and select `GUI` as the target.
 - Choose an iOS device as the run destination.
 - Build and run the app in Xcode on the selected device.
+
+### Linux Build Instructions
+
+Dependencies: 
+
+```bash
+lsb_release -a
+  No LSB modules are available.
+  Distributor ID: Ubuntu
+  Description:    Ubuntu 24.04.3 LTS
+  Release:        24.04
+  Codename:       noble
+
+sudo apt install -y git curl wget build-essential cmake git-lfs clang-tidy libapr1-dev libapr1t64
+
+git clone --recurse-submodules https://github.com/mlcommons/mlperf_client.git
+cd mlperf_client
+
+git-lfs pull
+git submodule update --remote --recursive --init
+```
+
+#### Linux CLI Build
+
+1. Generate the build configuration with CMake
+
+```bash
+export CC=/usr/bin/gcc
+export CXX=/usr/bin/g++
+
+mkdir -p "build"
+cmake -G "Unix Makefiles" -S . -B build
+```
+
+2. Build the application
+
+```bash
+cd build
+make
+```
+
+2. Run the application
+
+The application will be located in `Bin/Linux/Release/mlperf-linux`.
+
+#### Windows GUI Build
 
 ### Windows Build Instructions
 

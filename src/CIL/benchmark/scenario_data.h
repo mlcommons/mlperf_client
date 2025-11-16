@@ -21,6 +21,7 @@ struct ScenarioData {
   std::optional<std::string> output_results_file_paths;
 
   std::vector<std::pair<ExecutionProviderConfig, std::string>> prepared_eps;
+  std::map<std::string, uint64_t> remote_file_sizes;
 
   std::map<std::string, std::string> path_to_source_map;
   std::map<std::string, std::string> source_to_path_map;

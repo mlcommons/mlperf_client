@@ -11,22 +11,41 @@
 #include "ep_progress_widget.h"
 #include "toggle_button.h"
 
+/**
+ * @class ExecutionProgressWidget
+ * @brief Main widget for tracking benchmark execution progress.
+ */
 class ExecutionProgressWidget : public QWidget {
   Q_OBJECT
+
  public:
   explicit ExecutionProgressWidget(QWidget *parent = nullptr);
+
   void SetProgress(int value);
+
   void SetEpSelected(int index);
+
   int GetCurrentSelectedEP() const;
+
+  QString GetEPDisplayName(int index) const;
+
   int GetTotalEPs() const;
+
   void SetSelectedEpProgress(int total_steps, int current_step);
-  int AddEPProgressWidget(QString name, QString description, QString icon_path,
-                          QString long_name);
+
+  int AddEPProgressWidget(const QString &name, const QString &description,
+                          const QString &icon_path, const QString &long_name,
+                          const QString &model_name);
   void MoveToNextEP(bool current_success);
+
   void ClearEPs();
+
   void AddEP(const QString &name, const QString &description,
-             const QString &device_type, const QString &long_name);
+             const QString &device_type, const QString &long_name,
+             const QString &model_name);
+
   void SetTaskName(const QString &name);
+
   void SetCancelingState(bool on);
 
  private:
@@ -39,8 +58,10 @@ class ExecutionProgressWidget : public QWidget {
   QLabel *m_alert_icon;
   QPushButton *m_cancel_button;
   int current_selected_ep = -1;
+
   void setup_ui();
   void setup_connections();
+
  signals:
   void HideCountersToggled(bool checked);
   void CancelClicked();

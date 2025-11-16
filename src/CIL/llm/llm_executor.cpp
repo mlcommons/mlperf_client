@@ -238,7 +238,7 @@ LLMExecutor::LLMExecutor(ModelType model_type, const std::string& model_path,
       current_prompt_(0),
       task_description_(ep_name + " for " + ModelTypeToString(model_type)),
       llm_executor_logger_(GetLoggerByModelType(model_type)),
-      skip_failed_prompts_(skip_failed_prompts) {
+      skip_failed_required_prompts_(skip_failed_prompts) {
   // init result
   benchmark_result_.scenario_name = ModelTypeToString(model_type);
 
@@ -502,15 +502,16 @@ void LLMExecutor::RunLLMTask(EP ep, const nlohmann::json& settings) {
   LOG4CXX_INFO(
       llm_executor_logger_,
       "Running " << ep_name_ << " on " << inference->GetDeviceType() << " for "
-                 << model_type
-                 << " with " << iterations_ << " iterations."
+                 << model_type << " with " << iterations_ << " iterations."
                  << " The first iteration will be used to warm up the log.");
 
+  const auto& required_categories = BenchmarkResult::kLLMRequiredCategories;
   std::unordered_map<std::string, std::vector<PromptPerformanceResult>>
       prompt_perf_results;
 
   std::vector<std::vector<size_t>> skipped_prompts;
-  int32_t skipped_prompts_count = 0;
+  bool has_skipped_prompts = false;
+  bool has_skipped_required_prompts = false;
   for (const std::string& input_path : input_paths_) {
     if (status_ == Status::kCanceled) return;
 
@@ -550,12 +551,15 @@ void LLMExecutor::RunLLMTask(EP ep, const nlohmann::json& settings) {
     }
 
     model_initialized = true;
-
+    bool is_required_category =
+        std::ranges::find(required_categories, category) !=
+        required_categories.end();
     std::vector<size_t> skipped_prompts_for_input;
     size_t prompt_index = 0;
     for (size_t i = 0; i < input_prompts.size(); ++i) {
       const auto& prompt = input_prompts[i];
       LOG4CXX_DEBUG(llm_executor_logger_, "Prompt: " + prompt);
+      LOG4CXX_DEBUG(llm_executor_logger_, "Category: " + category);
 
       // Tokenize input text
       std::vector<std::string_view> input_texts = {prompt};
@@ -577,7 +581,6 @@ void LLMExecutor::RunLLMTask(EP ep, const nlohmann::json& settings) {
       auto check_error = [&]() {
         if (const auto& infer_error_message = inference->GetErrorMessage();
             !infer_error_message.empty()) {
-          status_ = Status::kFailed;
           benchmark_result_.error_message = inference->GetErrorMessage(false);
           benchmark_result_.ep_error_messages = inference->GetEPErrorMessages();
           is_success = false;
@@ -586,9 +589,10 @@ void LLMExecutor::RunLLMTask(EP ep, const nlohmann::json& settings) {
         return false;
       };
 
-      for (int iter = 0; iter < iterations_ + iterations_warmup_; ++iter,
-               ++current_session_index,
-               progress_ = current_session_index * 100 / sessions_count) {
+      int iter = 0;
+      for (; iter < iterations_ + iterations_warmup_;
+           ++iter, ++current_session_index,
+           progress_ = current_session_index * 100 / sessions_count) {
         if (status_ == Status::kCanceled) {
           LOG4CXX_DEBUG(llm_executor_logger_, "Canceled");
           inference->Deinit();
@@ -708,18 +712,24 @@ void LLMExecutor::RunLLMTask(EP ep, const nlohmann::json& settings) {
                         });
       }
 
+      all_prompt_index = prompt_index;
+      current_prompt_ = prompt_index;
+
       // Update benchmark time and progress
       if (!is_success || empty_tokens) {
-        if (skip_failed_prompts_) {
+        if (skip_failed_required_prompts_ || !is_required_category) {
           skipped_prompts_for_input.push_back(i);
-          skipped_prompts_count++;
+          has_skipped_prompts = true;
+          if (is_required_category) has_skipped_required_prompts = true;
+          // increase the session index by skipped interations count
+          current_session_index += iterations_ + iterations_warmup_ - iter;
+          progress_ = current_session_index * 100 / sessions_count;
           inference->ClearErrorMessage();
           inference->Deinit();
           inference->Init(model_config);
 
           continue;
-        }
-        else {
+        } else {
           status_ = Status::kFailed;
           if (benchmark_result_.error_message.empty()) {
             benchmark_result_.error_message =
@@ -739,8 +749,6 @@ void LLMExecutor::RunLLMTask(EP ep, const nlohmann::json& settings) {
 
     skipped_prompts.push_back(skipped_prompts_for_input);
 
-    all_prompt_index = prompt_index;
-    current_prompt_ = prompt_index;
   }  // input path
 
   if (model_initialized) {
@@ -751,7 +759,7 @@ void LLMExecutor::RunLLMTask(EP ep, const nlohmann::json& settings) {
     status_ = Status::kCompleted;
   }
 
-  /// Calculate overall benchmark metrics
+  // Calculate benchmark metrics
   benchmark_result_.is_llm_benchmark = true;
   benchmark_result_.benchmark_success = status_ == Status::kCompleted;
   benchmark_result_.device_type = inference->GetDeviceType();
@@ -794,68 +802,59 @@ void LLMExecutor::RunLLMTask(EP ep, const nlohmann::json& settings) {
             [](const auto& r) { return r.avg_ttft.count() / kMsToSecRatio; });
   }
 
-  if (skipped_prompts_count == 0) {
-    const auto& requiredCategories = BenchmarkResult::kLLMRequiredCategories;
-
-    bool haves_all_required_categories =
-        per_category_perf_results.size() == requiredCategories.size();
-
-    if (haves_all_required_categories) {
-      if ((ep == EP::kIHVWindowsML) && (utils::StringToLowerCase(settings.value("device_ep", "null")) != "openvino")) {
-        haves_all_required_categories = false;
-        LOG4CXX_WARN(llm_executor_logger_,
-                       "IHV WindowsML without OpenVINO device_ep. Overall "
-                       "performance results will not be calculated.");
-      } else {
-        for (const auto& category : per_category_perf_results) {
-          if (requiredCategories.find(category.first) ==
-              requiredCategories.end()) {
-            haves_all_required_categories = false;
-            LOG4CXX_WARN(llm_executor_logger_,
-                         "Some required categories are missing. Overall "
-                         "performance results will not be calculated.");
-            break;
-          }
-        }
-      }
-    } else if (per_category_perf_results.size() > requiredCategories.size()) {
-      LOG4CXX_WARN(llm_executor_logger_,
-                   "Some categories are not required. Overall performance "
-                   "results will not be calculated.");
-    }
-
-    if (haves_all_required_categories) {
-      PerformanceResult overall_performance_results{};
-
-      overall_performance_results.average_generated_tokens = arithmean<double>(
-          per_category_perf_results.begin(), per_category_perf_results.end(),
-          [](const auto& r) { return r.second.average_generated_tokens; });
-      overall_performance_results.average_input_tokens = arithmean<double>(
-          per_category_perf_results.begin(), per_category_perf_results.end(),
-          [](const auto& r) { return r.second.average_input_tokens; });
-      overall_performance_results.time_to_first_token_duration =
-          geomean<double>(per_category_perf_results.begin(),
-                          per_category_perf_results.end(), [](const auto& r) {
-                            return r.second.time_to_first_token_duration;
-                          });
-      overall_performance_results.token_generation_rate = geomean<double>(
-          per_category_perf_results.begin(), per_category_perf_results.end(),
-          [](const auto& r) { return r.second.token_generation_rate; });
-
-      if (!per_category_perf_results
-               .try_emplace(BenchmarkResult::kLLMOverallCategory,
-                            overall_performance_results)
-               .second) {
-        LOG4CXX_ERROR(llm_executor_logger_,
-                      "'Overall' category already present in the list. Prompts "
-                      "shall not have it.");
-        status_ = Status::kFailed;
-      }
-    }
-  } else {
+  if (has_skipped_prompts)
     LOG4CXX_WARN(llm_executor_logger_,
-                 "Some prompts were skipped due to empty output. Overall "
+                 "Some prompts were skipped due to empty output.");
+
+  bool calculate_overall_results = true;
+  if (has_skipped_required_prompts) {
+    LOG4CXX_WARN(llm_executor_logger_,
+                 "Since some required prompts were skipped, overall "
                  "performance results will not be calculated.");
+    calculate_overall_results = false;
+  }
+
+  CategoryPerformanceResult required_perf_results{};
+  if (calculate_overall_results) {
+    for (const auto& category : required_categories) {
+      if (auto it = per_category_perf_results.find(category);
+          it != per_category_perf_results.end()) {
+        required_perf_results[it->first] = it->second;
+      } else {
+        calculate_overall_results = false;
+        LOG4CXX_WARN(llm_executor_logger_,
+                     "Some required categories are missing. Overall "
+                     "performance results will not be calculated.");
+        break;
+      }
+    }
+  }
+
+  if (calculate_overall_results) {
+    PerformanceResult overall_performance_results{};
+
+    overall_performance_results.average_generated_tokens = arithmean<double>(
+        required_perf_results.begin(), required_perf_results.end(),
+        [](const auto& r) { return r.second.average_generated_tokens; });
+    overall_performance_results.average_input_tokens = arithmean<double>(
+        required_perf_results.begin(), required_perf_results.end(),
+        [](const auto& r) { return r.second.average_input_tokens; });
+    overall_performance_results.time_to_first_token_duration = geomean<double>(
+        required_perf_results.begin(), required_perf_results.end(),
+        [](const auto& r) { return r.second.time_to_first_token_duration; });
+    overall_performance_results.token_generation_rate = geomean<double>(
+        required_perf_results.begin(), required_perf_results.end(),
+        [](const auto& r) { return r.second.token_generation_rate; });
+
+    if (!per_category_perf_results
+             .try_emplace(BenchmarkResult::kLLMOverallCategory,
+                          overall_performance_results)
+             .second) {
+      LOG4CXX_ERROR(llm_executor_logger_,
+                    "'Overall' category already present in the list. Prompts "
+                    "shall not have it.");
+      status_ = Status::kFailed;
+    }
   }
 
   benchmark_result_.duration =

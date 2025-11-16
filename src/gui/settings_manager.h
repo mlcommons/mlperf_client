@@ -5,18 +5,37 @@
 #include <QString>
 #include <QVariant>
 
+/**
+ * @class SettingsManager
+ * @brief Singleton for persistent application/user settings.
+ */
 class SettingsManager {
  public:
+    /**
+   * @brief Get singleton instance.
+   * @return Reference to the singleton SettingsManager instance.
+   */
   static SettingsManager& getInstance() {
     static SettingsManager instance;
     return instance;
   }
 
+  /**
+   * @brief Set value for a given key.
+   * @param key The settings key to set.
+   * @param value The value to store for the key.
+   */
   void SetValue(const QString& key, const QVariant& value) {
     m_settings.setValue(key, value);
     m_settings.sync();
   }
-
+ 
+  /**
+   * @brief Get value for a given key, with optional default.
+   * @param key The settings key to retrieve.
+   * @param defaultValue Default value if key is not found.
+   * @return The stored value or default value if key doesn't exist.
+   */
   QVariant value(const QString& key,
                  const QVariant& defaultValue = QVariant()) const {
     return m_settings.value(key, defaultValue);

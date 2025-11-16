@@ -24,16 +24,16 @@ set(CMAKE_INCLUDE_CURRENT_DIR ON)
 include(FetchContent)
 
 if(NOT QNN_INSTALL_DIR)
-    message(STATUS "QNN_INSTALL_DIR is not set. Using QAIRT_SDK 2.35 from official source")
+    message(STATUS "QNN_INSTALL_DIR is not set. Using QAIRT_SDK 2.38.0 from official source")
 
 # Download and unpack the QAIRT SDK FILE file
 FetchContent_Declare(
   native_qnn_qairt_sdk
-  URL https://softwarecenter.qualcomm.com/api/download/software/sdks/Qualcomm_AI_Runtime_Community/All/2.35.3.250617/v2.35.3.250617.zip # URL to the QAIRT SDK ZIP file
+  URL https://softwarecenter.qualcomm.com/api/download/software/sdks/Qualcomm_AI_Runtime_Community/All/2.38.0.250901/v2.38.0.250901.zip # URL to the QAIRT SDK ZIP file
 )
 
 FetchContent_MakeAvailable(native_qnn_qairt_sdk)
-set(QNN_INSTALL_DIR "${native_qnn_qairt_sdk_SOURCE_DIR}/2.35.3.250617" CACHE PATH "Path to the QNN installation directory" FORCE)
+set(QNN_INSTALL_DIR "${native_qnn_qairt_sdk_SOURCE_DIR}/2.38.0.250901" CACHE PATH "Path to the QNN installation directory" FORCE)
 endif()
 
 find_file(QNN_README NAMES "QNN_README.txt" PATHS ${QNN_INSTALL_DIR} NO_DEFAULT_PATH REQUIRED) 

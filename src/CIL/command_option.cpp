@@ -1,4 +1,5 @@
 #include "command_option.h"
+#include <algorithm>
 
 CommandOption::CommandOption(const std::string& long_name, char short_name,
                              const std::string& help_message, bool required)

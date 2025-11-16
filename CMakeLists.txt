@@ -13,6 +13,8 @@ if(WIN32)
     set(CMAKE_GENERATOR "Visual Studio 16 2019" CACHE STRING "CMake Generator")
 elseif(APPLE)
     set(CMAKE_GENERATOR "XCode" CACHE STRING "CMake Generator")
+elseif(UNIX AND NOT APPLE)  # Linux
+    set(CMAKE_GENERATOR "Unix Makefiles" CACHE STRING "CMake Generator")
 endif()
 
 set(CMAKE_CXX_STANDARD 20)
@@ -38,7 +40,9 @@ elseif(WIN32)
 	else()
 		message(FATAL_ERROR "This project requires Windows x64.")
 	endif()
-else()
+elseif(UNIX AND NOT APPLE)  # Linux
+	set(PLATFORM "Linux")
+else()  
 		message(FATAL_ERROR "Unsupported platform.")
 endif()
 
@@ -71,6 +75,16 @@ set(CMAKE_CONFIGURATION_TYPES "Release;Debug;RelWithDebInfo" CACHE STRING "List 
 
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build, options are: Debug Release RelWithDebInfo." FORCE)
+endif()
+
+# Platform-specific compiler flags
+if(MSVC)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:>")
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
+elseif(UNIX AND NOT APPLE)  # Linux
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
 endif()
 
 add_compile_definitions(
@@ -116,6 +130,7 @@ if(WIN32)
         option(MLPERF_IHV_ORT_GENAI_RYZENAI "Enable ONNX Runtime GenAI path using RyzenAI." ON)
         set(MLPERF_IHV_GGML_VULKAN OFF)
         option(MLPERF_IHV_GGML_CUDA "Enable IHV GGML CUDA EP" ON)
+        option(MLPERF_IHV_GGML_ROCM "Enable IHV GGML ROCM EP" ON)
         option(MLPERF_IHV_WINDOWSML "Enable IHV Windows ML" ON)
     else()
         set(MLPERF_IHV_NATIVE_OPENVINO OFF)
@@ -124,21 +139,31 @@ if(WIN32)
         set(MLPERF_IHV_ORT_GENAI_RYZENAI OFF)
         set(MLPERF_IHV_GGML_VULKAN OFF)
         set(MLPERF_IHV_GGML_CUDA OFF)
+        set(MLPERF_IHV_GGML_ROCM OFF)
         option(MLPERF_IHV_WINDOWSML "Enable IHV Windows ML" OFF)
 	endif()
 
 elseif(APPLE)
 # Options to enable/disable IHV for MacOS
-
 	set(MLPERF_IHV_NATIVE_OPENVINO OFF)
 	set(MLPERF_IHV_ORT_GENAI OFF)
     set(MLPERF_IHV_ORT_GENAI_RYZENAI OFF)
     option(MLPERF_IHV_GGML_METAL "Enable IHV GGML Metal EP" ON)
     set(MLPERF_IHV_GGML_VULKAN OFF)
     set(MLPERF_IHV_GGML_CUDA OFF)
+    set(MLPERF_IHV_GGML_ROCM OFF)
     option(MLPERF_IHV_MLX "Enable IHV MLX EP" ON)
 	set(MLPERF_IHV_NATIVE_QNN OFF)
 	set(MLPERF_IHV_WINDOWSML OFF)
+elseif(UNIX AND NOT APPLE)  # Linux
+    set(MLPERF_IHV_NATIVE_OPENVINO ON)
+    set(MLPERF_IHV_ORT_GENAI OFF)
+    set(MLPERF_IHV_OGA_RYZENAI OFF)
+    set(MLPERF_IHV_GGML_METAL OFF)
+    set(MLPERF_IHV_GGML_VULKAN OFF)
+    set(MLPERF_IHV_GGML_ROCM OFF)
+    set(MLPERF_IHV_NATIVE_QNN OFF)
+    set(MLPERF_IHV_WINDOWSML OFF)
 endif()
 
 if(MLPERF_IHV_GGML_VULKAN)
@@ -166,8 +191,22 @@ endif()
 
 endif()
 
+if(MLPERF_IHV_GGML_ROCM)
+find_package(hip)
 
-if(MLPERF_IHV_GGML_METAL OR MLPERF_IHV_GGML_VULKAN OR MLPERF_IHV_GGML_CUDA)
+if(NOT hip_FOUND)
+    message(WARNING "HIP SDK not found, the build will be executed without ROCM/HIP, please install HIP SDK. ")
+    set(MLPERF_IHV_GGML_ROCM OFF)
+else()
+    message(STATUS "HIP SDK found: enabling GGML ROCM build")
+    # Detect BLAS backends used by ggml-hip and pass their dirs to subprojects
+    find_package(hipblas REQUIRED)
+    find_package(rocblas REQUIRED)
+endif()
+
+endif()
+
+if(MLPERF_IHV_GGML_METAL OR MLPERF_IHV_GGML_VULKAN OR MLPERF_IHV_GGML_CUDA OR MLPERF_IHV_GGML_ROCM)
     set(MLPERF_IHV_GGML ON CACHE BOOL "Enable IHV GGML" FORCE)
 else()
     set(MLPERF_IHV_GGML OFF CACHE BOOL "Disable IHV GGML" FORCE)

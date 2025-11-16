@@ -4,12 +4,31 @@ set(MINIZIP_INSTALL_DIR ${CMAKE_BINARY_DIR}/minizip-ng-install)
 set(MINIZIP_INCLUDE_DIR ${MINIZIP_INSTALL_DIR}/include)
 set(MINIZIP_LIB_DIR ${MINIZIP_INSTALL_DIR}/lib)
 
-if (NOT APPLE)
+if (NOT APPLE AND NOT UNIX)
     set(CMAKE_C_FLAGS_RELEASE "/MT")
     set(CMAKE_CXX_FLAGS_RELEASE "/MT")
 	set(MINIZIP_PLATFORM_COMMAND "-A ${CMAKE_GENERATOR_PLATFORM}")
+elseif(UNIX)
+    set(CMAKE_C_FLAGS_RELEASE "-fPIC -O3")
+    set(CMAKE_CXX_FLAGS_RELEASE "-fPIC -O3")
 else()
 	set(MINIZIP_PLATFORM_COMMAND "")
+endif()
+
+if(WIN32)
+    list(APPEND MINIZIB_LINK_LIBS 
+        ${MINIZIP_LIB_DIR}/bzip2.lib
+        ${MINIZIP_LIB_DIR}/lzma.lib
+        ${MINIZIP_LIB_DIR}/zlibstatic-ng.lib
+        ${MINIZIP_LIB_DIR}/zstd_static.lib
+        ${MINIZIP_LIB_DIR}/minizip.lib)
+else()
+    list(APPEND MINIZIB_LINK_LIBS 
+        ${MINIZIP_LIB_DIR}/libbzip2.a
+        ${MINIZIP_LIB_DIR}/liblzma.a
+        ${MINIZIP_LIB_DIR}/libzstd.a
+        ${MINIZIP_LIB_DIR}/libz-ng.a
+        ${MINIZIP_LIB_DIR}/libminizip.a)
 endif()
 
 ExternalProject_Add(minizip-ng
@@ -33,22 +52,6 @@ ExternalProject_Add(minizip-ng
         -DCMAKE_CXX_FLAGS_RELEASE=${CMAKE_CXX_FLAGS_RELEASE}
     BUILD_COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR}/minizip-ng-build --config Release
     INSTALL_COMMAND ${CMAKE_COMMAND} --install ${CMAKE_BINARY_DIR}/minizip-ng-build --config Release
+    BYPRODUCTS ${MINIZIB_LINK_LIBS}
 )
-
-if(APPLE)
-    list(APPEND MINIZIB_LINK_LIBS 
-        ${MINIZIP_LIB_DIR}/libbzip2.a
-        ${MINIZIP_LIB_DIR}/liblzma.a
-        ${MINIZIP_LIB_DIR}/libzstd.a
-        ${MINIZIP_LIB_DIR}/libz-ng.a
-        ${MINIZIP_LIB_DIR}/libminizip.a)
-else()
-    list(APPEND MINIZIB_LINK_LIBS 
-        ${MINIZIP_LIB_DIR}/bzip2.lib
-        ${MINIZIP_LIB_DIR}/lzma.lib
-        ${MINIZIP_LIB_DIR}/zlibstatic-ng.lib
-        ${MINIZIP_LIB_DIR}/zstd_static.lib
-        ${MINIZIP_LIB_DIR}/minizip.lib)
-endif()
-
 message(STATUS "Minizip link libraries: ${MINIZIB_LINK_LIBS}")

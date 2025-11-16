@@ -11,17 +11,24 @@ class StartPage;
 struct EPInformationCard;
 
 namespace controllers {
+/**
+ * @class StartPageController
+ * @brief Controller for the start page in the GUI.
+ */
 class StartPageController : public AbstractController {
   Q_OBJECT
  public:
   explicit StartPageController(QObject* parent = nullptr)
       : AbstractController(parent) {}
   virtual ~StartPageController() = default;
+
   void SetView(views::StartPage* view);
+
   void LoadSystemInformation();
+
   void LoadEPsInformation(const nlohmann::json& schema,
                           const QList<EPInformationCard>& configs);
-  // we return vector here instead of map, since the order matters
+                          
   QList<QPair<int, EPInformationCard>> GetCurrentEPsConfigurations() const;
 
   void ResetSelectedEPsConfigurations() const;
@@ -33,6 +40,7 @@ class StartPageController : public AbstractController {
   void OnAddEP(int base_ep_index);
   void OnDeleteEP(int ep_index);
   void OnEPsFilterChanged();
+  void OnSelectAllToggled(bool select);
 
  private:
   nlohmann::json config_schema_;

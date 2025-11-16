@@ -61,6 +61,8 @@ QVariant ResultsHistoryModel::data(const QModelIndex &index, int role) const {
       return entry.system_info_.gpu_ram;
     case Qt::UserRole + 14:
       return QVariant::fromValue(entry.system_info_);
+    case Qt::UserRole + 15:
+      return entry.config_file_comment_;
     default:
       return QVariant();
   }

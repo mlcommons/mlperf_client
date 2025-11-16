@@ -6,8 +6,8 @@
 #include <filesystem>
 #include <fstream>
 
-#include "../CLI/version.h"
 #include "utils.h"
+#include "version.h"
 
 log4cxx::LoggerPtr url_cache_logger(log4cxx::Logger::getLogger("Downloader"));
 
@@ -98,21 +98,24 @@ std::string URLCacheManager::GetFilePathFromCache(
 }
 
 void URLCacheManager::ClearCache() {
+  nlohmann::json updated_cache_;
   for (const auto& [url, file_info] : cache_.items()) {
     std::filesystem::path file_path = file_info[0];
+    bool remove_entry = true;
     if (std::filesystem::exists(file_path)) {
       try {
         std::filesystem::remove(file_path);
       } catch (const std::filesystem::filesystem_error& e) {
         LOG4CXX_ERROR(url_cache_logger, "Failed to remove file: "
                                             << file_path << ", " << e.what());
+        remove_entry = false;
       }
     }
+    if (!remove_entry) updated_cache_[url] = file_info;
   }
 
-  cache_.clear();
-  if (std::filesystem::exists(cache_file_path_))
-    std::filesystem::remove(cache_file_path_);
+  cache_ = updated_cache_;
+  StoreCacheToFile();
 }
 
 }  // namespace cil

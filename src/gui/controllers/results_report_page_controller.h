@@ -12,14 +12,20 @@ class ResultsReportPage;
 
 namespace controllers {
 
+/**
+ * @class ResultsReportPageController
+ * @brief Handles report generation and display for benchmark results.
+ */
 class ResultsReportPageController : public AbstractController {
   Q_OBJECT
 
  public:
   explicit ResultsReportPageController(QObject* parent = nullptr);
+
   void SetView(views::ResultsReportPage* view);
-  QStringList GetOrderedIndexs(const QList<HistoryEntry>& entries,
-                               bool long_prompts_only);
+
+  QList<QString> GetOrderedIndexes(const QList<HistoryEntry>& entries) const;
+
   void LoadResultsTable(const QList<HistoryEntry>& entries);
 
  signals:
@@ -28,14 +34,14 @@ class ResultsReportPageController : public AbstractController {
 
  private slots:
   void HandleExportReport();
-  void OnShowSubTasksResultsToggled(bool checked);
 
  private:
   std::vector<QStringList> report_;
   QList<HistoryEntry> table_entries_;
-  void DoLoadResultsTable();
-  views::ResultsReportPage* GetView() const;
 
+  void DoLoadResultsTable();
+
+  views::ResultsReportPage* GetView() const;
 };
 
 }  // namespace controllers

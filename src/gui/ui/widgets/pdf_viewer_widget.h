@@ -6,6 +6,10 @@
 class QPdfDocument;
 class QPdfView;
 
+/**
+ * @class PdfViewerWidget
+ * @brief Widget for PDF document display.
+ */
 class PdfViewerWidget : public QWidget {
   Q_OBJECT
 

@@ -27,11 +27,17 @@ class ResultsReportPage;
 
 }  // namespace views
 
+/**
+ * @class MainWindow
+ * @brief Main GUI window, manages layout, navigation, and global popups.
+ */
 class MainWindow : public QMainWindow {
   Q_OBJECT
 
  public:
-  MainWindow(controllers::AppController* app_controller, QWidget *parent = nullptr);
+  MainWindow(controllers::AppController *app_controller,
+             QWidget *parent = nullptr);
+
   bool CanLeaveCurrentPage();
 
  public slots:
@@ -40,6 +46,9 @@ class MainWindow : public QMainWindow {
   void HidePopup();
 
  protected:
+  /**
+   * @brief Handle mouse events for window dragging.
+   */
   void mousePressEvent(QMouseEvent *event) override;
   void mouseMoveEvent(QMouseEvent *event) override;
   void mouseReleaseEvent(QMouseEvent *event) override;
@@ -67,8 +76,11 @@ class MainWindow : public QMainWindow {
   QPoint mouse_press_position_;
 
   void SetupUi();
+
   void CreateActions();
+
   void InstallSignalHandlers();
+
   void InitializeControllers();
 };
 }  // namespace gui

@@ -18,10 +18,9 @@ namespace cil {
 
 bool ExecutionConfig::ValidateAndParse(
     const std::string& json_file_path, const std::string& schema_file_path,
-    const std::string& config_verification_file_path,
-    const std::string& config_experimental_verification_file_path) {
+    const std::map<std::string, std::string>& config_verification_files) {
   config_verified_ = false;
-  config_experimental_ = false;
+  config_category_.clear();
   // Load the JSON data
   nlohmann::json json_data;
   std::ifstream json_file(json_file_path);
@@ -51,9 +50,7 @@ bool ExecutionConfig::ValidateAndParse(
   FromJson(json_data);
 
   config_file_name_ = fs::path(json_file_path).filename().string();
-  if (config_verification_file_path.empty() &&
-      config_experimental_verification_file_path.empty())
-    return true;
+  if (config_verification_files.empty()) return true;
 
   config_file_hash_ =
       utils::ComputeFileSHA256(json_file_path, loggerExecutionConfig);
@@ -63,13 +60,17 @@ bool ExecutionConfig::ValidateAndParse(
     return true;
   }
 
-  if (!config_verification_file_path.empty())
-    config_verified_ = VerifyConfigFileHash(
-        config_verification_file_path, config_file_hash_, config_file_name_);
-  if (!config_experimental_verification_file_path.empty())
-    config_experimental_ =
-        VerifyConfigFileHash(config_experimental_verification_file_path,
-                             config_file_hash_, config_file_name_);
+  for (const auto& [category, verification_file] : config_verification_files) {
+    if (VerifyConfigFileHash(verification_file, config_file_hash_,
+                             config_file_name_)) {
+      if (category.empty()) {
+        config_verified_ = true;
+      } else {
+        config_category_ = category;
+      }
+      if (config_verified_ && !config_category_.empty()) break;
+    }
+  }
 
   return true;
 }
@@ -182,9 +183,18 @@ void SystemConfig::from_json(const nlohmann::json& j, SystemConfig& obj) {
   }
 }
 
+std::vector<std::string> ScenarioConfig::GetInputs() const {
+  std::vector<std::string> result;
+  for (const auto& [type, path] : inputs_)
+    if (allowed_input_type_ == type || allowed_input_type_ == "both")
+      result.emplace_back(path);
+
+  return result;
+}
+
 ScenarioConfig::ModelsMap ScenarioConfig::GetModelFiles() const {
   ModelsMap paths;
-  auto retreivePathsFromModel = [&paths](const ModelConfig& model) {
+  auto retrievePathsFromModel = [&paths](const ModelConfig& model) {
     std::string model_key = model.GetFilePath() + "_" +
                             model.GetDataFilePath() + "_" +
                             model.GetTokenizerPath();
@@ -199,16 +209,16 @@ ScenarioConfig::ModelsMap ScenarioConfig::GetModelFiles() const {
   };
 
   auto retrievePathsFromExecutionProvider =
-      [&retreivePathsFromModel](const ExecutionProviderConfig& ep) {
+      [&retrievePathsFromModel](const ExecutionProviderConfig& ep) {
 #if IGNORE_FILES_FROM_DISABLED_EPS && 1
         if (ep.GetLibraryPath().empty() &&
             !cil::utils::IsEpSupportedOnThisPlatform("", ep.GetName()))
           return;
 #endif
-        for (const auto& model : ep.GetModels()) retreivePathsFromModel(model);
+        for (const auto& model : ep.GetModels()) retrievePathsFromModel(model);
       };
 
-  for (const auto& model : models_) retreivePathsFromModel(model);
+  for (const auto& model : models_) retrievePathsFromModel(model);
   for (const auto& ep : execution_providers_)
     retrievePathsFromExecutionProvider(ep);
   return paths;
@@ -217,7 +227,7 @@ ScenarioConfig::ModelsMap ScenarioConfig::GetModelFiles() const {
 std::unordered_map<std::string, std::string>
 ScenarioConfig::GetModelExtraFiles() const {
   std::unordered_map<std::string, std::string> paths;
-  auto retreivePathsFromModel = [&paths](const ModelConfig& model) {
+  auto retrievePathsFromModel = [&paths](const ModelConfig& model) {
     std::string model_key = model.GetFilePath() + "_" +
                             model.GetDataFilePath() + "_" +
                             model.GetTokenizerPath();
@@ -231,16 +241,16 @@ ScenarioConfig::GetModelExtraFiles() const {
   };
 
   auto retrievePathsFromExecutionProvider =
-      [&retreivePathsFromModel](const ExecutionProviderConfig& ep) {
+      [&retrievePathsFromModel](const ExecutionProviderConfig& ep) {
 #if IGNORE_FILES_FROM_DISABLED_EPS && 1
         if (ep.GetLibraryPath().empty() &&
             !cil::utils::IsEpSupportedOnThisPlatform("", ep.GetName()))
           return;
 #endif
-        for (const auto& model : ep.GetModels()) retreivePathsFromModel(model);
+        for (const auto& model : ep.GetModels()) retrievePathsFromModel(model);
       };
 
-  for (const auto& model : models_) retreivePathsFromModel(model);
+  for (const auto& model : models_) retrievePathsFromModel(model);
   for (const auto& ep : execution_providers_)
     retrievePathsFromExecutionProvider(ep);
 
@@ -291,7 +301,22 @@ void ScenarioConfig::from_json(const nlohmann::json& j, ScenarioConfig& obj,
     }
     obj.models_.emplace_back(model);
   }
-  j.at("InputFilePath").get_to(obj.inputs_);
+
+  auto appendInputsFn = [&](std::string_view c, const nlohmann::json& arr) {
+    if (!arr.is_array()) return;
+    for (const auto& s : arr) {
+      if (!s.is_string()) continue;
+      obj.inputs_.emplace_back(std::string(c), s.get<std::string>());
+    }
+  };
+
+  if (const auto& inputs_json = j.at("InputFilePath"); inputs_json.is_array()) {
+    // Backward compatibility: ["s1","s2", ...] treat as group "base"
+    appendInputsFn("base", inputs_json);
+  } else {
+    for (const auto& [key, arr] : inputs_json.items()) appendInputsFn(key, arr);
+  }
+
   j.at("ResultsVerificationFile").get_to(obj.results_file_);
   j.at("DataVerificationFile").get_to(obj.data_verification_file_);
   j.at("Iterations").get_to(obj.iterations_);
@@ -319,9 +344,8 @@ void ScenarioConfig::from_json(const nlohmann::json& j, ScenarioConfig& obj,
 
   // Prepend base directory for relative paths, if needed
 
-  for (auto& input : obj.inputs_) {
+  for (auto& [c, input] : obj.inputs_)
     input = utils::PrependBaseDirIfNeeded(input, base_dir);
-  }
 
   obj.results_file_ =
       utils::PrependBaseDirIfNeeded(obj.results_file_, base_dir);
@@ -352,6 +376,12 @@ nlohmann::json ScenarioConfig::ToJson() const {
     j["ExecutionProviders"].push_back(ep.ToJson());
   }
   return j;
+}
+
+bool ScenarioConfig::HasNonBasePrompts() const {
+  if (allowed_input_type_ == "base") return false;
+  return std::ranges::any_of(inputs_,
+                             [](const auto& p) { return p.first != "base"; });
 }
 
 bool ExecutionConfig::isConfigFileValid(const std::string& json_path) {

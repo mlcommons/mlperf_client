@@ -48,7 +48,7 @@ class ExecutionProviderConfig {
         obj.models_.emplace_back(model);
       }
     }
-    if (obj.name_ == "RyzenAI" && obj.config_["device_type"] != "NPU")
+    if (obj.name_ == "RyzenAI" && (obj.config_["device_type"] == "NPU" || obj.config_["device_type"] == "NPU and GPU"))
       obj.name_ = "OrtGenAI-RyzenAI";
   }
 

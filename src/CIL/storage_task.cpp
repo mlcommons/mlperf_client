@@ -33,7 +33,7 @@ std::string StorageTask::GetResPath(bool absolute) const {
 
 bool StorageTask::CheckIfTaskCanBeSkipped() {
   pre_check_done_ = true;
-  bool should_skip = CheckIfFileExistsInStorage(true);
+  bool should_skip = CheckIfFileExistsInStorage(false);
   if (should_skip) {
     status_ = Status::KSkipped;
     progress_ = 100;
@@ -85,12 +85,20 @@ bool StorageTask::Run() {
     } else {
       status_ = Status::kRunning;
       res_path_ = "";
-      if (!storage_->FindFile(
-              file_name_, sub_dir_,
-              [this](int percent) { progress_ = percent; }, res_path_)) {
-        error_message_ = "Failed to get the file: " + file_name_;
+      bool sizes_only = storage_->IsCollectRemoteSizesOnlyEnabled();
+      bool success = storage_->FindFile(
+          file_name_, sub_dir_, [this](int percent) { progress_ = percent; },
+          res_path_);
+      if (!success) {
+        error_message_ = (sizes_only ? "Failed to get the file size: "
+                                     : "Failed to get the file: ") +
+                         file_name_;
       }
-      status_ = res_path_.empty() ? Status::kFailed : Status::kCompleted;
+      if (sizes_only) {
+        status_ = success ? Status::kCompleted : Status::kFailed;
+      } else {
+        status_ = res_path_.empty() ? Status::kFailed : Status::kCompleted;
+      }
     }
   } else {
     status_ = Status::KSkipped;

@@ -20,6 +20,8 @@ void StartPageController::SetView(views::StartPage* view) {
           [this]() { emit StartBenchmark(true); });
   connect(view, &gui::views::StartPage::EPsFilterChanged, this,
           &StartPageController::OnEPsFilterChanged);
+  connect(view, &gui::views::StartPage::SelectAllToggled, this,
+          &StartPageController::OnSelectAllToggled);
 }
 
 void StartPageController::LoadSystemInformation() {
@@ -47,6 +49,10 @@ void StartPageController::LoadSystemInformation() {
 
   start_page->AddSystemInformationCard(icon, main_title, details);
 
+  auto addMemoryInfoFn = [&](size_t bytes, const QString& name) {
+    if (double gb = utils::BytesToNearestGB(bytes); gb > 0.5)
+      details << qMakePair(name, gui::utils::GBToString(gb));
+  };
   for (const auto& gpu_info : system_info_provider->GetGpuInfo()) {
     icon = gui::utils::GetGPUIcon(QString::fromStdString(gpu_info.vendor));
     main_title = QString::fromStdString(gpu_info.name);
@@ -57,12 +63,9 @@ void StartPageController::LoadSystemInformation() {
     if (!gpu_info.driver_version.empty())
       details << qMakePair("Driver Version",
                            QString::fromStdString(gpu_info.driver_version));
-    if (gpu_info.dedicated_memory_size != 0)
-      details << qMakePair("Memory ", gui::utils::BytesToGbString(
-                                          gpu_info.dedicated_memory_size));
-    if (gpu_info.shared_memory_size != 0)
-      details << qMakePair("Shared Memory ", gui::utils::BytesToGbString(
-                                                 gpu_info.shared_memory_size));
+    addMemoryInfoFn(gpu_info.dedicated_memory_size, "Memory");
+    addMemoryInfoFn(gpu_info.shared_memory_size, "Shared Memory");
+
     start_page->AddSystemInformationCard(icon, main_title, details);
   }
 
@@ -76,12 +79,9 @@ void StartPageController::LoadSystemInformation() {
       details << qMakePair("Manufacturer",
                            QString::fromStdString(npu_info.vendor));
 
-    if (npu_info.dedicated_memory_size != 0)
-      details.append({"Memory ", gui::utils::BytesToGbString(
-                                     npu_info.dedicated_memory_size)});
-    if (npu_info.shared_memory_size != 0)
-      details.append({"Shared Memory ", gui::utils::BytesToGbString(
-                                            npu_info.shared_memory_size)});
+    addMemoryInfoFn(npu_info.dedicated_memory_size, "Memory");
+    addMemoryInfoFn(npu_info.shared_memory_size, "Shared Memory");
+
     start_page->AddSystemInformationCard(icon, main_title, details);
   }
 
@@ -93,15 +93,12 @@ void StartPageController::LoadSystemInformation() {
   if (!os_info.version.empty())
     details << qMakePair("Version", QString::fromStdString(os_info.version));
 
-  if (memory_info.physical_total != 0)
-    details << qMakePair("Total Memory", gui::utils::BytesToGbString(
-                                             memory_info.physical_total));
-  if (memory_info.virtual_total != 0)
-    details << qMakePair(
-        "Total Virtual Memory",
-        gui::utils::BytesToGbString(memory_info.virtual_total));
+  addMemoryInfoFn(memory_info.physical_total, "Total Memory");
+  addMemoryInfoFn(memory_info.virtual_total, "Total Virtual Memory");
 
   start_page->AddSystemInformationCard(icon, main_title, details);
+
+  start_page->ExpandSystemInformationWidget();
 }
 
 void StartPageController::LoadEPsInformation(
@@ -114,37 +111,38 @@ void StartPageController::LoadEPsInformation(
   EPFilter ep_filter{"EP", {}};
   EPFilter device_type_filter{"Device Type", {}};
   EPFilter model_type_filter{"Model Type", {}};
-  EPFilter other_prompts_filter{"Other", {}};
+  EPFilter config_status_filter{"Config Type", {}};
 
-  auto addOptionFn = [](std::map<QString, bool>& options,
-                        const QString& option_name, bool is_experimental) {
-    if (!options.contains(option_name))
-      options[option_name] = !is_experimental;
-    else
-      options[option_name] |= !is_experimental;
+  auto addOptionFn = [](QList<QPair<QString, bool>>& options,
+                        const QString& option_name) {
+    auto it = std::find_if(
+        options.begin(), options.end(),
+        [&](const QPair<QString, bool>& p) { return p.first == option_name; });
+    if (it == options.end()) options << qMakePair(option_name, true);
   };
 
   for (auto& config : eps_configs_) {
     QStringList long_name_splitted = config.long_name_.split(' ');
-    addOptionFn(vendor_filter.options, long_name_splitted.front(),
-                config.is_experimental);
-    addOptionFn(ep_filter.options, config.mapped_name_, config.is_experimental);
-    addOptionFn(device_type_filter.options, long_name_splitted.back(),
-                config.is_experimental);
-    addOptionFn(model_type_filter.options, config.model_name_,
-                config.is_experimental);
+    bool is_experimental = config.config_category_ == "experimental";
+    addOptionFn(vendor_filter.options, long_name_splitted.front());
+    addOptionFn(ep_filter.options, config.mapped_name_);
+    addOptionFn(device_type_filter.options, long_name_splitted.back());
+    addOptionFn(model_type_filter.options, config.model_name_);
   }
-  // Regular prompts are ON by default
-  // If the config is not inside LongPrompts, than it has regular prompts
-  other_prompts_filter.options["Base prompts"] = true;
-  other_prompts_filter.options["Long prompts"] = false;
 
-  start_page->LoadFiltersCard({vendor_filter, ep_filter, device_type_filter,
-                               model_type_filter, other_prompts_filter});
+  config_status_filter.options = {
+      {"Base", true}, {"Extended", true}, {"Experimental", true}};
+
+  start_page->LoadFiltersCard({config_status_filter, vendor_filter, ep_filter,
+                               device_type_filter, model_type_filter});
   start_page->LoadEPInformationCards(schema, configs);
 
   OnEPsFilterChanged();
-  if (!start_page->HasVisibleEPCard()) start_page->ExpandFiltersCard();
+
+  // select base configs
+  for (int i = 0; i < eps_configs_.size(); ++i)
+    start_page->SetEPCardSelected(i, eps_configs_[i].config_category_ == "" &&
+                                         start_page->IsEPCardVisible(i));
 }
 
 QList<QPair<int, EPInformationCard>>
@@ -155,6 +153,7 @@ StartPageController::GetCurrentEPsConfigurations() const {
     if (start_page->IsEPCardSelected(i)) {
       int ep_base_id = start_page->GetEPCardBaseId(i);
       EPInformationCard card = eps_configs_[i];
+      card.prompts_type_ = start_page->GetEPCardPromptsType(i);
       card.config_ = start_page->GetEPConfiguration(i);
       eps.push_back(qMakePair(ep_base_id, card));
     }
@@ -191,6 +190,11 @@ void StartPageController::OnEPsFilterChanged() {
   auto filters = start_page->GetEPsFilter();
 
   for (int i = 0; i < eps_configs_.size(); ++i) {
+    if (eps_configs_[i].devices_.isEmpty() &&
+        start_page->IsShowOnlyRunnableOn()) {
+      start_page->SetEPCardVisible(i, false);
+      continue;
+    }
     bool show_ep = true;
     for (const auto& filter : filters) {
       for (const auto& [name, is_active] : filter.options) {
@@ -205,8 +209,9 @@ void StartPageController::OnEPsFilterChanged() {
             (filter.name == "Model Type" &&
              eps_configs_[i].model_name_.compare(name, Qt::CaseInsensitive) ==
                  0) ||
-            (name == "Base prompts" && !eps_configs_[i].support_long_prompts) ||
-            (name == "Long prompts" && eps_configs_[i].support_long_prompts)) {
+            (name == "Base" && eps_configs_[i].config_category_.isEmpty()) ||
+            name.compare(eps_configs_[i].config_category_,
+                         Qt::CaseInsensitive) == 0) {
           show_ep = false;
           break;
         }
@@ -217,7 +222,16 @@ void StartPageController::OnEPsFilterChanged() {
 
     start_page->SetEPCardVisible(i, show_ep);
   }
+  for (int i = 0; i < eps_configs_.size(); ++i)
+    if (!start_page->IsEPCardVisible(i))
+      start_page->SetEPCardSelected(i, false);
+  start_page->UpdateUI();
 }
 
+void StartPageController::OnSelectAllToggled(bool select) {
+  auto start_page = dynamic_cast<gui::views::StartPage*>(view_);
+  for (int i = 0; i < eps_configs_.size(); ++i)
+    start_page->SetEPCardSelected(i, select && start_page->IsEPCardVisible(i));
+}
 }  // namespace controllers
 }  // namespace gui

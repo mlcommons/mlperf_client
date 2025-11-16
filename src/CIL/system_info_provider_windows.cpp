@@ -423,10 +423,12 @@ void SystemInfoProviderWindows::FetchPerformanceInfo() {
     NPUGPUPerformanceInfo info = {
         std::string(_bstr_t(data->GetDeviceName(i).c_str())),
         static_cast<size_t>(max(max(usage_3D, usage_compute), usage_copy)),
+        true,
         50,
         false,
         static_cast<size_t>(dedicated_memory_usage),
-        static_cast<size_t>(shared_memory_usage)};
+        static_cast<size_t>(shared_memory_usage),
+        true};
 
     if (data->GetDeviceType(i) == "NPU") {
       performance_info_.npu_info = info;

@@ -8,23 +8,35 @@ namespace controllers {
 class AbstractController;
 }  // namespace controllers
 namespace views {
+
+/**
+ * @class AbstractView
+ * @brief Base class for all GUI view components.
+ */
 class AbstractView : public QWidget {
   Q_OBJECT
  public:
   explicit AbstractView(QWidget* parent = nullptr);
   virtual ~AbstractView() = default;
 
-  // Disable copy and assignment
+  /**
+   * @brief Deleted copy constructor to prevent copying.
+   */
   AbstractView(const AbstractView&) = delete;
+
+  /**
+   * @brief Deleted assignment operator to prevent assignment.
+   */
   AbstractView& operator=(const AbstractView&) = delete;
 
-  // Add control to the view
+  /**
+   * @brief Attach controller to this view.
+   */
   void SetController(gui::controllers::AbstractController* controller);
   gui::controllers::AbstractController* controller() const {
     return controller_;
   }
 
-  // Manage the view lifecycle
   void OnEnterPage();
   void OnExitPage();
   bool CanExitPage();
@@ -33,10 +45,14 @@ class AbstractView : public QWidget {
   virtual void SetupUi() = 0;
   virtual void InstallSignalHandlers() = 0;
 
+  /**
+   * @brief Handle widget show event.
+   */
   void showEvent(QShowEvent* event) override;
 
  private:
   void InitializeView();
+  
   gui::controllers::AbstractController* controller_;
   bool is_initialized_;
 };

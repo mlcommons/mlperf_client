@@ -50,6 +50,8 @@ class Unpacker {
     // config experimental verification file.
     kConfigExperimentalVerificationFile,  // This file is used to detect whether
                                           // the config is experimental or not
+    kConfigExtendedVerificationFile,      // This file is used to detect whether
+                                          // the config is extended or not
     kLLMInputFileSchema,  // This file is used to validate the Llama2 input
     // file.
     kEPDependenciesConfig,  // This file is used to define the dependencies of
@@ -67,6 +69,7 @@ class Unpacker {
     kGGML_Vulkan,    // This file is used to run benchmarks with GGML Vulkan
     kGGML_CUDA,      // This file is used to run benchmarks with GGML CUDA
     kGGML_Metal,     // This file is used to run benchmarks with GGML Metal
+    kGGML_ROCm,      // This file is used to run benchmarks with GGML ROCm
     kNativeQNN,  // This file is used to run benchmarks with Native QNN
     kMLX,            // This file is used to run benchmarks with MLX
   };
@@ -98,12 +101,6 @@ class Unpacker {
    * @return True if the asset was successfully unpacked, false otherwise.
    */
   bool UnpackAsset(Asset asset, std::string& path, bool forced = false);
-  /**
-   * @brief Get the size of all the unpacked files.
-   *
-   * @return The size of all the unpacked files.
-   */
-  size_t GetAllDataSize() const;
   /**
    * @brief Unpack files from a ZIP file with a timeout.
    *

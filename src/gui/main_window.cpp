@@ -5,7 +5,7 @@
 #include <QMouseEvent>
 #include <QShortcut>
 
-#include "../CLI/version.h"
+#include "../CIL/version.h"
 // include pages
 #include "ui/eula_page.h"
 #include "ui/realtime_monitoring_page.h"
@@ -49,7 +49,7 @@ void MainWindow::SetupUi() {
   ui_.setupUi(this);
   setAttribute(Qt::WA_TranslucentBackground);
   setWindowTitle(QString("MLPerf Client ") + APP_VERSION_STRING " " +
-                 APP_BUILD_NAME + " Beta GUI");
+                 APP_BUILD_NAME);
   setWindowFlags(Qt::Window | Qt::FramelessWindowHint |
                  Qt::CustomizeWindowHint | Qt::WindowTitleHint |
                  Qt::WindowSystemMenuHint | Qt::WindowMinimizeButtonHint |

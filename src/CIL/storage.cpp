@@ -17,17 +17,15 @@ using namespace log4cxx;
 LoggerPtr loggerStorage(Logger::getLogger("Downloader"));
 
 namespace cil {
-
-Storage::Storage(bool force_download)
-    : force_download_(force_download), check_version_(false) {}
-
 Storage::Storage(const std::string& storage_path,
                  const std::shared_ptr<URLCacheManager>& url_cache_manager,
-                 bool force_download, bool check_version)
+                 bool force_download, bool check_version,
+                 bool collect_remote_sizes_only)
     : storage_path_(storage_path),
       url_cache_manager_(url_cache_manager),
       force_download_(force_download),
-      check_version_(check_version) {}
+      check_version_(check_version),
+      collect_remote_sizes_only_(collect_remote_sizes_only) {}
 
 Storage::~Storage() = default;
 
@@ -194,6 +192,14 @@ bool Storage::FindFileWithUrl(const std::filesystem::path& fs_path,
     downloader_ = std::make_shared<Downloader>(fs_path_as_string);
     std::regex github_regex(R"((?:https?://)?github\.com/(.*)/blob/(.*))");
     std::smatch match;
+    auto downloadFileFn = [&](const std::string& url) {
+      uint64_t file_size = 0;
+      auto res = downloader_->operator()(url, collect_remote_sizes_only_,
+                                         file_size, download_callback);
+      if (res && collect_remote_sizes_only_)
+        remote_file_sizes_[file_url] = file_size;
+      return res;
+    };
     if (std::regex_search(file_url, match, github_regex)) {
       if (3 == match.size()) {
         std::string file_path = match[1].str() + "/" + match[2].str();
@@ -204,26 +210,25 @@ bool Storage::FindFileWithUrl(const std::filesystem::path& fs_path,
 
         media_github_url = std::regex_replace(
             media_github_url, placeholder_file_path_regex, file_path);
-        if (!(result = downloader_->operator()(media_github_url,
-                                               download_callback))) {
+        if (!(result = downloadFileFn(media_github_url))) {
           std::string raw_github_url =
               "https://raw.githubusercontent.com/{file_path}";
 
           raw_github_url = std::regex_replace(
               raw_github_url, placeholder_file_path_regex, file_path);
 
-          result = downloader_->operator()(raw_github_url, download_callback);
+          result = downloadFileFn(raw_github_url);
         }
       } else {
         // Invalid github file url
         return false;
       }
     } else {
-      result = downloader_->operator()(file_url, download_callback);
+      result = downloadFileFn(file_url);
     }
   }
 
-  if (result) {
+  if (result && !collect_remote_sizes_only_) {
     file_path = fs_path.string();
     if (url_cache_manager_)
       url_cache_manager_->AddUrlToCache(url_for_download, file_path,

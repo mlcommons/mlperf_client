@@ -1,3 +1,12 @@
+/**
+ * @file types.h
+ * @brief Core type definitions for the GUI module.
+ *
+ * Essential data structures and enums for pages, benchmark results, system
+ * info, history entries, execution provider details, and filtering. Used for
+ * data exchange across GUI components.
+ */
+
 #ifndef __GUI_TYPES_H__
 #define __GUI_TYPES_H__
 
@@ -6,6 +15,10 @@
 #include <nlohmann/json.hpp>
 
 namespace gui {
+
+/**
+ * @brief Navigation pages in the application.
+ */
 enum class PageType {
   kEulaPage,
   kStartPage,
@@ -15,12 +28,18 @@ enum class PageType {
   kSettingsPage,
 };
 
+/**
+ * @brief Performance metrics for a benchmark result.
+ */
 struct HistoryEntryPerfResult {
   QString name;
   double time_to_first_token_;
   double token_generation_rate_;
 };
 
+/**
+ * @brief System hardware/software details for reproducibility.
+ */
 struct SystemInfoDetails {
   QString os_name;
   QString ram;
@@ -29,6 +48,9 @@ struct SystemInfoDetails {
   QString gpu_ram;
 };
 
+/**
+ * @brief Complete record of a benchmark execution.
+ */
 struct HistoryEntry {
   QString scenario_name_;
   QString ep_name_;
@@ -37,14 +59,17 @@ struct HistoryEntry {
   QDateTime date_time_;
   bool success_;
   bool tested_by_ml_commons_;
-  bool is_experimental;
+  QString config_category_;
   QMap<QString, HistoryEntryPerfResult> perf_results_map_;
   QString error_message_;
-  bool support_long_prompts_;
+  QString config_file_comment_;
 
   SystemInfoDetails system_info_;
 };
 
+/**
+ * @brief Information card for an EP.
+ */
 struct EPInformationCard {
   QString name_;
   QString long_name_;
@@ -53,16 +78,39 @@ struct EPInformationCard {
   QString model_name_;
   QStringList devices_;
   nlohmann::json config_;
-  bool is_experimental;
-  bool support_long_prompts;
+  QString config_category_;
+  QString prompts_type_;
   QString mapped_name_;
 };
 
+/**
+ * @brief Filter configuration for EPs.
+ */
 struct EPFilter {
   QString name;
-  std::map<QString, bool> options;
+  QList<QPair<QString, bool>> options;
 };
 
+/**
+ * @brief Execution provider benchmark status after execution.
+ */
+struct EPBenchmarkStatus {
+  QString ep_name_;
+  bool success_;
+  QString error_message_;
+};
+
+/**
+ * @brief Overall benchmark status after execution, including both the global
+ * action result and the status of each execution provider.
+ */
+struct BenchmarkStatus {
+  bool success_;
+  bool download_accepted_;
+  bool size_info_collected_;
+  QString logs_path_;
+  QList<EPBenchmarkStatus> eps_benchmark_status_;
+};
 }  // namespace gui
 
 Q_DECLARE_METATYPE(gui::SystemInfoDetails)

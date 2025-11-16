@@ -21,21 +21,14 @@ class API_Handler {
     kFatal,
   };
 
-  enum class Type {
-    kIHV,
-  };
-
   using Logger = std::function<void(LogLevel, std::string)>;
   using DeviceListPtr = const API_IHV_DeviceList_t*;
 
-  API_Handler(Type type, const std::string& library_path, Logger logger);
+  API_Handler(const std::string& library_path, Logger logger, bool force_unload_ep_deps = false);
   virtual ~API_Handler();
 
   API_Handler(const API_Handler&) = delete;
   API_Handler& operator=(const API_Handler&) = delete;
-
-  // Library name based on type
-  std::string LibraryName() const;
 
   bool IsLoaded() const;
 
@@ -53,8 +46,7 @@ class API_Handler {
   bool Deinit();                           // Clear loaded model
   bool Release();                          // Release the library
 
-  static std::string CanBeLoaded(API_Handler::Type type,
-                                 const std::string& library_path);
+  static std::string CanBeLoaded(const std::string& library_path);
 
   struct DeviceInfo {
     API_IHV_DeviceID_t device_id;
@@ -63,8 +55,7 @@ class API_Handler {
 
   typedef std::vector<DeviceInfo> DeviceList;
 
-  static DeviceList EnumerateDevices(API_Handler::Type type,
-                                     const std::string& library_path,
+  static DeviceList EnumerateDevices(const std::string& library_path,
                                      const std::string& ep_name,
                                      const std::string& model_name,
                                      const nlohmann::json& ep_settings,
@@ -93,7 +84,7 @@ class API_Handler {
 
   std::unique_ptr<dylib> library_;
   utils::LibraryPathHandle library_path_handle_;
-  Type type_;
+  const bool force_unload_ep_;
   std::string library_path_directory_;
 
   std::string ihv_errors_;

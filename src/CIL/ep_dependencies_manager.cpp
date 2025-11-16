@@ -66,7 +66,9 @@ bool EPDependenciesManager::Initialize() {
 #if !WITH_IHV_MLX
     if (ep == "MLX" || ep == "IHV MLX") continue;
 #endif
-
+#if !WITH_IHV_GGML_ROCM
+    if (ep == "ROCM" || ep == "IHV ROCM") continue;
+#endif
     if (!fs::exists(download_files_dir) &&
         !fs::create_directories(download_files_dir)) {
       LOG4CXX_ERROR(loggerEPDependenciesManager,

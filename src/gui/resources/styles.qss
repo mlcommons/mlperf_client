@@ -354,6 +354,11 @@ ElidedLabel[class="small_normal_label"] {
     line-height: 14px;
 }
 
+ElidedLabel[class="medium_regular_label"] {
+    font-weight: 400;
+    font-size: 16px;
+}
+
 QTextEdit {
     background: transparent;
     font-weight: 400;
@@ -520,16 +525,6 @@ EPExpandableWidget{
     border-radius: 10px;
 }
 
-EPFilterWidget {
-    background: qlineargradient(spread:pad, x1:0, y1:0, x2:0, y2:1, stop:0 #9914588D, stop:1 #990A2C45);
-    border-radius: 6px;                            
-}
-
-EPFiltersExpandableWidget{
-    background-color: #99092A44;
-    border-radius: 6px;
-}
-
 #expand_icon_btn, #expand_icon_btn::unchecked{
     background: transparent;
     border: none;
@@ -562,6 +557,55 @@ EPFiltersExpandableWidget{
     color: #5B829F;
 }
 
+QWidget[class="category_widget"]{
+    min-height: 26px;
+    max-height: 26px;
+    border-radius: 6px;
+}
+
+QWidget[class="category_widget"][category="base"]{
+    background-color: #296BB7FE;
+}
+
+QWidget[class="category_widget"][category="base"] QLabel{
+    color: #CBE5FF;
+}
+
+QWidget[class="category_widget"][category="experimental"]{
+    background-color: #29FFB157;
+}
+
+QWidget[class="category_widget"][category="experimental"] QLabel{
+    color: #FFCF88;
+}
+
+QWidget[class="category_widget"][category="extended"]{
+    background-color: #29BF57FF;
+}
+
+QWidget[class="category_widget"][category="extended"] QLabel{
+    color: #E1B1FF;
+}
+
+QWidget[class="status_label"]{
+    min-height: 26px;
+    max-height: 26px;
+    border-radius: 6px;
+    background-color: #3DDD5B5B;
+}
+
+QWidget[class="status_label"] QLabel{
+    color: #FF5757;
+}
+
+QWidget[class="status_label"][success="true"]{
+    background-color: #2925FF6E;
+}
+
+QWidget[class="status_label"][success="true"] QLabel{
+    color: #17CF6D;
+}
+
 #json_schema_label{
     font-size: 14px;
     color: #FFFFFF;
@@ -579,7 +623,7 @@ QComboBox, QLineEdit {
     font-size: 12px;
     font-weight: 400;
     height: 30px;
-    min-width: 70px;
+    min-width: 60px;
 }
 
 QComboBox:on, QComboBox:on QLineEdit {
@@ -607,7 +651,7 @@ QComboBox QAbstractItemView {
     border-bottom-right-radius: 5px;
     border-top-left-radius: 0;
     border-top-right-radius: 0;
-    padding: 5px 10px;
+    padding: 4px 4px;
     outline: none;
 }
 
@@ -620,6 +664,26 @@ QComboBox QAbstractItemView::item {
 
 QComboBox QAbstractItemView::item:selected {
     background: #10ffffff;
+}
+QComboBox QAbstractItemView::item:hover {
+    background: #0fffffff;
+}
+
+QComboBox QAbstractItemView::indicator:checked {
+    image: url(:/icons/resources/icons/checkbox_primary_on.png);
+}
+
+QComboBox QAbstractItemView::indicator:unchecked {
+    image: url(:/icons/resources/icons/checkbox_primary_off.png);
+}
+
+CheckableComboBox, QLineEdit {
+    background: #0B3B5F;
+    height: 34px;
+}
+
+CheckableComboBox QAbstractItemView {
+    background: #0B3B5F;
 }
 
 QSpinBox {
@@ -701,4 +765,19 @@ QLabel#history_sys_info_key_label {
 QLabel#bullet_rounded{
  background-color: #A5A5A5; 
  border-radius:4px; 
+}
+
+/****************************** Benchmark Status Widget ************************************/
+
+BenchmarkStatusCardWidget {
+background: transparent;
+    border: 1px solid #376D98;
+    border-radius: 6px;
+}
+
+QPushButton#show_more_button {
+    font-weight: 400;
+    font-size: 14px;
+    color: #99FFFFFF;
+    text-decoration: underline;
 }

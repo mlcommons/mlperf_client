@@ -6,7 +6,11 @@
 #include <cstdio>
 #include <filesystem>
 #include <iostream>
+#include <ostream>
+#include <fstream>
+
 #include <regex>
+#include <fstream>
 
 #include "progress_notifier.h"
 #include "utils.h"
@@ -16,6 +20,14 @@ using namespace log4cxx;
 LoggerPtr loggerDownloader(Logger::getLogger("Downloader"));
 
 namespace cil {
+
+bool HasFileScheme(const std::string& url) {
+  return std::regex_search(url, std::regex(R"(^file://)"));
+}
+
+bool HasHttpScheme(const std::string& url) {
+  return url.rfind("http://", 0) == 0 || url.rfind("https://", 0) == 0;
+}
 
 bool CheckDiskSpace(const std::string& destination_path, uint64_t file_size) {
   // Get Parent directory of the destination file
@@ -91,6 +103,42 @@ std::pair<std::string, int> Downloader::ParseProxy(
   return std::make_pair(host, port);
 }
 
+template <typename ClientType>
+bool Downloader::GetRemoteFileMeta(ClientType& client,
+                                   const std::string& host_file_path,
+                                   uint64_t& file_size,
+                                   bool* accepts_range) const {
+  auto res = client.Head(host_file_path.c_str());
+  if (!res || res->status != 200) {
+    LOG4CXX_ERROR(
+        loggerDownloader,
+        "Error getting the content length of the file: " << host_file_path);
+    if (res) {
+      auto error = res.error();
+      LOG4CXX_ERROR(loggerDownloader, "Status code: " << res->status);
+      LOG4CXX_ERROR(loggerDownloader, "Error: " << error);
+    }
+    return false;
+  }
+
+  auto content_length = res->get_header_value("Content-Length");
+  if (content_length.empty()) {
+    LOG4CXX_ERROR(
+        loggerDownloader,
+        "Error getting the content length of the file: " << host_file_path);
+    return false;
+  }
+  file_size = std::stoull(content_length);
+
+  if (accepts_range) {
+    auto accept_range_it = res->headers.find("Accept-Ranges");
+    *accepts_range = accept_range_it != res->headers.end() &&
+                     accept_range_it->second == "bytes";
+  }
+
+  return true;
+}
+
 void Downloader::DownloadChunk(const std::string& host_name,
                                const std::string& host_file_path,
                                uint64_t start, uint64_t end,
@@ -160,29 +208,12 @@ bool Downloader::DownloadRemoteFile(
   httplib::Client client(host_name);
   SetProxyIfAvailable(client);
   client.set_follow_location(true);
-  ProgressNotifier progress_notifier;
-  // Send request to get the content length of the file
-  auto res = client.Head(host_file_path.c_str());
-  if (!res || res->status != 200) {
-    LOG4CXX_ERROR(
-        loggerDownloader,
-        "Error getting the content length of the file: " << host_file_path);
-    if (res) {
-      auto error = res.error();
-      LOG4CXX_ERROR(loggerDownloader, "Status code: " << res->status);
-      LOG4CXX_ERROR(loggerDownloader, "Error: " << error);
-    }
-    return false;
-  }
 
-  auto content_length = res->get_header_value("Content-Length");
-  if (content_length.empty()) {
-    LOG4CXX_ERROR(
-        loggerDownloader,
-        "Error getting the content length of the file: " << host_file_path);
+  uint64_t file_size = 0;
+  bool accepts_range = false;
+  if (!GetRemoteFileMeta(client, host_file_path, file_size, &accepts_range))
     return false;
-  }
-  uint64_t file_size = std::stoull(content_length);
+
   // Check if there is enough space to download the file
   if (!CheckDiskSpace(destination_file_path, file_size)) {
     return false;
@@ -192,10 +223,7 @@ bool Downloader::DownloadRemoteFile(
   // If the server does not support range requests, or if threads num is 1, or
   // the file size is less than 1MB, download the file without splitting it
 
-  auto accept_range_it = res->headers.find("Accept-Ranges");
-  bool accepts_range = accept_range_it != res->headers.end() &&
-                       accept_range_it->second == "bytes";
-
+  ProgressNotifier progress_notifier;
   if (!accepts_range || num_threads == 1 ||
       num_threads > 1 && file_size < 1024 * 1024) {
     std::ofstream output_file(destination_file_path, std::ios::binary);
@@ -288,32 +316,48 @@ bool Downloader::DownloadRemoteFile(
   full_output_file.close();
   return true;
 }
-Downloader::Downloader(const std::string& destination_file_path)
-    : destination_file_path_(destination_file_path) {}
 
-Downloader::~Downloader() = default;
-
-bool Downloader::operator()(const std::string& file_url,
-    const DownloadProgressCallback& progress_callback) const {
-  std::regex file_url_regex(R"(^file://)");
-  if (std::regex_search(file_url, file_url_regex)) {
-    return CopyFileWithProgress(file_url.substr(7), destination_file_path_,
-                                progress_callback);
-  }
-
-  if (file_url.rfind("http://", 0) != 0 && file_url.rfind("https://", 0) != 0) {
-    return CopyFileWithProgress(file_url, destination_file_path_,
-                                progress_callback);
+bool Downloader::GetRemoteFileSize(const std::string& file_url,
+                                   uint64_t& file_size) const {
+  if (HasFileScheme(file_url) || !HasHttpScheme(file_url)) {
+    file_size = 0;
+    return true;
   }
 
   // Parse the URL to extract the host name and file path
   std::string host_name;
   std::string host_file_path;
+  ParseFileUrl(file_url, host_name, host_file_path);
+
+  httplib::Client client(host_name);
+  SetProxyIfAvailable(client);
+  client.set_follow_location(true);
+
+  return GetRemoteFileMeta(client, host_file_path, file_size);
+}
+
+Downloader::Downloader(const std::string& destination_file_path)
+    : destination_file_path_(destination_file_path) {}
+
+Downloader::~Downloader() = default;
+
+bool Downloader::operator()(
+    const std::string& file_url, bool get_remote_size_only, uint64_t& file_size,
+    const DownloadProgressCallback& progress_callback) const {
+  if (get_remote_size_only) return GetRemoteFileSize(file_url, file_size);
+
+  if (HasFileScheme(file_url))
+    return CopyFileWithProgress(file_url.substr(7), destination_file_path_,
+                                progress_callback);
+  if (!HasHttpScheme(file_url))
+    return CopyFileWithProgress(file_url, destination_file_path_,
+                                progress_callback);
+
+  // Parse the URL to extract the host name and file path
+  std::string host_name;
+  std::string host_file_path;
   auto url_parts = ParseFileUrl(file_url, host_name, host_file_path);
-  //
-  if (!host_file_path.empty() && host_file_path[0] != '/') {
-    host_file_path = "/" + host_file_path;
-  }
+
   // Log some information about the download
   LOG4CXX_INFO(
       loggerDownloader,
@@ -430,6 +474,9 @@ bool Downloader::ParseFileUrl(const std::string& file_url,
     host_name = file_url.substr(start_pos, pos - start_pos);
     host_file_path = file_url.substr(pos + 1);
   }
+
+  if (!host_file_path.empty() && host_file_path[0] != '/')
+    host_file_path = "/" + host_file_path;
 
   return true;
 }

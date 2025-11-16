@@ -26,8 +26,14 @@ function(pack_as_binary target)
     endforeach()
     list(APPEND binary_file_names "${deps_dest_folder}/${DEPS_NAMESPACE}.h")
 
+    if(UNIX AND NOT APPLE)
+	set(deps_packer_bin "${DEPS_PACKER_RUNTIME_OUTPUT_DIRECTORY}/DepsPacker")
+    else()
+	set(deps_packer_bin "${DEPS_PACKER_RUNTIME_OUTPUT_DIRECTORY}/$<CONFIG>/DepsPacker")
+    endif()
+
     add_custom_command(OUTPUT ${binary_file_names}
-        COMMAND ${DEPS_PACKER_RUNTIME_OUTPUT_DIRECTORY}/$<CONFIG>/DepsPacker --divide ${number_of_subdiv} ${deps_dest_folder} "${DEPS_NAMESPACE}" 
+        COMMAND ${deps_packer_bin} --divide ${number_of_subdiv} ${deps_dest_folder} "${DEPS_NAMESPACE}"
              ${DEPS_ARG_SOURCES}
         WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
         DEPENDS ${DEPS_ARG_SOURCES} DepsPacker

@@ -19,7 +19,9 @@ LoggerPtr loggerUtils(Logger::getLogger("Utils"));
 
 #include <regstr.h>
 #include <setupapi.h>
+
 #elif defined(__APPLE__)
+
 #include <CoreFoundation/CoreFoundation.h>
 #include <TargetConditionals.h>
 #include <dlfcn.h>
@@ -27,7 +29,15 @@ LoggerPtr loggerUtils(Logger::getLogger("Utils"));
 #include <sys/ioctl.h>
 #include <sys/sysctl.h>
 #include <unistd.h>
-#endif
+
+#elif defined(__linux__)
+
+#include <dlfcn.h>
+#include <sys/ioctl.h>
+#include <unistd.h>
+#include <sys/statvfs.h>
+
+#endif // _WIN32 || _WIN64
 
 #undef GetCurrentDirectory
 #undef SetCurrentDirectory
@@ -83,6 +93,12 @@ std::string GetCurrentDirectory() {
 #elif defined(__APPLE__)
   uint32_t size = sizeof(buffer);
   if (_NSGetExecutablePath(buffer, &size) == 0) path = buffer;
+#elif defined(__linux__)
+  ssize_t len = readlink("/proc/self/exe", buffer, sizeof(buffer) - 1);
+  if (len != -1) {
+    buffer[len] = '\0';
+    path = buffer;
+  }
 #endif
 
   // Remove the executable name from the path
@@ -183,7 +199,7 @@ void SaveFlagToSettings(const std::string& settings_path,
   }
 
   RegCloseKey(hKey);
-#else
+#elif defined(__APPLE__)
   CFStringRef app_id = CFStringCreateWithCString(nullptr, settings_path.c_str(),
                                                  kCFStringEncodingUTF8);
   CFStringRef key = CFStringCreateWithCString(nullptr, value_name.c_str(),
@@ -201,6 +217,19 @@ void SaveFlagToSettings(const std::string& settings_path,
 
   CFRelease(app_id);
   CFRelease(key);
+#elif defined(__linux__)
+  // On Linux, we'll use a simple file-based approach
+  std::string config_dir = std::string(getenv("HOME")) + "/.config/" + settings_path;
+  std::filesystem::create_directories(config_dir);
+
+  std::ofstream file(config_dir + "/" + value_name);
+  if (file.is_open()) {
+    file << (flag ? "1" : "0");
+    file.close();
+  } else {
+    LOG4CXX_ERROR(loggerUtils, "Failed to save setting. Path: "
+                                   << config_dir << "/" << value_name);
+  }
 #endif
 }
 
@@ -235,7 +264,7 @@ bool ReadFlagFromSettings(const std::string& settings_path,
                                    << settings_path << ", Result: " << result);
   }
   return flagValue;
-#else
+#elif defined(__APPLE__)
   CFStringRef app_id = CFStringCreateWithCString(nullptr, settings_path.c_str(),
                                                  kCFStringEncodingUTF8);
   CFStringRef key = CFStringCreateWithCString(nullptr, value_name.c_str(),
@@ -257,7 +286,19 @@ bool ReadFlagFromSettings(const std::string& settings_path,
   }
 
   return static_cast<bool>(read_value);
+
+#elif defined(__linux__)
+  std::string config_path = std::string(getenv("HOME")) + "/.config/" + settings_path + "/" + value_name;
+  std::ifstream file(config_path);
+  if (file.is_open()) {
+    std::string value;
+    file >> value;
+    flagValue = (value == "1");
+    file.close();
+  }
+  return flagValue;
 #endif
+
 }
 
 std::string GetCurrentDateTimeString(const std::string& format) {
@@ -743,6 +784,9 @@ bool IsEpSupportedOnThisPlatform(const std::string_view& model_name,
 #endif
 #if WITH_IHV_GGML_CUDA
   if (is_supported_ihv("CUDA")) return SupportsVendorID(VendorID::kNVIDIA);
+#endif
+#if WITH_IHV_GGML_ROCM
+  if (is_supported_ihv("ROCm")) return SupportsVendorID(VendorID::kAMD);
 #endif
 #if WITH_IHV_MLX
   if (is_supported_ihv("MLX")) return true;

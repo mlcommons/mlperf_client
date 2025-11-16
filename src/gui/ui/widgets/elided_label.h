@@ -3,14 +3,18 @@
 
 #include <QWidget>
 
+/**
+ * @class ElidedLabel
+ * @brief Label widget with automatic text elision.
+ */
 class ElidedLabel : public QWidget {
   Q_OBJECT
+
  public:
   explicit ElidedLabel(const QString& text, QWidget* parent = nullptr);
   explicit ElidedLabel(QWidget* parent = nullptr);
 
   void SetText(const QString& text);
-
   void SetElideMode(Qt::TextElideMode mode);
   void SetPreferredLineCount(int count);
 

@@ -16,18 +16,14 @@
 #include <filesystem>
 #include <string>
 
-#include "../CLI/version.h"
+#include "../CIL/version.h"
 
 #ifdef _WIN32
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #else
-#include <TargetConditionals.h>
-#if TARGET_OS_IOS
-#include "ios/ios_utils.h"
-#endif
-
+#include "apple/apple_utils.h"
 #endif
 
 #undef GetCurrentDirectory
@@ -51,15 +47,8 @@ namespace utils {
  */
 
 inline fs::path GetAppDefaultTempPath() {
-  std::string version = APP_VERSION_STRING;
-  if (size_t pos = version.rfind('.'); pos != std::string::npos) {
-    version = version.substr(0, pos);
-  }
-#if (defined(DEBUG_BUILD)) && not defined(__APPLE__)
-  return (fs::current_path() / "deps" / version);
-#else
-  return (std::filesystem::temp_directory_path() / "MLPerf" / version);
-#endif
+  const std::string version = APP_VERSION_STRING;
+  return std::filesystem::temp_directory_path() / "MLPerf" / version;
 }
 
 /**
@@ -71,10 +60,6 @@ inline fs::path GetAppDefaultTempPath() {
  * @return A path to the default data directory.
  */
 inline fs::path GetAppDefaultDataPath() {
-#if TARGET_OS_IOS
-  return cil::ios_utils::GetDocumentsDirectoryPath();
-#endif
-
   return fs::current_path();
 }
 

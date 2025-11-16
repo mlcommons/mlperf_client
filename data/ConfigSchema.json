@@ -153,7 +153,8 @@
                     "Metal",
                     "NativeQNN",
                     "MLX",
-                    "WindowsML"
+                    "WindowsML",
+                    "ROCm"
                   ]
                 },
                 "Config": {
@@ -278,6 +279,36 @@
                   "if": {
                     "properties": {
                       "Name": {
+                        "const": "OrtGenAI-RyzenAI"
+                      }
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "Config": {
+                        "type": "object",
+                        "properties": {
+                          "device_type": {
+                            "type": "string",
+                            "enum": [
+                              "NPU and GPU"
+                            ]
+                          }
+                        }
+                      }
+                    },
+                    "LibraryPath": {
+                      "type": "string"
+                    },
+                    "required": [
+                      "Config"
+                    ]
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "Name": {
                         "const": "WindowsML"
                       }
                     }
@@ -345,6 +376,41 @@
                     "properties": {
                       "Name": {
                         "const": "CUDA"
+                      }
+                    }
+                  },
+                  "then": {
+                    "properties": {
+                      "Config": {
+                        "type": "object",
+                        "properties": {
+                          "device_type": {
+                            "type": "string",
+                            "enum": [
+                              "GPU",
+                              "CPU"
+                            ]
+                          },
+                          "gpu_layers": {
+                            "type": "integer",
+                            "minimum": 0
+                          }
+                        }
+                      },
+                      "LibraryPath": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "Config"
+                    ]
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "Name": {
+                        "const": "ROCm"
                       }
                     }
                   },

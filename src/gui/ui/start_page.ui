@@ -21,50 +21,19 @@
     <number>20</number>
    </property>
    <property name="leftMargin">
-    <number>104</number>
+    <number>30</number>
    </property>
    <property name="topMargin">
     <number>30</number>
    </property>
    <property name="rightMargin">
-    <number>104</number>
+    <number>30</number>
    </property>
    <property name="bottomMargin">
-    <number>45</number>
+    <number>30</number>
    </property>
    <item>
-    <widget class="QScrollArea" name="system_information_scroll_area">
-     <property name="enabled">
-      <bool>true</bool>
-     </property>
-     <property name="widgetResizable">
-      <bool>true</bool>
-     </property>
-     <widget class="QWidget" name="sys_scroll_content">
-      <property name="geometry">
-       <rect>
-        <x>0</x>
-        <y>0</y>
-        <width>1037</width>
-        <height>156</height>
-       </rect>
-      </property>
-      <layout class="QHBoxLayout" name="sys_info_frame_h_layout">
-       <property name="leftMargin">
-        <number>0</number>
-       </property>
-       <property name="topMargin">
-        <number>0</number>
-       </property>
-       <property name="rightMargin">
-        <number>0</number>
-       </property>
-       <property name="bottomMargin">
-        <number>0</number>
-       </property>
-      </layout>
-     </widget>
-    </widget>
+    <widget class="SystemInformationWidget" name="system_information_widget" native="true"/>
    </item>
    <item>
     <widget class="QWidget" name="ep_widgets_container" native="true">
@@ -74,7 +43,7 @@
        <height>200</height>
       </size>
      </property>
-     <layout class="QVBoxLayout" name="verticalLayout_2">
+     <layout class="QVBoxLayout" name="verticalLayout_2" stretch="0,1">
       <property name="topMargin">
        <number>0</number>
       </property>
@@ -96,11 +65,76 @@
          <number>9</number>
         </property>
         <item>
-         <widget class="QLabel" name="select_configs_label">
-          <property name="text">
-           <string>Select one or more configurations to run</string>
-          </property>
-         </widget>
+         <layout class="QHBoxLayout" name="horizontalLayout_2">
+          <item>
+           <widget class="QLabel" name="select_configs_label">
+            <property name="text">
+             <string>Select one or more configurations to run</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="horizontalSpacer_2">
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayout_3">
+            <property name="spacing">
+             <number>2</number>
+            </property>
+            <item>
+             <widget class="QCheckBox" name="select_all_box">
+              <property name="text">
+               <string/>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="select_all_label">
+              <property name="text">
+               <string>Select All</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="select_all_number_label">
+              <property name="minimumSize">
+               <size>
+                <width>40</width>
+                <height>0</height>
+               </size>
+              </property>
+              <property name="text">
+               <string>(0)</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <widget class="ToggleButton" name="show_only_runnable_switch">
+            <property name="text">
+             <string>Switch</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="show_only_runnable_label">
+            <property name="text">
+             <string>Show only runnable</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
         </item>
        </layout>
       </item>
@@ -114,8 +148,8 @@
           <rect>
            <x>0</x>
            <y>0</y>
-           <width>1019</width>
-           <height>342</height>
+           <width>1167</width>
+           <height>341</height>
           </rect>
          </property>
          <layout class="QVBoxLayout" name="eps_v_layout">
@@ -219,6 +253,19 @@ Performance may also vary due to factors like system load and thermals.</string>
    </item>
   </layout>
  </widget>
+ <customwidgets>
+  <customwidget>
+   <class>SystemInformationWidget</class>
+   <extends>QWidget</extends>
+   <header>widgets/system_information_widget.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>ToggleButton</class>
+   <extends>QPushButton</extends>
+   <header>ui/widgets/toggle_button.h</header>
+  </customwidget>
+ </customwidgets>
  <resources/>
  <connections/>
 </ui>

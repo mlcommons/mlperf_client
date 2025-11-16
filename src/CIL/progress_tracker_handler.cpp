@@ -117,7 +117,7 @@ void ProgressTrackerHandler::DisplayCurrentTaskAndOverallProgress(
   auto &current_task_index_ = GetCurrentTaskIndex(tracker);
   const auto update_interval_ = tracker.GetUpdateInterval();
 
-  std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
+  auto now = std::chrono::high_resolution_clock::now();
   const auto &current_task = tasks[current_task_index_];
 
   using enum cil::ProgressableTask::Status;

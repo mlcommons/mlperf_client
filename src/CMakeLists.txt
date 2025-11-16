@@ -28,13 +28,8 @@ set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(list_of_targets "")
 
 # Projects
-add_subdirectory(cil)
-add_subdirectory(cli)
+add_subdirectory(CIL)
+add_subdirectory(CLI)
 if(MLPERF_BUILD_GUI)
     add_subdirectory(gui)
-endif()
-
-option(BUILD_TESTS "Build the tests" ON)
-if(BUILD_TESTS)
-    add_subdirectory(tests)
 endif()

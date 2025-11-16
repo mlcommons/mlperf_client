@@ -3,13 +3,14 @@
 #include <QDateTime>
 #include <QStyle>
 
+#include "core/gui_utils.h"
 #include "core/types.h"
 
 ResultsHistoryEntryWidget::ResultsHistoryEntryWidget(
     const QString &name, const QDateTime &dateTime, bool passed,
     double time_to_first_token, double token_generation_rate,
     const QString &error_message, const gui::SystemInfoDetails &sys_info,
-    QWidget *parent)
+    const QString &config_file_comment, QWidget *parent)
     : QWidget(parent), is_passed_(passed) {
   ui_.setupUi(this);
 
@@ -65,10 +66,12 @@ ResultsHistoryEntryWidget::ResultsHistoryEntryWidget(
   ui_.TPS_icon_label_->setVisible(passed);
   ui_.TPS_title_label_->setVisible(passed);
   ui_.TPS_label_->setVisible(passed);
-  ui_.error_label_->setVisible(!passed);
-  ui_.error_icon_label_->setVisible(!passed);
+  ui_.error_label_->setVisible(!error_message.isEmpty());
+  ui_.error_icon_label_->setVisible(!error_message.isEmpty());
 
   ui_.ep_label_->setText(name);
+  if (!config_file_comment.isEmpty())
+    ui_.ep_label_->setToolTip(config_file_comment);
   ui_.date_label_->setText(dateTime.toString("MMM dd, yyyy"));
   ui_.time_label_->setText(dateTime.toString("h:mm AP"));
 
@@ -82,9 +85,12 @@ ResultsHistoryEntryWidget::ResultsHistoryEntryWidget(
             ? "N/A"
             : QString::number(token_generation_rate, 'f', 1));
   } else {
-    ui_.error_label_->SetText(error_message);
     ui_.open_button_->setEnabled(false);
   }
+
+  ui_.error_label_->SetText(gui::utils::NormalizeNewlines(error_message));
+  ui_.error_label_->setToolTip(error_message);
+  ui_.error_icon_label_->setToolTip(error_message);
 
   SetSelected(false);
 

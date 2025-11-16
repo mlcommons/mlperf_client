@@ -25,6 +25,7 @@ target_compile_options(${PROJECT_NAME}
 	PRIVATE
 	$<$<CXX_COMPILER_ID:MSVC>:/w45038 /w45205 /w44061 /EHsc>
 	$<$<CXX_COMPILER_ID:Clang>:-Wreorder -fexceptions>
+	$<$<AND:$<CXX_COMPILER_ID:GNU>,$<NOT:$<BOOL:${WIN32}>>>:-fPIC>
 )
 
 # Force enable exceptions for extern C functions

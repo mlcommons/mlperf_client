@@ -2,7 +2,7 @@
 
 #include <set>
 
-#include "../CLI/version.h"
+#include "version.h"
 #include "api_handler.h"
 #include "executor_base.h"
 #include "executor_factory.h"
@@ -185,19 +185,20 @@ void BenchmargStage::BenchmarkTask(
   task_executed = true;
 
   auto res = executor->GetBenchmarkResult();
-  results_logger_.SetConfigVerified(
-      skip_failed_prompts_ ? false : config_.IsConfigVerified());
-  results_logger_.SetConfigExperimental(config_.IsConfigExperimental());
+  results_logger_.SetConfigVerified(config_.IsConfigVerified());
+  results_logger_.SetConfigCategory(config_.GetConfigCategory());
   results_logger_.SetApplicationVersionString(
       std::string(APP_VERSION_STRING) + " " + std::string(APP_BUILD_NAME));
   res.model_name = display_model_name;
   res.config_file_name = config_.GetConfigFileName();
   res.config_file_hash = config_.GetConfigFileHash();
+  res.config_file_comment = config_.GetSystemConfig().GetComment();
   res.model_path = model_source_path;
   LOG4CXX_INFO(logger_, "Model " << scenario_config.GetName()
                                  << ", model path Result: " << res.model_path);
   res.asset_paths = scenario_config.GetAssets();
   res.data_paths = scenario_config.GetInputs();
+  res.has_non_base_prompts = scenario_config.HasNonBasePrompts();
   res.results_file = scenario_config.GetResultsFile();
   auto end_time = std::chrono::high_resolution_clock::now();
   res.benchmark_duration = utils::FormatDuration(end_time - start_time);

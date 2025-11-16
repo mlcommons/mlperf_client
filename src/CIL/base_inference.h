@@ -217,7 +217,6 @@ class BaseInference {
   const std::string deps_dir_;
   const EP ep_;
 
-  const std::string api_type_;
   const nlohmann::json ep_settings_;
 
   const std::string library_path_;

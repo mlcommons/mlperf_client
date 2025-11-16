@@ -1,6 +1,5 @@
 #include "base_inference.h"
 
-#include <../WinMLBootstrap.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.System.h>
 
@@ -10,12 +9,220 @@
 #include <set>
 #include <thread>
 
+#include "winrt/Microsoft.Windows.AI.MachineLearning.h"
+
 #define NOMINMAX
 #include <windows.h>
+#include <MddBootstrap.h>
 
 #define SHOW_DEBUG_ENUMERATION 0
 
 namespace fs = std::filesystem;
+namespace winml = winrt::Microsoft::Windows::AI::MachineLearning;
+
+static std::string ConvertWideToUtf8(const std::wstring& wstr) {
+  int count = WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), wstr.length(), NULL,
+                                  0, NULL, NULL);
+  std::string str(count, 0);
+  WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), -1, &str[0], count, NULL, NULL);
+  return str;
+}
+
+void LogInstalledWinMLEPVersions(cil::Logger& logger_cb) {
+  static const auto runHiddenCommandCapture =
+      [](const std::string& cmd, std::string& stdout_text) -> DWORD {
+    SECURITY_ATTRIBUTES sa;
+    sa.nLength = sizeof(sa);
+    sa.bInheritHandle = TRUE;
+    sa.lpSecurityDescriptor = nullptr;
+
+    HANDLE read_pipe = nullptr;
+    HANDLE write_pipe = nullptr;
+    if (!CreatePipe(&read_pipe, &write_pipe, &sa, 0)) {
+      return (DWORD)-1;
+    }
+    if (!SetHandleInformation(read_pipe, HANDLE_FLAG_INHERIT, 0)) {
+      CloseHandle(read_pipe);
+      CloseHandle(write_pipe);
+      return (DWORD)-1;
+    }
+
+    STARTUPINFOA si = {sizeof(si)};
+    PROCESS_INFORMATION pi{};
+    si.dwFlags = STARTF_USESHOWWINDOW | STARTF_USESTDHANDLES;
+    si.wShowWindow = SW_HIDE;
+    si.hStdOutput = write_pipe;
+    si.hStdError = write_pipe;
+
+    std::string cmd_copy = "cmd.exe /C " + cmd;
+
+    BOOL success = CreateProcessA(nullptr, &cmd_copy[0], nullptr, nullptr, TRUE,
+                                  CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi);
+
+    CloseHandle(write_pipe);
+
+    if (!success) {
+      CloseHandle(read_pipe);
+      return (DWORD)-1;
+    }
+
+    std::string buffer;
+    char chunk[4096];
+    DWORD bytes_read = 0;
+    while (ReadFile(read_pipe, chunk, sizeof(chunk), &bytes_read, nullptr) &&
+           bytes_read) {
+      buffer.append(chunk, chunk + bytes_read);
+    }
+    CloseHandle(read_pipe);
+
+    WaitForSingleObject(pi.hProcess, INFINITE);
+    DWORD exitCode;
+    GetExitCodeProcess(pi.hProcess, &exitCode);
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+
+    size_t l = 0;
+    size_t r = buffer.size();
+    auto is_ws = [&](char c) {
+      return c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == '\0';
+    };
+    while (l < r && is_ws(buffer[l])) ++l;
+    while (r > l && is_ws(buffer[r - 1])) --r;
+    stdout_text.assign(buffer.data() + l, r - l);
+
+    return exitCode;
+  };
+
+  std::string cmd =
+      std::string("powershell.exe -ExecutionPolicy Bypass -NoProfile ") +
+      "-Command \"$ErrorActionPreference='SilentlyContinue'; "
+      "$isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator); "
+      "$pkgs = if ($isAdmin) { Get-AppxPackage -AllUsers } else { Get-AppxPackage }; "
+      "$pkgs = $pkgs | Where-Object { $_.Name -like 'MicrosoftCorporationII.WinML.*' } | Sort-Object Name; "
+      "foreach($p in $pkgs){ Write-Output ($p.Name + '|' + $p.Version) }\"";
+
+  std::string out;
+  runHiddenCommandCapture(cmd, out);
+
+  if (out.empty()) {
+    logger_cb(cil::LogLevel::kWarning,
+              "No WindowsML EP MSIX packages detected via Get-AppxPackage.");
+    return;
+  }
+
+  size_t start = 0;
+  while (start < out.size()) {
+    size_t end = out.find_first_of("\r\n", start);
+    if (end == std::string::npos) end = out.size();
+    if (end > start) {
+      std::string line = out.substr(start, end - start);
+
+      size_t i = 0, j = line.size();
+      auto is_ws2 = [&](char c) {
+        return c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == '\0';
+      };
+      while (i < j && is_ws2(line[i])) ++i;
+      while (j > i && is_ws2(line[j - 1])) --j;
+      if (j > i) {
+        std::string trimmed = line.substr(i, j - i);
+        auto bar = trimmed.find('|');
+        if (bar != std::string::npos) {
+          std::string name = trimmed.substr(0, bar);
+          std::string version = trimmed.substr(bar + 1);
+          logger_cb(cil::LogLevel::kInfo,
+                    std::string("WindowsML EP package: ") + name +
+                        ", version=" + version);
+        } else {
+          logger_cb(cil::LogLevel::kInfo,
+                    std::string("WindowsML EP package: ") + trimmed);
+        }
+      }
+    }
+    start = end + 1;
+    if (start < out.size() && (out[start] == '\n' || out[start] == '\r'))
+      ++start;
+  }
+}
+
+static std::once_flag g_epRegistrationFlag;
+static bool EnsureAndRegisterEPs(Ort::Env& env, cil::Logger& logger) {
+  static bool initialized = false;
+
+  std::call_once(g_epRegistrationFlag, [&env, &logger]() {
+    // Initialize Windows App SDK (if not already initialized)
+    const UINT32 majorMinor = 0x00010008;  // WinAppSDK 1.8
+    PACKAGE_VERSION minVersion{};          // no minimum
+    const HRESULT hr = MddBootstrapInitialize2(
+        majorMinor,                                       // majorMinorVersion
+        nullptr,                                          // versionTag (stable)
+        minVersion,                                       // minVersion
+        MddBootstrapInitializeOptions_OnNoMatch_ShowUI);  // options
+    initialized = SUCCEEDED(hr);
+
+    winrt::init_apartment();
+
+    // Register all certified EPs, or try to register all individually if that
+    // fails
+    auto catalog = winml::ExecutionProviderCatalog::GetDefault();
+    try {
+      logger(cil::LogLevel::kInfo,
+             "Initializing and registering certified EPs.");
+      catalog.EnsureAndRegisterCertifiedAsync().get();
+    } catch (const std::exception& e) {
+      logger(cil::LogLevel::kWarning,
+             std::string("EP catalog init failed: ") + e.what());
+
+      logger(cil::LogLevel::kInfo,
+             "Attempting to individually ensure and register all EPs.");
+
+      for (auto const& p : catalog.FindAllProviders()) {
+        try {
+          if (p.ReadyState() ==
+              winml::ExecutionProviderReadyState::NotPresent) {
+            p.EnsureReadyAsync().get();
+          }
+          p.TryRegister();
+        } catch (const std::exception& e) {
+          logger(cil::LogLevel::kWarning,
+                 std::string("EP registration failed: ") + e.what());
+        }
+      }
+
+      catalog.RegisterCertifiedAsync().get();
+    }
+
+    bool foundReadyEP = false;
+
+    for (auto const& p : catalog.FindAllProviders()) {
+      if (p.ReadyState() != winml::ExecutionProviderReadyState::Ready) continue;
+
+      std::wstring name = p.Name().c_str();
+      std::wstring path = p.LibraryPath().c_str();
+      if (name.empty() || path.empty()) continue;
+      try {
+        auto utf8_name = ConvertWideToUtf8(name);
+        auto utf8_path = ConvertWideToUtf8(path);
+        foundReadyEP = true;
+        logger(cil::LogLevel::kInfo,
+               "Registering EP: " + utf8_name + " at " + utf8_path);
+        env.RegisterExecutionProviderLibrary(utf8_name.c_str(), path);
+      } catch (const std::exception& e) {
+        logger(cil::LogLevel::kWarning,
+               std::string(
+                   "EP registration failed (might be already registered): ") +
+                   e.what());
+      }
+    }
+
+    LogInstalledWinMLEPVersions(logger);
+
+    MddBootstrapShutdown();
+
+    initialized = initialized && foundReadyEP;
+  });
+
+  return initialized;
+}
 
 namespace cil {
 namespace IHV {
@@ -31,93 +238,39 @@ BaseInference::BaseInference(
       deps_dir_(deps_dir) {
   SetDeviceType(ep_settings.GetDeviceType());
   if (ep_name_.find("WindowsML") != std::string::npos) {
-    winrt::init_apartment();  // Required for most WinRT APIs
-
-    if (WinMLInitialize() != S_OK)
-      throw std::runtime_error("Failed to initialize WinML.");
-
     Ort::Env env(ORT_LOGGING_LEVEL_ERROR, "OGA");
 
-    struct Context {
-      std::atomic<bool> download_done{false};
-      std::atomic<bool> download_success{false};
-      std::atomic<bool> registration_done{false};
-      std::atomic<bool> registration_success{false};
-      std::atomic<bool> get_paths_done{false};
-      std::atomic<bool> get_paths_success{false};
-      std::vector<std::pair<std::wstring, std::wstring>>
-          execution_provider_paths;
-    } contextData;
-
-    // Ensure the latest execution providers are available (downloads them if
-    // they aren't)
-    if (WinMLDownloadExecutionProviders(
-            [](void* context, HRESULT result) {
-              auto& contextData = *static_cast<Context*>(context);
-              contextData.download_success.store(SUCCEEDED(result));
-              contextData.download_done.store(true);
-            },
-            &contextData) != S_OK) {
-      throw std::runtime_error(
-          "Failed to initiate download of execution providers");
+    if (EnsureAndRegisterEPs(env, logger_))
+      logger_(LogLevel::kInfo, "Execution Providers are ready.");
+    else {
+      logger_(LogLevel::kError, "Failed to initialize Execution Providers.");
+      SetErrorMessage(
+          "WindowsML failed to initialize.\n"
+          "Enable Windows Update so the benchmark can download/install WinML.\n"
+          "Minimum required: Windows 11 Enterprise 24H2 (OS build 26100.6901)\n"
+          "Experience Pack: Windows Feature Experience Pack 1000.26100.253.0\n"
+          "Install all pending Windows Updates and reboot if needed.\n"
+          "Also install: Microsoft Visual C++ Redistributable (x64) 14.44.53211.");
+      return;
     }
 
-    while (!contextData.download_done.load()) std::this_thread::yield();
+    auto allProviders =
+        winml::ExecutionProviderCatalog::GetDefault().FindAllProviders();
 
-    if (!contextData.download_success.load()) {
-      throw std::runtime_error("Failed to download execution providers");
+    std::vector<std::pair<std::wstring, std::wstring>> execution_provider_paths;
+    execution_provider_paths.reserve(allProviders.size());
+    for (auto const& p : allProviders) {
+      if (p.ReadyState() == winml::ExecutionProviderReadyState::Ready) {
+        std::wstring name = p.Name().c_str();
+        std::wstring path = p.LibraryPath().c_str();
+        if (!name.empty() && !path.empty()) {
+          execution_provider_paths.emplace_back(std::move(name),
+                                                std::move(path));
+        }
+      }
     }
 
-    // And register the EPs with ONNX Runtime
-    if (WinMLRegisterExecutionProviders(
-            [](void* context, HRESULT result) {
-              auto& contextData = *static_cast<Context*>(context);
-              contextData.registration_success.store(SUCCEEDED(result));
-              contextData.registration_done.store(true);
-            },
-            &contextData) != S_OK) {
-      throw std::runtime_error(
-          "Failed to initiate registration of execution providers");
-    }
-
-    while (!contextData.registration_success.load()) std::this_thread::yield();
-
-    if (!contextData.registration_success.load()) {
-      throw std::runtime_error("Failed to register execution providers");
-    }
-
-    // Get the paths of the execution providers installed on this device
-    if (WinMLGetExecutionProviderPaths(
-            [](void* context, HRESULT result, const wchar_t** names,
-               const wchar_t** paths, unsigned int count) {
-              auto& contextData = *static_cast<Context*>(context);
-              contextData.get_paths_success.store(SUCCEEDED(result));
-
-              auto& execution_provider_paths =
-                  contextData.execution_provider_paths;
-              if (SUCCEEDED(result)) {
-                execution_provider_paths.reserve(count);
-                for (unsigned int i = 0; i < count; ++i) {
-                  execution_provider_paths.emplace_back(std::wstring(names[i]),
-                                                        std::wstring(paths[i]));
-                }
-              } else {
-                execution_provider_paths.clear();
-              }
-              contextData.get_paths_done.store(true);
-            },
-            &contextData) != S_OK) {
-      throw std::runtime_error(
-          "Failed to initiate retrieval of execution provider paths");
-    }
-
-    while (!contextData.get_paths_done.load()) std::this_thread::yield();
-
-    if (!contextData.get_paths_success.load()) {
-      throw std::runtime_error("Failed to get execution provider paths");
-    }
-
-    DetectWindowsMLDevices(env, contextData.execution_provider_paths);
+    DetectWindowsMLDevices(env, execution_provider_paths);
     if (!winml_devices_.has_value() || winml_devices_.value().empty()) {
       SetErrorMessage(
           "No WindowsML devices found. Please ensure you have the required "
@@ -127,9 +280,8 @@ BaseInference::BaseInference(
 }
 
 BaseInference::~BaseInference() {
-  if (WinMLGetInitializationStatus() == S_OK) {
-    WinMLUninitialize();
-  }
+  // Intentionally not calling winrt::uninit_apartment() to keep apartment
+  // alive across multiple BaseInference lifetimes and avoid teardown races.
 }
 
 const API_IHV_DeviceList_t* const BaseInference::EnumerateDevices() {
@@ -198,10 +350,15 @@ void BaseInference::DetectWindowsMLDevices(
   auto device_ep = lower_case(ep_settings_.GetDeviceEP());
 
   static const std::map<std::string, std::string> ep_aliases = {
+      {"CPUExecutionProvider", "CPU"},
       {"OpenVINOExecutionProvider", "OpenVINO"},
-  };
+      {"QNNExecutionProvider", "QNN"},
+      {"VitisAIExecutionProvider", "VitisAI"},
+      {"NvTensorRTRTXExecutionProvider", "NvTensorRtRtx"},
+      {"DmlExecutionProvider", "DirectML"}};
 
-  static const std::set<std::string> supported_eps = {"OpenVINO"};
+  static const std::set<std::string> supported_eps = {
+      "CPU", "DirectML", "OpenVINO", "QNN", "VitisAI", "NvTensorRtRtx"};
 
   std::vector<Ort::ConstEpDevice> ep_devices = env.GetEpDevices();
 
@@ -212,6 +369,15 @@ void BaseInference::DetectWindowsMLDevices(
   }
 
   static const std::vector<std::string> device_types = {"CPU", "GPU", "NPU"};
+
+  struct DirectMLDevice {
+    std::string name;
+    std::string type;
+    std::string perf;
+    uint32_t id;
+  };
+
+  std::vector<DirectMLDevice> directml_devices;
 
   std::vector<WinMLDevice> winml_devices;
 
@@ -226,6 +392,20 @@ void BaseInference::DetectWindowsMLDevices(
                       ? device_types[device.Device().Type()]
                       : "Unknown";
 
+      LOGGER_(cil::LogLevel::kInfo,
+              " | Vendor: " + std::string(device.EpVendor()) +
+                  " | Device Type: " + type +
+                  " | DeviceId: " + std::to_string(device.Device().DeviceId()));
+
+#if SHOW_DEVICE_METADATA || SHOW_DEBUG_ENUMERATION || 0
+      for (const auto& metadata :
+           device.Device().Metadata().GetKeyValuePairs()) {
+        LOGGER_(cil::LogLevel::kInfo,
+                "            | Metadata: " + metadata.first + " = " +
+                    metadata.second);
+      }
+#endif
+
       if (type == "unknown" ||
           !device_type_.empty() && (type.empty() || type != device_type_))
         continue;
@@ -234,7 +414,25 @@ void BaseInference::DetectWindowsMLDevices(
 
       if (!device_ep.empty() && device_ep != lower_case(ep)) continue;
 
-      if (ep != "DirectML") {
+      if (ep == "DirectML") {
+        try {
+          DirectMLDevice directml_device;
+
+          directml_device.name =
+              device.Device().Metadata().GetValue("Description");
+          std::string perf =
+              device.Device().Metadata().GetValue("DxgiHighPerformanceIndex");
+          directml_device.perf = std::stoi(perf);
+          directml_device.type = type;
+          directml_device.id = device.Device().DeviceId();
+
+          directml_devices.emplace_back(directml_device);
+        } catch (const std::exception& e) {
+          LOGGER_(cil::LogLevel::kWarning,
+                  "Failed to parse DML device: " + std::string(e.what()));
+        }
+
+      } else {
         auto device_name =
             device.Device().Metadata().GetKeyValuePairs().contains(
                 "Description")
@@ -242,32 +440,28 @@ void BaseInference::DetectWindowsMLDevices(
                 : std::string(device.Device().Vendor());
         if (device_name.empty()) device_name = std::string(device.EpVendor());
 
-        winml_devices.emplace_back(
-            WinMLDevice{ep, type, device_name, device.Device().DeviceId()});
+        winml_devices.emplace_back(WinMLDevice{
+            ep, type, device_name, device.Device().DeviceId(), "", std::nullopt,
+            device.Device().Metadata().GetKeyValuePairs().contains("Discrete")
+                ? std::optional<bool>{device.Device().Metadata().GetValue(
+                                          "Discrete") == "1"}
+                : std::nullopt});
       }
     }
   }
 
-  static auto convertWideToUtf8 = [](const std::wstring& wstr) -> std::string {
-    int count = WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), wstr.length(),
-                                    NULL, 0, NULL, NULL);
-    std::string str(count, 0);
-    WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), -1, &str[0], count, NULL,
-                        NULL);
-    return str;
-  };
-
   LOGGER_(cil::LogLevel::kInfo, "Execution Providers and their paths:");
   for (auto& [wname, wpath] : execution_provider_paths) {
-    auto ep = convertWideToUtf8(wname);
+    auto ep = ConvertWideToUtf8(wname);
     if (ep_aliases.contains(ep)) {
       ep = ep_aliases.at(ep);
     }
 
-    auto path = convertWideToUtf8(wpath);
+    auto path = ConvertWideToUtf8(wpath);
 
     LOGGER_(cil::LogLevel::kInfo, "   " + ep + " | " + path);
 
+    // Workaround when EP does not report devices, but was registered.
     auto it = std::find_if(winml_devices.begin(), winml_devices.end(),
                            [&ep](const WinMLDevice& d) { return d.ep == ep; });
 
@@ -275,14 +469,34 @@ void BaseInference::DetectWindowsMLDevices(
 
     if (!device_ep.empty() && device_ep != lower_case(ep)) continue;
 
-    if (ep == "OpenVINO") {
+    if (ep == "NvTensorRtRtx") {
+      if (device_type_.empty() || device_type_ == "GPU")
+        winml_devices.emplace_back(WinMLDevice{ep, "GPU", "Nvidia", 1});
+    } else if (ep == "OpenVINO") {
       if (device_type_.empty() || device_type_ == "NPU")
         winml_devices.emplace_back(WinMLDevice{ep, "NPU", "Intel", 0});
       if (device_type_.empty() || device_type_ == "GPU")
         winml_devices.emplace_back(WinMLDevice{ep, "GPU", "Intel", 1});
+    } else if (ep == "QNN") {
+      if (device_type_.empty() || device_type_ == "NPU")
+        winml_devices.emplace_back(WinMLDevice{ep, "NPU", "Qualcomm", 0});
+      if (device_type_.empty() || device_type_ == "GPU")
+        winml_devices.emplace_back(WinMLDevice{ep, "GPU", "Qualcomm", 1});
     }
   }
 
+  // sort directml devices by performance
+  std::sort(directml_devices.begin(), directml_devices.end(),
+            [](const DirectMLDevice& a, const DirectMLDevice& b) {
+              return a.perf < b.perf;  // Higher performance first
+            });
+
+  for (const auto& dml_device : directml_devices) {
+    winml_devices.emplace_back(WinMLDevice{"DirectML", dml_device.type,
+                                           dml_device.name, dml_device.id});
+  }
+
+  // Remove duplicates
   for (size_t i = 0; i < winml_devices.size(); ++i) {
     for (size_t j = i + 1; j < winml_devices.size();) {
       if (winml_devices[i].ep == winml_devices[j].ep &&
@@ -304,6 +518,53 @@ void BaseInference::DetectWindowsMLDevices(
                                 std::string::npos;
                        }),
         winml_devices.end());
+  }
+
+  if (!winml_devices.empty() && directml_devices.size()) {
+    cil::common::DirectML::DeviceEnumeration directml_device_enumeration;
+
+    // Enumerate devices using CLI
+    auto directml_devices_enumerated =
+        directml_device_enumeration.EnumerateDevices(deps_dir_, device_type_,
+                                                     device_vendor);
+
+    bool has_directml = false;
+    for (auto it = winml_devices.begin(); it != winml_devices.end();) {
+      auto& device = *it;
+      if (device.ep != "DirectML") {
+        ++it;
+        continue;
+      }
+
+      if (directml_devices_enumerated.empty()) {
+        LOGGER_(LogLevel::kError,
+                "No DirectML devices found for: " + device.name);
+        it = winml_devices.erase(it);
+        continue;
+      }
+
+      auto directml_device_it = std::find_if(
+          directml_devices_enumerated.begin(),
+          directml_devices_enumerated.end(),
+          [&device](
+              const cil::common::DirectML::DeviceEnumeration::DeviceInfo& d) {
+            return d.name == device.name;
+          });
+      if (directml_device_it == directml_devices_enumerated.end()) {
+        LOGGER_(LogLevel::kWarning, "DirectML LUID not found: " + device.name);
+        it = winml_devices.erase(it);
+        continue;
+      }
+      // Assign the DirectML device entry
+      device.directml_device_entry = (int)std::distance(
+          directml_devices_enumerated.begin(), directml_device_it);
+      ++it;
+
+      has_directml = true;
+    }
+
+    if (has_directml)
+      directml_devices_ = std::move(directml_devices_enumerated);
   }
 
   // Log final device ids
@@ -339,6 +600,7 @@ void BaseInference::AssignModelForDevices() {
 
   std::vector<AvailableModel> available_models;
   std::set<std::string> available_providers;
+  available_providers.insert("NvTensorRtRtx");
 
   auto get_available_providers = [&available_models, &available_providers,
                                   this](const fs::path& model_folder) {
@@ -378,8 +640,8 @@ void BaseInference::AssignModelForDevices() {
                 available_providers.insert("VitisAI");
                 execution_providers.insert("VitisAI");
               } else if (option.contains("NvTensorRtRtx")) {
-                available_providers.insert("NvTensorRTRTX");
-                execution_providers.insert("NvTensorRTRTX");
+                available_providers.insert("NvTensorRtRtx");
+                execution_providers.insert("NvTensorRtRtx");
               }
             }
           }

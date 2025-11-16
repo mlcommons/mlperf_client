@@ -1,0 +1,93 @@
+{
+  "EPDependencies": [
+    {
+      "Name": "NativeOpenVINO",
+      "Files": [
+        {
+          "Name": "libopenvino.so",
+          "Path": "https://client.mlcommons-storage.org/deps/1.5/binaries/NativeOpenVINO/Linux/libopenvino.so"
+        },
+        {
+          "Name": "libopenvino.so.2530",
+          "Path": "https://client.mlcommons-storage.org/deps/1.5/binaries/NativeOpenVINO/Linux/libopenvino.so.2530"
+        },
+        {
+          "Name": "libopenvino_auto_batch_plugin.so",
+          "Path": "https://client.mlcommons-storage.org/deps/1.5/binaries/NativeOpenVINO/Linux/libopenvino_auto_batch_plugin.so"
+        },
+        {
+          "Name": "libopenvino_auto_plugin.so",
+          "Path": "https://client.mlcommons-storage.org/deps/1.5/binaries/NativeOpenVINO/Linux/libopenvino_auto_plugin.so"
+        },
+        {
+          "Name": "libopenvino_c.so",
+          "Path": "https://client.mlcommons-storage.org/deps/1.5/binaries/NativeOpenVINO/Linux/libopenvino_c.so"
+        },
+        {
+          "Name": "libopenvino_genai.so",
+          "Path": "https://client.mlcommons-storage.org/deps/1.5/binaries/NativeOpenVINO/Linux/libopenvino_genai.so"
+        },
+        {
+          "Name": "libopenvino_genai.so.2530",
+          "Path": "https://client.mlcommons-storage.org/deps/1.5/binaries/NativeOpenVINO/Linux/libopenvino_genai.so.2530"
+        },
+        {
+          "Name": "libopenvino_ir_frontend.so.2530",
+          "Path": "https://client.mlcommons-storage.org/deps/1.5/binaries/NativeOpenVINO/Linux/libopenvino_ir_frontend.so.2530"
+        },
+        {
+          "Name": "libopenvino_hetero_plugin.so",
+          "Path": "https://client.mlcommons-storage.org/deps/1.5/binaries/NativeOpenVINO/Linux/libopenvino_hetero_plugin.so"
+        },
+        {
+          "Name": "libopenvino_intel_cpu_plugin.so",
+          "Path": "https://client.mlcommons-storage.org/deps/1.5/binaries/NativeOpenVINO/Linux/libopenvino_intel_cpu_plugin.so"
+        },
+        {
+          "Name": "libopenvino_intel_gpu_plugin.so",
+          "Path": "https://client.mlcommons-storage.org/deps/1.5/binaries/NativeOpenVINO/Linux/libopenvino_intel_gpu_plugin.so"
+        },
+        {
+          "Name": "libopenvino_intel_npu_plugin.so",
+          "Path": "https://client.mlcommons-storage.org/deps/1.5/binaries/NativeOpenVINO/Linux/libopenvino_intel_npu_plugin.so"
+        },
+        {
+          "Name": "libopenvino_onnx_frontend.so",
+          "Path": "https://client.mlcommons-storage.org/deps/1.5/binaries/NativeOpenVINO/Linux/libopenvino_onnx_frontend.so"
+        },
+        {
+          "Name": "libopenvino_paddle_frontend.so",
+          "Path": "https://client.mlcommons-storage.org/deps/1.5/binaries/NativeOpenVINO/Linux/libopenvino_paddle_frontend.so"
+        },
+        {
+          "Name": "libopenvino_pytorch_frontend.so",
+          "Path": "https://client.mlcommons-storage.org/deps/1.5/binaries/NativeOpenVINO/Linux/libopenvino_pytorch_frontend.so"
+        },
+        {
+          "Name": "libopenvino_tensorflow_frontend.so",
+          "Path": "https://client.mlcommons-storage.org/deps/1.5/binaries/NativeOpenVINO/Linux/libopenvino_tensorflow_frontend.so"
+        },
+        {
+          "Name": "libopenvino_tensorflow_lite_frontend.so",
+          "Path": "https://client.mlcommons-storage.org/deps/1.5/binaries/NativeOpenVINO/Linux/libopenvino_tensorflow_lite_frontend.so"
+        },
+        {
+          "Name": "libopenvino_tokenizers.so",
+          "Path": "https://client.mlcommons-storage.org/deps/1.5/binaries/NativeOpenVINO/Linux/libopenvino_tokenizers.so"
+        },
+        {
+          "Name": "libtbb.so.12",
+          "Path": "https://client.mlcommons-storage.org/deps/1.5/binaries/NativeOpenVINO/Linux/libtbb.so.12"
+        },
+        {
+          "Name": "libtbbmalloc.so",
+          "Path": "https://client.mlcommons-storage.org/deps/1.5/binaries/NativeOpenVINO/Linux/libtbbmalloc.so"
+        },
+        {
+          "Name": "plugins.xml",
+          "Path": "https://client.mlcommons-storage.org/deps/1.5/binaries/NativeOpenVINO/Linux/plugins.xml"
+        }
+      ]
+    }
+  ]
+}

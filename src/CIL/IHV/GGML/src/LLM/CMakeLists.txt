@@ -67,7 +67,13 @@ add_subdirectory(../../../../../../deps/JSONSchema JSONSchema)
 
 set(GIT_EXE ${GIT_EXECUTABLE})
 
-find_program(GIT_EXE NAMES git git.exe REQUIRED NO_CMAKE_FIND_ROOT_PATH)
+# Prefer a pre-provided GIT_EXECUTABLE, otherwise try to locate git; don't hard-require it
+if(NOT GIT_EXE)
+  find_program(GIT_EXE NAMES git git.exe NO_CMAKE_FIND_ROOT_PATH)
+  if(NOT GIT_EXE)
+    message(WARNING "Git not found; proceeding without git-dependent metadata.")
+  endif()
+endif()
 
 # Add common code from CIL
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../../../common" common_cil)

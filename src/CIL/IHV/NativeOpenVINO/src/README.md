@@ -25,14 +25,14 @@ Optimum Intel provides a simple interface to optimize Transformer and Diffuser m
 
 To install latest Optimum Intel release with required dependencies one can use `pip` as follows:
 
-Download OpenVINO 2025.2.0.0rc2 or later from:
-https://storage.openvinotoolkit.org/repositories/openvino_genai/packages/pre-release/2025.2.0.0rc2/openvino_genai_windows_2025.2.0.0rc2_x86_64.zip
-
+Download OpenVINO 2025.3:
+ - Windows - https://storage.openvinotoolkit.org/repositories/openvino_genai/packages/2025.3/windows/openvino_genai_windows_2025.3.0.0_x86_64.zip
+ - Linux - https://storage.openvinotoolkit.org/repositories/openvino_genai/packages/2025.3/linux/openvino_genai_ubuntu24_2025.3.0.0_x86_64.tar.gz
 
 ```bash
 python --version
 # Python 3.12.4
-cd openvino_genai_2025.2.0.0rc2/python
+cd openvino_genai_2025.3*/python
 pip install -r requirements.txt
 pip install --upgrade --upgrade-strategy eager "optimum[openvino]"
 
@@ -83,4 +83,5 @@ MLPerf Client require the tokenizer files inside a zip file.
 - For a comprehensive guide, refer to https://github.com/huggingface/optimum-intel
 - "Export an LLM model via Hugging Face Optimum-Intel", https://docs.openvino.ai/2025/openvino-workflow-generative/inference-with-optimum-intel.html
 - Make sure you include openvino_tokenizer.* and openvino_detokenizer.* into IHV-OV-tokenizers.zip
-
+- Linux build was tested on Ubuntu 24.04
+- [OpenVINO support setup guide for Linux AI PC](https://medium.com/openvino-toolkit/how-to-run-openvino-on-a-linux-ai-pc-52083ce14a98). Update NPU driver download link to the latest available on the GitHub.

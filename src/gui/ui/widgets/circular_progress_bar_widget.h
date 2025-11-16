@@ -7,18 +7,26 @@
 
 class QPropertyAnimation;
 
+/**
+ * @class CircularProgressBar
+ * @brief Animated circular progress bar with customizable styling.
+ */
 class CircularProgressBar : public QWidget {
   Q_OBJECT
   Q_PROPERTY(int GradientRotationAngle READ GradientRotationAngle WRITE
                  SetGradientRotationAngle)
 
  public:
-  // Constructor
   CircularProgressBar(int diameter, QWidget *parent = nullptr);
+
   void SetProgress(int value) {
     m_value = value;
     update();
   }
+
+  /**
+   * @brief Progress bar configs.
+   */
   void SetThickness(int thickness) {
     m_thickness = thickness;
     update();
@@ -68,8 +76,15 @@ class CircularProgressBar : public QWidget {
     m_icon_path = icon_path;
     update();
   }
+
+  /**
+   * @brief Gets the current progress value.
+   */
   int GetProgress() { return m_value; }
 
+  /**
+   * @brief Get/Set gradient rotation angle
+   */
   int GradientRotationAngle() const {
     return m_gradient_rotation_angle;
   }

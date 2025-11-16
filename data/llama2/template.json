@@ -1,0 +1,23 @@
+{
+  "model_config": {
+    "model": {
+      "bos_token_id": 1,
+      "context_length": "<int>",
+      "eos_token_id": 2,
+      "vocab_size": 32000
+    },
+    "search": {
+      "method": "greedy",
+      "temperature": 0.6,
+      "top_k": 1,
+      "top_p": 0.9,
+      "stop_on_eos": true,
+      "max_length": "<int>",
+      "max_total_length": "<int>"
+    }
+  },
+  "prompts": [
+    "<prompt text>"
+  ],
+  "category": "<string>"
+}

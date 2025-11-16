@@ -10,13 +10,28 @@ class QItemSelectionModel;
 namespace gui {
 namespace views {
 
+/**
+ * @class ResultsHistoryPage
+ * @brief Page for displaying and managing benchmark results history.
+ */
 class ResultsHistoryPage : public AbstractView {
   Q_OBJECT
 
  public:
   explicit ResultsHistoryPage(QWidget* parent = nullptr);
+  /**
+   * @brief Set the data model for results display.
+   */
   void SetModel(QAbstractItemModel* model);
+
+  /**
+   * @brief Access selection model for results list.
+   */
   QItemSelectionModel* GetSelectionModel() const;
+
+  /**
+   * @brief Set the sorting mode for the results.
+   */
   void SetSortingMode(const QString& mode);
 
  signals:
@@ -36,13 +51,12 @@ class ResultsHistoryPage : public AbstractView {
                              const QItemSelection& deselected);
   void OnRowOpenButtonClicked();
   void OnRowSelectionBoxChecked(bool checked);
-
   void OnDeleteButtonClicked();
 
  private:
   void UpdateButtons();
 
-  Ui::ResultsHistoryPage ui_;
+  Ui::ResultsHistoryPage ui_;  ///< UI form generated from the .ui file
 };
 
 }  // namespace views

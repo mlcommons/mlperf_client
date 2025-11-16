@@ -93,7 +93,7 @@ std::string LlmInference::formConfigStringPhi3_5(
                                                     {"n-layer", 32},
                                                     {"n-embd", 3072},
                                                     {"n-heads", 32},
-                                                    {"use-in-memory", true},
+                                                    {"enable-in-memory-kv-share", true},
                                                     {"kv-quantization", true}};
     cpu_engine["model"]["version"] = 1;
     cpu_engine["model"]["type"] = "library";

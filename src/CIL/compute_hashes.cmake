@@ -4,19 +4,21 @@ set(temp_file "${OUTPUT_FILE}.tmp")
 file(WRITE "${temp_file}" "{\n")
 
 list(LENGTH FILES_TO_HASH LIST_LENGTH)
-math(EXPR LAST_INDEX "${LIST_LENGTH} - 1")
 
-foreach(INDEX RANGE ${LAST_INDEX})
-    list(GET FILES_TO_HASH ${INDEX} file_to_hash)
-    file(SHA256 ${file_to_hash} HASH)
-    get_filename_component(FILE_NAME ${file_to_hash} NAME)
-    if(NOT ${INDEX} EQUAL ${LAST_INDEX})
-        file(APPEND "${temp_file}" " \"${HASH}\": \"${FILE_NAME}\",\n")
-    else()
-        file(APPEND "${temp_file}" " \"${HASH}\": \"${FILE_NAME}\"\n")
-    endif()
-endforeach()
-
+if(LIST_LENGTH GREATER 0)
+    math(EXPR LAST_INDEX "${LIST_LENGTH} - 1")
+    
+    foreach(INDEX RANGE ${LAST_INDEX})
+        list(GET FILES_TO_HASH ${INDEX} file_to_hash)
+        file(SHA256 ${file_to_hash} HASH)
+        get_filename_component(FILE_NAME ${file_to_hash} NAME)
+        if(NOT ${INDEX} EQUAL ${LAST_INDEX})
+            file(APPEND "${temp_file}" " \"${HASH}\": \"${FILE_NAME}\",\n")
+        else()
+            file(APPEND "${temp_file}" " \"${HASH}\": \"${FILE_NAME}\"\n")
+        endif()
+    endforeach()
+endif()
 file(APPEND "${temp_file}" "}\n")
 
 

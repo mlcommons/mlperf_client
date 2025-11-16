@@ -58,10 +58,12 @@ class SystemInfoProvider {
   struct NPUGPUPerformanceInfo {
     std::string name;
     size_t usage;
+    bool usage_is_available;
     double temperature;
     bool temperature_is_available;
     size_t dedicated_memory_usage;
     size_t shared_memory_usage;
+    bool memory_usage_is_available;
   };
 
   struct PerformanceInfo {

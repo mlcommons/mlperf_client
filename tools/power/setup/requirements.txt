@@ -1,0 +1,12 @@
+# python requirements for power collection and log processing
+# usage: pip install -r requirements.txt
+
+# Power Collection
+uuid
+logging
+pywin32
+
+# Logs Processing
+matplotlib
+datetime
+numpy

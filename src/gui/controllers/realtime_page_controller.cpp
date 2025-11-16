@@ -21,15 +21,17 @@ RealtimePageController::RealtimePageController(std::atomic<bool>& interrupt,
       monitoring_update_in_progress_(false),
       monitoring_timer_(nullptr),
       progress_handler_(new GuiProgressTrackerHandler(interrupt)),
-      current_stage_(0) {
+      current_stage_(0),
+      logs_enabled_(true) {
   connect(progress_handler_, &GuiProgressTrackerHandler::CurrentTaskInfoChanged,
           this, &RealtimePageController::OnCurrentTaskInfoChanged);
   connect(
       progress_handler_, &GuiProgressTrackerHandler::LogMessage, this,
       [this](const QString& message, bool move_start, bool move_up,
              bool move_down) {
-        GetView()->GetLogsWidget()->InsertLogMessage(message, move_start,
-                                                     move_up, move_down);
+        if (logs_enabled_)
+          GetView()->GetLogsWidget()->InsertLogMessage(message, move_start,
+                                                       move_up, move_down);
       },
       Qt::QueuedConnection);
 
@@ -37,8 +39,9 @@ RealtimePageController::RealtimePageController(std::atomic<bool>& interrupt,
     QMetaObject::invokeMethod(
         this,
         [this, message]() {
-          GetView()->GetLogsWidget()->AppendLogMessage(
-              QString(message.c_str()));
+          if (logs_enabled_)
+            GetView()->GetLogsWidget()->AppendLogMessage(
+                QString(message.c_str()));
         },
         Qt::QueuedConnection);
   });
@@ -69,11 +72,24 @@ void RealtimePageController::InitExecutionWithEPs(
   for (const auto& ep : eps)
     execution_progress_widget->AddEP(
         ep.name_, ep.description_,
-        QString::fromStdString(ep.config_["device_type"]),
-        ep.long_name_ + "(" + ep.model_name_ + ")");
+        QString::fromStdString(ep.config_["device_type"]), ep.long_name_,
+        ep.model_name_);
   GetView()->GetLogsWidget()->ClearLogs();
 
   progress_handler_->SetInterrupt(false);
+}
+
+QString RealtimePageController::GetEPDisplayName(int index) const {
+  return GetExecutionProgressWidget()->GetEPDisplayName(index);
+}
+
+bool RealtimePageController::RequestDownload(uint64_t size_in_bytes) {
+  return GetView()->RequestDownload(size_in_bytes);
+}
+
+void RealtimePageController::ShowStatus(const QString& action_type,
+                                        const BenchmarkStatus& status) {
+  return GetView()->ShowStatus(action_type, status);
 }
 
 void RealtimePageController::SetEpSelected(int index) {
@@ -131,34 +147,40 @@ void RealtimePageController::InitializeMonitoringWidgets() {
 
   const auto& gpu_info = system_info_provider->GetGpuInfo();
   for (const auto& gpu : gpu_info) {
-    QString gpu_name = QString::fromStdString(gpu.name);
-    monitoring_widget_indices_[gpu_name] = configs.size();
-    configs.append(
-        {SystemMonitoringWidget::MonitoringWidgetType::kCircularGauge,
-         "GPU Utilization", gui::utils::GetDeviceIcon("GPU"), gpu_name, "%",
-         100.0});
-    double dedicated_memory_gb =
-        gui::utils::BytesToGb(gpu.dedicated_memory_size);
-    double shared_memory_gb = gui::utils::BytesToGb(gpu.shared_memory_size);
-    bool is_dedicated = dedicated_memory_gb > 0.5;
-    is_gpu_dedicated[gpu_name] = is_dedicated;
-    configs.append(
-        {SystemMonitoringWidget::MonitoringWidgetType::kCapacityBar,
-         QString("GPU Memory (%1)").arg(is_dedicated ? "Dedicated" : "Shared"),
-         "", gpu_name, "GB",
-         is_dedicated ? dedicated_memory_gb : shared_memory_gb});
-
     auto gpu_performance_info = performance_info.gpu_info.find(gpu.name);
-    if (gpu_performance_info != performance_info.gpu_info.end() &&
-        gpu_performance_info->second.temperature_is_available)
+    if (gpu_performance_info == performance_info.gpu_info.end()) continue;
+    QString gpu_name = QString::fromStdString(gpu.name);
+    size_t initial_size = configs.size();
+    if (gpu_performance_info->second.usage_is_available)
+      configs.append(
+          {SystemMonitoringWidget::MonitoringWidgetType::kCircularGauge,
+           "GPU Utilization", gui::utils::GetDeviceIcon("GPU"), gpu_name, "%",
+           100.0});
+    if (gpu_performance_info->second.memory_usage_is_available) {
+      double dedicated_memory_gb =
+          gui::utils::BytesToGb(gpu.dedicated_memory_size);
+      double shared_memory_gb = gui::utils::BytesToGb(gpu.shared_memory_size);
+      bool is_dedicated = dedicated_memory_gb > 0.5;
+      is_gpu_dedicated[gpu_name] = is_dedicated;
+      configs.append(
+          {SystemMonitoringWidget::MonitoringWidgetType::kCapacityBar,
+           QString("GPU Memory (%1)")
+               .arg(is_dedicated ? "Dedicated" : "Shared"),
+           "", gpu_name, "GB",
+           is_dedicated ? dedicated_memory_gb : shared_memory_gb});
+    }
+
+    if (gpu_performance_info->second.temperature_is_available)
       configs.append(
           {SystemMonitoringWidget::MonitoringWidgetType::kThermometer,
            "GPU Temperature", ":/icons/resources/icons/mdi_temperature.png",
            gpu_name, "", 0.0});
+    if (initial_size != configs.size())  // there is a config added for this gpu
+      monitoring_widget_indices_[gpu_name] = initial_size;
   }
 
   const auto& npu_info = system_info_provider->GetNpuInfo();
-  if (!npu_info.name.empty()) {
+  if (!npu_info.name.empty() && performance_info.npu_info.usage_is_available) {
     QString npu_name = QString::fromStdString(npu_info.name);
     monitoring_widget_indices_[npu_name] = configs.size();
     configs.append(
@@ -208,18 +230,21 @@ void RealtimePageController::OnMonitoringTimerTimeout() {
           auto gpu_index_it = monitoring_widget_indices_.find(gpu_name);
           if (gpu_index_it == monitoring_widget_indices_.end()) continue;
           int index = *gpu_index_it;
-          size_t gpu_memory_usage = is_gpu_dedicated[gpu_name]
-                                        ? gpu.second.dedicated_memory_usage
-                                        : gpu.second.shared_memory_usage;
-          monitoring_widget->SetWidgetValue(index, gpu.second.usage);
-          monitoring_widget->SetWidgetValue(
-              index + 1, gui::utils::BytesToGb(gpu_memory_usage));
+          if (gpu.second.usage_is_available)
+            monitoring_widget->SetWidgetValue(index++, gpu.second.usage);
+          if (gpu.second.memory_usage_is_available) {
+            size_t gpu_memory_usage = is_gpu_dedicated[gpu_name]
+                                          ? gpu.second.dedicated_memory_usage
+                                          : gpu.second.shared_memory_usage;
+            monitoring_widget->SetWidgetValue(
+                index++, gui::utils::BytesToGb(gpu_memory_usage));
+          }
           if (gpu.second.temperature_is_available)
-            monitoring_widget->SetWidgetValue(index + 2,
-                                              gpu.second.temperature);
+            monitoring_widget->SetWidgetValue(index, gpu.second.temperature);
         }
 
-        if (!performance_data.npu_info.name.empty()) {
+        if (!performance_data.npu_info.name.empty() &&
+            performance_data.npu_info.usage_is_available) {
           auto npu_name =
               QString::fromStdString(performance_data.npu_info.name);
           int index = monitoring_widget_indices_[npu_name];
@@ -307,9 +332,16 @@ void RealtimePageController::OnCurrentTaskInfoChanged(
   progress_widget->SetSelectedEpProgress(total_steps, current_step);
 }
 
-void RealtimePageController::OnLogMessageAppended(const QString& message) {
+void RealtimePageController::AppendLogMessage(const QString& message) {
   GetView()->GetLogsWidget()->AppendLogMessage(message);
 }
+
+void RealtimePageController::SetCurrentTaskName(const QString& name) {
+  auto progress_widget = GetExecutionProgressWidget();
+  progress_widget->SetTaskName(name);
+}
+
+void RealtimePageController::EnableLogs(bool enable) { logs_enabled_ = enable; }
 
 }  // namespace controllers
 }  // namespace gui

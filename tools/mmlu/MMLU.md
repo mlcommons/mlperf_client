@@ -44,27 +44,7 @@ The script takes a JSON configuration file as input. Below is an example configu
             "model": {
                 "bos_token_id": 1,
                 "context_length": 4096,
-                "decoder": {
-                    "head_size": 128,
-                    "hidden_size": 4096,
-                    "inputs": {
-                        "input_ids": "input_ids",
-                        "attention_mask": "attention_mask",
-                        "position_ids": "position_ids",
-                        "past_key_names": "past_key_values.%d.key",
-                        "past_value_names": "past_key_values.%d.value"
-                    },
-                    "outputs": {
-                        "logits": "logits",
-                        "present_key_names": "present.%d.key",
-                        "present_value_names": "present.%d.value"
-                    },
-                    "num_attention_heads": 32,
-                    "num_hidden_layers": 32,
-                    "num_key_value_heads": 32
-                },
                 "eos_token_id": 2,
-                "pad_token_id": 0,
                 "vocab_size": 32000
             }
         }

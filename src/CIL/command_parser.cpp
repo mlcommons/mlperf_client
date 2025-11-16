@@ -5,7 +5,7 @@
 #include <sstream>
 #include <string>
 
-#include "../CLI/version.h"
+#include "version.h"
 #include "utils.h"
 
 const int MIN_CONSOLE_WIDTH = 60;

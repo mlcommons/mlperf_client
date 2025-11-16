@@ -4,7 +4,7 @@
 #include "base_inference_common.h"
 #include "directml/adapter_enumeration.h"
 #include "windowsml_config.h"
-#include "win_onnxruntime_cxx_api.h"
+#include "winml/onnxruntime_cxx_api.h"
 
 namespace cil {
 namespace IHV {
@@ -38,6 +38,7 @@ class BaseInference : public cil::infer::BaseInferenceCommon {
     std::string model_path;
 
     std::optional<unsigned> directml_device_entry;
+    std::optional<bool> is_descrete;
   };
 
   std::optional<std::vector<WinMLDevice>> winml_devices_;

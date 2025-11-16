@@ -12,10 +12,15 @@
 #include <memory>
 #include <nlohmann/json.hpp>
 
+/**
+ * @class JsonSchemaPair
+ * @brief Label-input widget pair generated from JSON schema.
+ */
 class JsonSchemaPair {
  public:
   explicit JsonSchemaPair(const QString& key, const nlohmann::json& schema,
                           QWidget* parent = nullptr);
+
   nlohmann::json GetValue() const;
   QString GetKey() const { return key_; }
   QLabel* GetLabelWidget() { return label_; }

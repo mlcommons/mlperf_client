@@ -66,8 +66,9 @@ bool SystemController::Config(bool temp_dir_overriden) {
   }
 
   config_ = std::make_unique<cil::ExecutionConfig>();
-  bool json_loaded = config_->ValidateAndParse(
-      json_config_path_, config_schema_path, config_verification_file_path);
+  bool json_loaded =
+      config_->ValidateAndParse(json_config_path_, config_schema_path,
+                                {{"", config_verification_file_path}});
 
   if (!json_loaded) {
     LOG4CXX_ERROR(loggerSystemController,
@@ -237,6 +238,11 @@ void SystemController::SetSystemDownloadBehavior(
   config_->GetSystemConfig().SetDownloadBehavior(download_behavior);
 }
 
+void SystemController::SetAllowedPromptsType(const std::string& type) {
+  auto& scenarios = config_->GetScenarios();
+  for (auto& scenario : scenarios) scenario.SetAllowedInputType(type);
+}
+
 bool SystemController::GetSystemCacheLocalFiles() const {
   return config_->GetSystemConfig().GetCacheLocalFiles();
 }
@@ -326,10 +332,10 @@ bool SystemController::Run(const Logger& logger, bool enumerate_devices,
           }
         }
         // Start the timer
-        benchmark_start = std::chrono::high_resolution_clock::now();
+        benchmark_start = std::chrono::steady_clock::now();
       } else if (stage_name == "DisplayResult") {
         // Stop the timer and calculate the duration
-        auto benchmark_end = std::chrono::high_resolution_clock::now();
+        auto benchmark_end = std::chrono::steady_clock::now();
         std::chrono::duration<double> duration =
             benchmark_end - benchmark_start;
 

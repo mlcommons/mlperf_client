@@ -1,6 +1,8 @@
 #include "settings_page.h"
 
 #include <QFileDialog>
+#include <QListView>
+#include <QStyleFactory>
 
 namespace gui {
 namespace views {
@@ -25,6 +27,18 @@ void SettingsPage::SetupUi() {
   ui_.keep_logs_label_->setProperty("class", "medium_normal_label");
   ui_.cooldown_label_->setProperty("class", "large_strong_label");
   ui_.cooldown_description_label_->setProperty("class", "medium_normal_label");
+
+#ifdef __APPLE__
+  auto updateBoxFn = [](QComboBox *box) {
+    // This makes combobox popup look identical on Windows, macOS, and iOS
+    box->setView(new QListView());
+    box->setStyle(QStyleFactory::create("Windows"));
+    box->view()->window()->setWindowFlags(box->view()->window()->windowFlags() |
+                                          Qt::NoDropShadowWindowHint);
+  };
+  updateBoxFn(ui_.data_path_box_);
+  updateBoxFn(ui_.logs_path_box_);
+#endif
 }
 
 void SettingsPage::InstallSignalHandlers() {

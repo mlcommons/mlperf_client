@@ -18,13 +18,20 @@ class ResultsHistoryProxyModel;
 
 namespace controllers {
 
+/**
+ * @class ResultsHistoryPageController
+ * @brief Controller for the results history page in the GUI.
+ */
 class ResultsHistoryPageController : public AbstractController {
   Q_OBJECT
 
  public:
   explicit ResultsHistoryPageController(QObject* parent = nullptr);
+
   void SetView(views::ResultsHistoryPage* view);
+
   void LoadHistory(const std::string& results_path);
+
   QList<HistoryEntry> GetCurrentEntries() const;
 
  public slots:
@@ -38,7 +45,18 @@ class ResultsHistoryPageController : public AbstractController {
 
  private:
   void InitializeModels();
+
+  /**
+   * @brief Access the associated view.
+   * @return Pointer to the ResultsHistoryPage view.
+   */
   views::ResultsHistoryPage* GetView() const;
+
+  /**
+   * @brief Update selection state for all rows.
+   * @param row The row index to update.
+   * @param select Boolean indicating whether to select or deselect.
+   */
   void UpdateAllRowsSelection(int row, bool select);
 
   models::ResultsHistoryModel* model_;

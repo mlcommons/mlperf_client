@@ -1,6 +1,12 @@
 #include "execution_progress_widget.h"
 
+#include <QScrollArea>
+
 #include "core/gui_utils.h"
+
+#ifdef Q_OS_IOS
+#include <QScroller>
+#endif
 
 ExecutionProgressWidget::ExecutionProgressWidget(QWidget *parent)
     : QWidget(parent) {
@@ -12,12 +18,11 @@ void ExecutionProgressWidget::setup_ui() {
   setAttribute(Qt::WA_StyledBackground, true);
   setProperty("class", "panel_widget");
   auto main_layout = new QVBoxLayout(this);
-  main_layout->setContentsMargins(0, 5, 0, 5);
+  main_layout->setContentsMargins(5, 5, 5, 5);
   main_layout->setSpacing(10);
-  main_layout->addSpacerItem(
-      new QSpacerItem(60, 25, QSizePolicy::Minimum, QSizePolicy::Expanding));
+  main_layout->addSpacing(10);
 
-#ifndef Q_OS_IOS
+#if defined(Q_OS_WIN) || (defined(Q_OS_MACOS))
   m_hide_counters_button = new ToggleButton(true, this);
   m_hide_counters_label = new QLabel("Hide Counters", this);
   m_hide_counters_label->setProperty("class", "medium_normal_label");
@@ -31,8 +36,7 @@ void ExecutionProgressWidget::setup_ui() {
 #else
   m_hide_counters_button = nullptr;
 #endif
-  main_layout->addSpacerItem(
-      new QSpacerItem(60, 15, QSizePolicy::Minimum, QSizePolicy::Expanding));
+  main_layout->addSpacing(5);
 
   // Progress bar
   m_progress_bar = new CircularProgressBar(232, this);
@@ -40,22 +44,24 @@ void ExecutionProgressWidget::setup_ui() {
   m_progress_bar->SetCenterTextVisible(true);
   m_progress_bar->SetBottomTextVisible(true);
   m_progress_bar->SetAddInnerCircle(true);
-  m_progress_bar->SetBottomText("CUDA (GPU)");
   m_progress_bar->SetSymbol("%");
   m_progress_bar->SetIconPath(gui::utils::GetDeviceIcon("GPU"));
   main_layout->addWidget(m_progress_bar, 0, Qt::AlignCenter);
-  main_layout->addSpacerItem(
-      new QSpacerItem(55, 35, QSizePolicy::Minimum, QSizePolicy::Expanding));
+  main_layout->addSpacing(10);
   auto eps_frame = new QFrame(this);
   eps_frame->setObjectName("eps_frame");
   eps_frame->setFrameShape(QFrame::NoFrame);
   m_ep_layout = new QVBoxLayout(eps_frame);
-  m_ep_layout->setSpacing(20);
-  m_ep_layout->addSpacerItem(
-      new QSpacerItem(60, 40, QSizePolicy::Minimum, QSizePolicy::Expanding));
-  main_layout->addWidget(eps_frame, 1);
-  main_layout->addSpacerItem(
-      new QSpacerItem(60, 40, QSizePolicy::Minimum, QSizePolicy::Expanding));
+  m_ep_layout->setContentsMargins(0, 0, 0, 0);
+  m_ep_layout->setSpacing(10);
+  m_ep_layout->addStretch();
+
+  QScrollArea *eps_scroll_area = new QScrollArea();
+  eps_scroll_area->setWidgetResizable(true);
+  eps_scroll_area->setWidget(eps_frame);
+
+  main_layout->addWidget(eps_scroll_area, 1);
+  main_layout->addSpacing(10);
   QHBoxLayout *alert_layout = new QHBoxLayout();
   alert_layout->addStretch();
 
@@ -77,11 +83,14 @@ void ExecutionProgressWidget::setup_ui() {
   m_cancel_button->setFixedSize(195, 40);
   m_cancel_button->setProperty("class", "secondary_button");
   main_layout->addWidget(m_cancel_button, 0, Qt::AlignCenter);
-  main_layout->addSpacerItem(
-      new QSpacerItem(75, 75, QSizePolicy::Minimum, QSizePolicy::Expanding));
+  main_layout->addSpacing(25);
   setLayout(main_layout);
 
   SetCancelingState(false);
+
+#ifdef Q_OS_IOS
+  QScroller::grabGesture(eps_scroll_area);
+#endif
 }
 
 void ExecutionProgressWidget::setup_connections() {
@@ -104,6 +113,10 @@ int ExecutionProgressWidget::GetCurrentSelectedEP() const {
   return current_selected_ep;
 }
 
+QString ExecutionProgressWidget::GetEPDisplayName(int index) const {
+  return m_ep_widgets.at(index)->GetLongName();
+}
+
 int ExecutionProgressWidget::GetTotalEPs() const { return m_ep_widgets.size(); }
 
 void ExecutionProgressWidget::SetSelectedEpProgress(int total_steps,
@@ -111,16 +124,15 @@ void ExecutionProgressWidget::SetSelectedEpProgress(int total_steps,
   m_ep_widgets.at(current_selected_ep)->SetProgress(total_steps, current_step);
 }
 
-int ExecutionProgressWidget::AddEPProgressWidget(QString name,
-                                                 QString description,
-                                                 QString icon_path,
-                                                 QString long_name) {
-  auto ep_widget =
-      new EPProgressWidget(name, description, icon_path, long_name, this);
-  ep_widget->sizePolicy().setVerticalPolicy(QSizePolicy::Fixed);
+int ExecutionProgressWidget::AddEPProgressWidget(const QString &name,
+                                                 const QString &description,
+                                                 const QString &icon_path,
+                                                 const QString &long_name,
+                                                 const QString &model_name) {
+  auto ep_widget = new EPProgressWidget(name, description, icon_path, long_name,
+                                        model_name, this);
   m_ep_widgets.append(ep_widget);
-  m_ep_layout->insertWidget(m_ep_layout->count() - 1, ep_widget, 0,
-                            Qt::AlignTop);
+  m_ep_layout->insertWidget(m_ep_layout->count() - 1, ep_widget);
   ep_widget->SetTransparent(m_ep_widgets.size() % 2 == 0);
   ep_widget->update();
   return m_ep_widgets.size() - 1;
@@ -156,9 +168,10 @@ void ExecutionProgressWidget::ClearEPs() {
 void ExecutionProgressWidget::AddEP(const QString &name,
                                     const QString &description,
                                     const QString &device_type,
-                                    const QString &long_name) {
+                                    const QString &long_name,
+                                    const QString &model_name) {
   AddEPProgressWidget(name, description, gui::utils::GetDeviceIcon(device_type),
-                      long_name);
+                      long_name, model_name);
 }
 
 void ExecutionProgressWidget::SetTaskName(const QString &name) {

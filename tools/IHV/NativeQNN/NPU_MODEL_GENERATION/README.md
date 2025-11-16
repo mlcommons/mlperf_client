@@ -90,13 +90,13 @@ docker run --rm --gpus all --name=aimet-dev-torch-gpu -v $PWD:$PWD -w $PWD -v /e
 
 ### Install QAIRT
 
-1. Extract the QAIRT 2.35.3.250617 version sdk using 
+1. Extract the QAIRT 2.38.0.250901 version sdk using 
 ```bash
-wget https://softwarecenter.qualcomm.com/api/download/software/sdks/Qualcomm_AI_Runtime_Community/All/2.35.3.250617/v2.35.3.250617.zip
+wget https://softwarecenter.qualcomm.com/api/download/software/sdks/Qualcomm_AI_Runtime_Community/All/2.38.0.250901/v2.38.0.250901.zip
 ```
 2. Unzip the sdk
 ```bash
-unzip v2.35.3.250617.zip
+unzip v2.38.0.250901.zip
 ```
 3. Copy QAIRT inside notebook folder
 

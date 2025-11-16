@@ -1,7 +1,8 @@
 #include "llm_inference.h"
 
-#include <format>
 #include <filesystem>
+#include <string_view>
+#include <format>
 #include <unordered_set>
 
 #include "math_utils.h"
@@ -20,7 +21,8 @@ using namespace cil::infer;
 namespace fs = std::filesystem;
 
 namespace {
-  const std::unordered_set<std::string> kEPConfigSetup = {"DirectML", "OpenVINO"};
+const std::unordered_set<std::string> kEPConfigSetup = {"DirectML", "OpenVINO",
+                                                        "NvTensorRtRtx"};
 }
 
 namespace cil {
@@ -226,9 +228,6 @@ void LLMInference::Deinit() {
     }
     oga_model_ = 0;
   }
-  if (getenv("DISABLE_OPENVINO_GENAI_NPU_L0")) {
-    putenv("DISABLE_OPENVINO_GENAI_NPU_L0=");
-  }
 
   try {
     if (backup_genai_config_.has_value()) {
@@ -290,25 +289,46 @@ void LLMInference::SetupGenaiConfigForEP(const std::string& model_path) {
     any_updated = true;
   };
 
+  const auto count_openvino_devices = [&](std::string_view dev_type) -> int {
+    return std::count_if(winml_devices_->begin(), winml_devices_->end(),
+                  [&](const WinMLDevice& device) {
+                    return (device.ep == "OpenVINO") &&
+                           (device.type.find(dev_type) != std::string::npos);
+                  });
+  };
+
   // Update OpenVINO specific options
   const auto update_ov_config = [&](auto& options, auto& genai_config) {
     constexpr size_t kMaxNpuAllocSize = 4032;
 
     genai_config["search"]["max_length"] = config_.search.max_total_length;
 
-    const int max_prompt_len = 
-        static_cast<int>(config_.search.max_total_length - config_.search.max_length);
+    const int max_prompt_len = static_cast<int>(
+        config_.search.max_total_length - config_.search.max_length);
     options["load_config"] = std::format(
-        "{{\"NPU\":{{\"MAX_PROMPT_LEN\":\"{}\",\"MIN_RESPONSE_LEN\":\"{}\"{}}}}}",
+        "{{\"NPU\":{{\"MAX_PROMPT_LEN\":\"{}\",\"MIN_RESPONSE_LEN\":\"{}\"{}{}}}}}",
         max_prompt_len,
         config_.search.max_length,
         (config_.search.max_total_length <= kMaxNpuAllocSize) || (model_name_ != "llama2") ?
-          ",\"GENERATE_HINT\":\"BEST_PERF\"" : "");
-    options["device_type"] = ep_settings_.GetDeviceType();
+          ", \"GENERATE_HINT\":\"BEST_PERF\"" : "",
+        std::string{", \"PREFILL_HINT\":"} + (config_.search.max_total_length > kMaxNpuAllocSize ? "\"DYNAMIC\"" : "\"STATIC\""));
 
-    if (config_.search.max_total_length > kMaxNpuAllocSize) {
-      putenv("DISABLE_OPENVINO_GENAI_NPU_L0=1");
+    const auto& device_type = ep_settings_.GetDeviceType();
+    if (device_type.substr(0, 3) == "GPU" && count_openvino_devices("GPU") > 1) {
+      options["device_type"] = std::format("{}{}",
+        device_type,
+        winml_device.is_descrete.has_value() ? 
+          (winml_device.is_descrete.value() ? ".1" : ".0") : "");
+    } else {
+      options["device_type"] = device_type;
     }
+
+    any_updated = true;
+  };
+
+  // Update NvTensorRtRtx specific options
+  const auto update_nvep_config = [&](auto& options, auto& genai_config) {
+    genai_config["search"]["max_length"] = config_.search.max_total_length;
 
     any_updated = true;
   };
@@ -319,8 +339,7 @@ void LLMInference::SetupGenaiConfigForEP(const std::string& model_path) {
   if (!fs::exists(genai_config_path)) {
     error_message_ =
         "genai_config.json does not exist in " + model_dir.string();
-    logger_(LogLevel::kError,
-            error_message_);
+    logger_(LogLevel::kError, error_message_);
     return;
   }
 
@@ -342,6 +361,8 @@ void LLMInference::SetupGenaiConfigForEP(const std::string& model_path) {
               update_dml_config(option["dml"]);
             } else if (option.contains("OpenVINO")) {
               update_ov_config(option["OpenVINO"], genai_config);
+            } else if (option.contains("NvTensorRtRtx")) {
+              update_nvep_config(option["NvTensorRtRtx"], genai_config);
             }
           }
         }
@@ -361,8 +382,7 @@ void LLMInference::SetupGenaiConfigForEP(const std::string& model_path) {
     logger_(LogLevel::kInfo, "Updated " + genai_config_path.string());
   } catch (const std::exception& e) {
     error_message_ = "Failed to generate genai_config.json";
-    logger_(LogLevel::kFatal, std::format("{}: {}",
-        error_message_, e.what()));
+    logger_(LogLevel::kFatal, std::format("{}: {}", error_message_, e.what()));
   }
 }
 

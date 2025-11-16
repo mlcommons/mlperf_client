@@ -126,6 +126,7 @@ function(add_llama_cpp_ep_library library_name binary_dir install_dir)
         LOG_BUILD ON
         LOG_INSTALL ON
     )
+
 endfunction()
 
 # Define directories for both Vulkan and Metal libraries
@@ -133,25 +134,150 @@ set(EP_LIBRARY_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/LLM)
 set(EP_LIBRARY_BINARY_DIR_VULKAN ${CMAKE_BINARY_DIR}/Vulkan)
 set(EP_LIBRARY_BINARY_DIR_CUDA ${CMAKE_BINARY_DIR}/CUDA)
 set(EP_LIBRARY_BINARY_DIR_METAL ${CMAKE_BINARY_DIR}/Metal)
+set(EP_LIBRARY_BINARY_DIR_ROCM ${CMAKE_BINARY_DIR}/ROCm)
 set(EP_LIBRARY_INSTALL_DIR_VULKAN ${CMAKE_BINARY_DIR}/Vulkan/bin)
 set(EP_LIBRARY_INSTALL_DIR_CUDA ${CMAKE_BINARY_DIR}/CUDA/bin)
 set(EP_LIBRARY_INSTALL_DIR_METAL ${CMAKE_BINARY_DIR}/Metal/bin)
+set(EP_LIBRARY_INSTALL_DIR_ROCM ${CMAKE_BINARY_DIR}/ROCm/bin)
 
 # Add GGML_Vulkan if GGML_VULKAN is set
 if(GGML_VULKAN)
-    add_llama_cpp_ep_library(GGML_Vulkan ${EP_LIBRARY_BINARY_DIR_VULKAN} ${EP_LIBRARY_INSTALL_DIR_VULKAN} -DGGML_VULKAN=ON -DGGML_CUDA=OFF -DGGML_METAL=OFF)
+    add_llama_cpp_ep_library(GGML_Vulkan ${EP_LIBRARY_BINARY_DIR_VULKAN} ${EP_LIBRARY_INSTALL_DIR_VULKAN} -DGGML_VULKAN=ON -DGGML_CUDA=OFF -DGGML_METAL=OFF -DGGML_HIP=OFF)
 endif()
 
 # Add GGML_CUDA if GGML_CUDA is set
 if(GGML_CUDA)
-    add_llama_cpp_ep_library(GGML_CUDA ${EP_LIBRARY_BINARY_DIR_CUDA} ${EP_LIBRARY_INSTALL_DIR_CUDA} -DGGML_VULKAN=OFF -DGGML_CUDA=ON -DGGML_METAL=OFF)
+    add_llama_cpp_ep_library(GGML_CUDA ${EP_LIBRARY_BINARY_DIR_CUDA} ${EP_LIBRARY_INSTALL_DIR_CUDA} -DGGML_VULKAN=OFF -DGGML_CUDA=ON -DGGML_METAL=OFF -DGGML_HIP=OFF)
 endif()
 
 # Add GGML_Metal if GGML_METAL is set
 if(GGML_METAL)
-    set(GGML_METAL_ARGS -DGGML_VULKAN=OFF -DGGML_CUDA=OFF -DGGML_METAL=ON)
+    set(GGML_METAL_ARGS -DGGML_VULKAN=OFF -DGGML_CUDA=OFF -DGGML_METAL=ON -DGGML_HIP=OFF)
     if(IOS)
         list(APPEND GGML_METAL_ARGS -DGGML_NATIVE=OFF -DGGML_CPU_ARM_ARCH=native)
     endif()
     add_llama_cpp_ep_library(GGML_Metal ${EP_LIBRARY_BINARY_DIR_METAL} ${EP_LIBRARY_INSTALL_DIR_METAL} ${GGML_METAL_ARGS})
+endif()
+
+# Add GGML_ROCM if GGML_ROCM is set
+if(GGML_ROCM)
+    # Ensure Ninja is available only when building ROCm (mixed HIP/C++ requires Ninja generator)
+    find_program(NINJA_PROGRAM NAMES ninja ninja-build ninja.exe)
+    if(NOT NINJA_PROGRAM)
+        if(WIN32)
+            # Download prebuilt Ninja for Windows so the external project can configure with -G Ninja
+            set(_NINJA_BOOTSTRAP_DIR "${CMAKE_BINARY_DIR}/.ninja-bootstrap")
+            file(MAKE_DIRECTORY "${_NINJA_BOOTSTRAP_DIR}")
+            set(_NINJA_ZIP "${_NINJA_BOOTSTRAP_DIR}/ninja-win.zip")
+            set(_NINJA_EXE "${_NINJA_BOOTSTRAP_DIR}/ninja.exe")
+            if(NOT EXISTS "${_NINJA_EXE}")
+                file(DOWNLOAD "https://github.com/ninja-build/ninja/releases/download/v1.11.1/ninja-win.zip" "${_NINJA_ZIP}" SHOW_PROGRESS)
+                execute_process(
+                    COMMAND ${CMAKE_COMMAND} -E tar xf "${_NINJA_ZIP}"
+                    WORKING_DIRECTORY "${_NINJA_BOOTSTRAP_DIR}"
+                )
+            endif()
+            if(EXISTS "${_NINJA_EXE}")
+                set(NINJA_PROGRAM "${_NINJA_EXE}")
+            else()
+                message(FATAL_ERROR "Failed to bootstrap Ninja for ROCm build. Please install Ninja and retry.")
+            endif()
+        else()
+            message(FATAL_ERROR "Ninja not found and auto-bootstrap is only implemented for Windows. Please install Ninja.")
+        endif()
+    endif()
+
+    # Minimal: just forward hip_DIR/hipblas_DIR/rocblas_DIR if set at the top-level
+    set(HIP_DIR_ARG)
+    if(DEFINED hip_DIR AND hip_DIR)
+        file(TO_CMAKE_PATH "${hip_DIR}" hip_DIR_CMAKE)
+        set(HIP_DIR_ARG -Dhip_DIR:PATH=${hip_DIR_CMAKE})
+    endif()
+    set(HIPBLAS_DIR_ARG)
+    if(DEFINED hipblas_DIR AND hipblas_DIR)
+        file(TO_CMAKE_PATH "${hipblas_DIR}" hipblas_DIR_CMAKE)
+        set(HIPBLAS_DIR_ARG -Dhipblas_DIR:PATH=${hipblas_DIR_CMAKE})
+        # Derive hipblas-common config dir as sibling of hipblas
+        get_filename_component(_HIPBLAS_PARENT "${hipblas_DIR_CMAKE}" DIRECTORY)
+        set(HIPBLAS_COMMON_DIR_ARG -Dhipblas-common_DIR:PATH=${_HIPBLAS_PARENT}/hipblas-common)
+    endif()
+    set(ROCBLAS_DIR_ARG)
+    if(DEFINED rocblas_DIR AND rocblas_DIR)
+        file(TO_CMAKE_PATH "${rocblas_DIR}" rocblas_DIR_CMAKE)
+        set(ROCBLAS_DIR_ARG -Drocblas_DIR:PATH=${rocblas_DIR_CMAKE})
+    endif()
+
+    set(_ROCM_ROOT_FROM_HIP "")
+    if(DEFINED hip_DIR AND hip_DIR)
+        file(TO_CMAKE_PATH "${hip_DIR}" _HIP_DIR_NORM)
+        string(REGEX REPLACE "/lib/cmake/hip$" "" _ROCM_ROOT_FROM_HIP "${_HIP_DIR_NORM}")
+        if(_ROCM_ROOT_FROM_HIP STREQUAL "${_HIP_DIR_NORM}")
+            string(REGEX REPLACE "/hip/lib/cmake$" "" _ROCM_ROOT_FROM_HIP "${_HIP_DIR_NORM}")
+        endif()
+    endif()
+    if(NOT _ROCM_ROOT_FROM_HIP AND DEFINED ENV{ROCM_PATH} AND NOT "$ENV{ROCM_PATH}" STREQUAL "")
+        file(TO_CMAKE_PATH "$ENV{ROCM_PATH}" _ROCM_ROOT_FROM_HIP)
+    endif()
+
+    set(ROCM_ENV ${_ROCM_ROOT_FROM_HIP})
+    
+    set(COMPILER_ARGS)
+    if(_ROCM_ROOT_FROM_HIP)
+        set(_CAND_C   "${_ROCM_ROOT_FROM_HIP}/bin/clang.exe")
+        set(_CAND_CXX "${_ROCM_ROOT_FROM_HIP}/bin/clang++.exe")
+        if(EXISTS "${_CAND_C}")
+            list(APPEND COMPILER_ARGS -DCMAKE_C_COMPILER:FILEPATH=${_CAND_C})
+        endif()
+        if(EXISTS "${_CAND_CXX}")
+            list(APPEND COMPILER_ARGS -DCMAKE_CXX_COMPILER:FILEPATH=${_CAND_CXX})
+        endif()
+    endif()
+
+    # Pass along GIT_EXECUTABLE if present so subproject can use it; otherwise omit
+    set(GIT_EXECUTABLE_ARG)
+    if(GIT_EXECUTABLE)
+        set(GIT_EXECUTABLE_ARG -DGIT_EXECUTABLE=${GIT_EXECUTABLE})
+    endif()
+
+    ExternalProject_Add(GGML_ROCm
+        SOURCE_DIR ${EP_LIBRARY_SOURCE_DIR}
+        BINARY_DIR ${EP_LIBRARY_BINARY_DIR_ROCM}
+        INSTALL_DIR ${EP_LIBRARY_INSTALL_DIR_ROCM}
+        BUILD_ALWAYS ON
+
+        # Mixed hip/cpp builds are not supported by CMake Visual Studio generator. Use Ninja instead.
+        CMAKE_GENERATOR Ninja
+
+        # Use CMAKE_CACHE_ARGS instead of CMAKE_ARGS to preserve GPU_TARGETS format
+        # This prevents ExternalProject_Add from processing it as a list and splitting it at semicolons
+        CMAKE_CACHE_ARGS
+            -DCMAKE_BUILD_TYPE:STRING=$<CONFIG>
+            -DCMAKE_INSTALL_PREFIX:PATH=${EP_LIBRARY_INSTALL_DIR_ROCM}
+            -DCMAKE_CXX_STANDARD:STRING=20
+            -DCMAKE_MAKE_PROGRAM:FILEPATH=${NINJA_PROGRAM}
+            ${COMPILER_ARGS}
+            -DENV_PATH:STRING=${ENV_PATH}
+            -DPROJECT_NAME:STRING=GGML_ROCm
+            -DIOS:BOOL=${IOS}
+            -DGGML_OPENMP:BOOL=OFF
+            -DGGML_VULKAN:BOOL=OFF
+            -DGGML_CUDA:BOOL=OFF
+            -DGGML_METAL:BOOL=OFF
+            -DGGML_HIP:BOOL=ON
+            "-DGPU_TARGETS:STRING=gfx1100\\;gfx1101\\;gfx1102\\;gfx1150\\;gfx1151\\;gfx1200\\;gfx1201"
+            ${HIP_DIR_ARG}
+            ${HIPBLAS_DIR_ARG}
+            ${HIPBLAS_COMMON_DIR_ARG}
+            ${ROCBLAS_DIR_ARG}
+
+        # Custom build command (export ROCM_PATH to avoid quoting issues in flags)
+        BUILD_COMMAND ${CMAKE_COMMAND} -E env ROCM_PATH=${ROCM_ENV} ${CMAKE_COMMAND} --build ${EP_LIBRARY_BINARY_DIR_ROCM}
+
+        # Custom install command
+        INSTALL_COMMAND ${CMAKE_COMMAND} -E env ROCM_PATH=${ROCM_ENV} ${CMAKE_COMMAND} --install ${EP_LIBRARY_BINARY_DIR_ROCM} --prefix ${EP_LIBRARY_INSTALL_DIR_ROCM}
+
+        LOG_CONFIGURE ON
+        LOG_BUILD ON
+        LOG_INSTALL ON
+    )
 endif()

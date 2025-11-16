@@ -5,13 +5,22 @@
 
 class ResultComponentWrapperWidget;
 
+/**
+ * @class CapacityWidgetBar
+ * @brief Custom progress bar for displaying capacity measurements.
+ */
 class CapacityWidgetBar : public QProgressBar {
   Q_OBJECT
 
  public:
   explicit CapacityWidgetBar(const QString &title, const QString tooltip_text,
                              const QString unit, QWidget *parent = nullptr);
+
+  /**
+   * @brief Gets the wrapper widget.
+   */
   ResultComponentWrapperWidget *wrapper() const { return wrapper_widget_; }
+
   void SetValue(double value);
   void SetMaximum(double value);
   void SetUnit(const QString &unit);

@@ -58,13 +58,16 @@ class SystemConfig {
 class ScenarioConfig {
  public:
   ScenarioConfig()
-      : iterations_(0), iterations_warmup_(0), inference_delay_(0.0) {};
+      : iterations_(0),
+        iterations_warmup_(0),
+        inference_delay_(0.0),
+        allowed_input_type_("base") {};
   ScenarioConfig(const nlohmann::json& j) { FromJson(j); }
   ~ScenarioConfig() = default;
 
   const std::string& GetName() const { return name_; }
   const std::vector<ModelConfig>& GetModels() const { return models_; }
-  const std::vector<std::string>& GetInputs() const { return inputs_; }
+  std::vector<std::string> GetInputs() const;
   const std::vector<std::string>& GetAssets() const { return assets_; }
   const std::string& GetResultsFile() const { return results_file_; }
   const std::string& GetDataVerificationFile() const {
@@ -117,11 +120,7 @@ class ScenarioConfig {
                                  }),
                   models_.end());
   }
-  void AddInput(const std::string& input) { inputs_.emplace_back(input); }
-  void RemoveInput(const std::string& input) {
-    inputs_.erase(std::remove(inputs_.begin(), inputs_.end(), input),
-                  inputs_.end());
-  }
+
   void AddAsset(const std::string& asset) { assets_.emplace_back(asset); }
   void RemoveAsset(const std::string& asset) {
     assets_.erase(std::remove(assets_.begin(), assets_.end(), asset),
@@ -134,6 +133,12 @@ class ScenarioConfig {
     data_verification_file_ = data_verification_file;
   }
   void SetIterations(int iterations) { iterations_ = iterations; }
+
+  void SetAllowedInputType(const std::string& type) {
+    allowed_input_type_ = type;
+  }
+
+  bool HasNonBasePrompts() const;
 
   void AddExecutionProvider(const ExecutionProviderConfig& ep) {
     execution_providers_.emplace_back(ep);
@@ -153,13 +158,14 @@ class ScenarioConfig {
  private:
   std::string name_;
   std::vector<ModelConfig> models_;
-  std::vector<std::string> inputs_;
+  std::vector<std::pair<std::string, std::string>> inputs_;
   std::vector<std::string> assets_;
   std::string results_file_;
   std::string data_verification_file_;
   int iterations_;
   int iterations_warmup_;
   double inference_delay_;
+  std::string allowed_input_type_;
   std::vector<ExecutionProviderConfig> execution_providers_;
 };
 
@@ -170,13 +176,12 @@ class ExecutionConfig {
 
   bool ValidateAndParse(
       const std::string& json_file_path, const std::string& schema_file_path,
-      const std::string& config_verification_file_path,
-      const std::string& config_experimental_verification_file_path = {});
+      const std::map<std::string, std::string>& config_verification_files);
 
   bool IsConfigVerified() const { return config_verified_; }
   void SetConfigVerified(bool verified) { config_verified_ = verified; }
 
-  bool IsConfigExperimental() const { return config_experimental_; }
+  std::string GetConfigCategory() const { return config_category_; }
 
   std::string GetConfigFileName() const { return config_file_name_; }
 
@@ -205,7 +210,7 @@ class ExecutionConfig {
   std::string config_file_hash_;
 
   bool config_verified_{false};
-  bool config_experimental_{false};
+  std::string config_category_;
 };
 
 std::filesystem::path GetExecutionProviderParentLocation(

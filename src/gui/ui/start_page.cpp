@@ -10,7 +10,7 @@
 
 #include "../core/types.h"
 #include "widgets/ep_exapandable_widget.h"
-#include "widgets/ep_filters_expandable_widget.h"
+#include "widgets/ep_filters_widget.h"
 #include "widgets/information_card_widget.h"
 
 namespace gui {
@@ -20,20 +20,22 @@ StartPage::StartPage(QString schema_file_path, QWidget* parent)
 
 void StartPage::SetupUi() {
   ui_.setupUi(this);
-  ui_.system_information_scroll_area->setProperty("class",
-                                                  "transparent_panel_widget");
 
   ui_.ep_widgets_container->setAttribute(Qt::WA_StyledBackground, true);
   ui_.ep_widgets_container->setProperty("class", "transparent_panel_widget");
   ui_.select_configs_label->setProperty("class", "large_strong_label");
+  ui_.select_all_box->setProperty("class", "secondary_checkbox");
+  ui_.select_all_label->setProperty("class", "medium_normal_label");
+  ui_.select_all_number_label->setProperty("class", "medium_normal_label");
+  ui_.show_only_runnable_label->setProperty("class", "medium_normal_label");
   ui_.disclaimer_text_label->setProperty("class", "medium_light_label");
 
+  ui_.show_only_runnable_switch->SetFixedSize(25, 16, 10);
   ui_.m_start_btn->setProperty("class", "primary_button");
   ui_.m_download_only_btn->setProperty("class", "primary_link_button");
   ui_.m_download_only_btn->setCursor(Qt::PointingHandCursor);
 
 #ifdef Q_OS_IOS
-  QScroller::grabGesture(ui_.system_information_scroll_area);
   QScroller::grabGesture(ui_.ep_scroll_area);
 #endif
 }
@@ -57,34 +59,39 @@ void StartPage::OnEPDeleteButtonClicked() {
     if (eps_widgets_[i] == sender_object) emit DeleteEPRequested(i);
 }
 
-void StartPage::UpdateBenchmarkButtons() {
+void StartPage::UpdateUI() {
   int selected_eps_count = 0;
-  for (auto ep_widget : eps_widgets_)
+  int runnable_visible_eps_count = 0;
+  for (auto ep_widget : eps_widgets_) {
     if (ep_widget->IsSelected()) ++selected_eps_count;
+    if (ep_widget->isVisible() && ep_widget->isEnabled())
+      ++runnable_visible_eps_count;
+  }
 
   ui_.m_start_btn->setEnabled(selected_eps_count);
   ui_.m_download_only_btn->setEnabled(selected_eps_count);
+
+  ui_.select_all_box->blockSignals(true);
+  ui_.select_all_box->setChecked(runnable_visible_eps_count ==
+                                 selected_eps_count);
+  ui_.select_all_number_label->setText(
+      QString("(%1)").arg(runnable_visible_eps_count));
+  ui_.select_all_box->blockSignals(false);
 
   QString start_button_text =
       QString("Run Benchmark Tests (%1)").arg(selected_eps_count);
   ui_.m_start_btn->setText(start_button_text);
 }
 
-void StartPage::ClearSystemInfoCards() {
-  for (auto widget : system_information_card_widgets_) {
-    ui_.sys_info_frame_h_layout->removeWidget(widget);
-    delete widget;
-  }
-  system_information_card_widgets_.clear();
-}
-
 void StartPage::AddSystemInformationCard(
     const QString& image_path, const QString& header_text,
     const QList<QPair<QString, QString>>& header_key_values) {
-  auto information_card = new InformationCardWidget(
-      image_path, header_text, header_key_values, ui_.sys_scroll_content);
-  system_information_card_widgets_.append(information_card);
-  ui_.sys_info_frame_h_layout->addWidget(information_card);
+  ui_.system_information_widget->AddSystemInformationCard(
+      image_path, header_text, header_key_values);
+}
+
+void StartPage::ExpandSystemInformationWidget() {
+  ui_.system_information_widget->Expand(false);
 }
 
 void StartPage::LoadFiltersCard(const QList<EPFilter>& filters) {
@@ -93,15 +100,17 @@ void StartPage::LoadFiltersCard(const QList<EPFilter>& filters) {
     eps_filters_widget_->deleteLater();
   }
 
-  eps_filters_widget_ =
-      new EPFiltersExpandableWidget(filters, ui_.ep_widgets_container);
+  eps_filters_widget_ = new EPFiltersWidget(filters, ui_.ep_widgets_container);
   ui_.ep_filters_container_layout->addWidget(eps_filters_widget_);
 
-  connect(eps_filters_widget_, &EPFiltersExpandableWidget::FilterChanged, this,
+  connect(eps_filters_widget_, &EPFiltersWidget::FilterChanged, this,
           &StartPage::EPsFilterChanged);
+  // the "Show only runnable" switch also is part of the filtering
+  connect(ui_.show_only_runnable_switch, &QAbstractButton::toggled, this,
+          &StartPage::EPsFilterChanged);
+  connect(ui_.select_all_box, &QCheckBox::toggled, this,
+          &StartPage::SelectAllToggled);
 }
-
-void StartPage::ExpandFiltersCard() { eps_filters_widget_->Expand(); }
 
 void StartPage::LoadEPInformationCards(
     const nlohmann::json& schema, const QList<EPInformationCard>& configs) {
@@ -149,8 +158,12 @@ void StartPage::AddEpInformationCard(const nlohmann::json& schema,
     qDebug() << "Error: " << ep_config.name_ << " not found in schema.";
   }
 
+  QString category = ep_config.config_category_.isEmpty()
+                         ? "base"
+                         : ep_config.config_category_;
   auto ep_widget = new EPExpandableWidget(
-      ep_config.long_name_, ep_config.description_, ep_config.description_,
+      ep_config.model_name_ + " (" + ep_config.long_name_ + ")",
+      ep_config.description_, ep_config.description_, category,
       ep_config.devices_, fields, ep_config.config_, ui_.m_scroll_area_widget);
   ep_widget->SetDeletable(deletable);
   connect(ep_widget, &EPExpandableWidget::AddButtonClicked, this,
@@ -158,7 +171,7 @@ void StartPage::AddEpInformationCard(const nlohmann::json& schema,
   connect(ep_widget, &EPExpandableWidget::DeleteButtonClicked, this,
           &StartPage::OnEPDeleteButtonClicked);
   connect(ep_widget, &EPExpandableWidget::SelectionChanged, this,
-          &StartPage::UpdateBenchmarkButtons);
+          &StartPage::UpdateUI);
 
   eps_widgets_base_ids[ep_widget] = base_id;
   if (base_id >= 0 && base_id < eps_widgets_.size())
@@ -172,7 +185,7 @@ void StartPage::AddEpInformationCard(const nlohmann::json& schema,
     ui_.eps_v_layout->insertWidget(index, ep_widget);
   }
 
-  UpdateBenchmarkButtons();
+  UpdateUI();
 }
 
 void StartPage::DeleteEpInformationCard(int index) {
@@ -181,21 +194,23 @@ void StartPage::DeleteEpInformationCard(int index) {
 
   eps_widgets_.at(index)->deleteLater();
   eps_widgets_.remove(index);
-  UpdateBenchmarkButtons();
+  UpdateUI();
+}
+
+bool StartPage::IsEPCardVisible(int index) const {
+  return eps_widgets_.at(index)->isVisible();
 }
 
 void StartPage::SetEPCardVisible(int index, bool visible) {
   eps_widgets_.at(index)->setVisible(visible);
 }
 
-bool StartPage::HasVisibleEPCard() const {
-  for (auto widget : eps_widgets_)
-    if (widget->isVisible()) return true;
-  return false;
-}
-
 bool StartPage::IsEPCardSelected(int index) const {
   return eps_widgets_.at(index)->IsSelected();
+}
+
+QString StartPage::GetEPCardPromptsType(int index) const {
+  return eps_widgets_.at(index)->GetPromptsType();
 }
 
 void StartPage::SetEPCardSelected(int index, bool selected) {
@@ -214,6 +229,10 @@ nlohmann::json StartPage::GetEPConfiguration(int index) const {
 
 QList<EPFilter> StartPage::GetEPsFilter() const {
   return eps_filters_widget_->GetFilters();
+}
+
+bool StartPage::IsShowOnlyRunnableOn() const {
+  return ui_.show_only_runnable_switch->isChecked();
 }
 
 }  // namespace views

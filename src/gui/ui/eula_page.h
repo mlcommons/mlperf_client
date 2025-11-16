@@ -7,6 +7,10 @@
 namespace gui {
 namespace views {
 
+/**
+ * @class EULAWidget
+ * @brief Widget for displaying and handling the End User License Agreement.
+ */
 class EULAWidget : public AbstractView {
   Q_OBJECT
  public:

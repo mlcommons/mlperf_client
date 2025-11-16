@@ -23,6 +23,7 @@ bool DownloadStage::Run(const ScenarioConfig& scenario_config,
 
   bool dependencies_only = download_behavior == "deps_only" ||
                            download_behavior == "deps_only_enumeration";
+  bool get_sizes_only = download_behavior == "collect_remote_sizes_only";
 
   bool retrieve_results_file = !scenario_config.GetResultsFile().empty();
   if (retrieve_results_file) {
@@ -91,15 +92,11 @@ bool DownloadStage::Run(const ScenarioConfig& scenario_config,
     return output;
   };
 
-  std::string
-      deps_dir;  // empty means the URLCacheManager will use the default paths i.e. appdata or default temp dir
+  auto url_cache_manager =
+      std::make_shared<URLCacheManager>(unpacker_.GetDepsDir());
 
-  deps_dir = unpacker_.GetDepsDir();
-
-  auto url_cache_manager = std::make_shared<URLCacheManager>(deps_dir);
-
-  auto data_storage =
-      std::make_shared<Storage>(data_dir_, url_cache_manager, force_download);
+  auto data_storage = std::make_shared<Storage>(
+      data_dir_, url_cache_manager, force_download, false, get_sizes_only);
 
   StorageTaskVector model_files_storage_tasks;
   StorageTaskVector model_ext_files_storage_tasks;
@@ -135,8 +132,9 @@ bool DownloadStage::Run(const ScenarioConfig& scenario_config,
     fs::path dest_dir =
         GetExecutionProviderParentLocation(ep, unpacker_.GetDepsDir());
 
-    ep_dependencies_storages.push_back(std::make_shared<Storage>(
-        dest_dir.string(), url_cache_manager, force_download));
+    ep_dependencies_storages.push_back(
+        std::make_shared<Storage>(dest_dir.string(), url_cache_manager,
+                                  force_download, false, get_sizes_only));
     addStorageTasks(ep_dependencies_storages.back(),
                     containerToMap(ep_external_dependencies),
                     ep_dependencies_storage_tasks, "");
@@ -152,10 +150,11 @@ bool DownloadStage::Run(const ScenarioConfig& scenario_config,
   const auto& ep_storage_files = ep_dependencies_manager_.GetEpsStorageFiles();
   for (const auto& [ep_deps_dir, files] : ep_storage_files) {
     ep_dependencies_storages.push_back(std::make_shared<Storage>(
-        ep_deps_dir, url_cache_manager, force_download, true));
+        ep_deps_dir, url_cache_manager, force_download, true, get_sizes_only));
     addStorageTasks(ep_dependencies_storages.back(), containerToMap(files),
                     other_storage_tasks, "");
   }
+
   int total_num_tasks = storage_tasks_progress_tracker.GetTaskCount();
   if (download_behavior == "skip_all" || download_behavior == "prompt" ||
       download_behavior == "deps_only_enumeration") {
@@ -189,7 +188,8 @@ bool DownloadStage::Run(const ScenarioConfig& scenario_config,
   }
 
   if (total_num_tasks > 0) {
-    LOG4CXX_INFO(logger_, "\nDownloading necessary files...\n");
+    if (!get_sizes_only)
+      LOG4CXX_INFO(logger_, "\nDownloading necessary files...\n");
 
     if (!raport_progress_cb(storage_tasks_progress_tracker,
                             storage_tasks_scheduler)) {
@@ -211,6 +211,15 @@ bool DownloadStage::Run(const ScenarioConfig& scenario_config,
       LOG4CXX_ERROR(logger_, "Download Stage failed, stopping...");
       return false;
     }
+  }
+
+  if (get_sizes_only) {
+    scenario_data.remote_file_sizes = data_storage->GetRemoteFileSizes();
+    for (const auto& storage : ep_dependencies_storages)
+      scenario_data.remote_file_sizes.insert(
+          storage->GetRemoteFileSizes().begin(),
+          storage->GetRemoteFileSizes().end());
+    return true;
   }
 
   bool unpacking_files = false;
@@ -243,7 +252,7 @@ bool DownloadStage::Run(const ScenarioConfig& scenario_config,
       if (files.empty()) return false;
 
       for (auto& file : files) {
-        file = fs::relative(utils::NormalizePath(file)).string();
+        file = fs::proximate(utils::NormalizePath(file)).string();
         scenario_data.source_to_path_map[task->GetSourcePath()] = file;
         scenario_data.path_to_source_map[file] = task->GetSourcePath();
         paths.push_back(file);

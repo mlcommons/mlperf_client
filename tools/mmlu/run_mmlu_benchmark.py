@@ -11,6 +11,7 @@ import requests
 import argparse
 import subprocess
 import pandas as pd
+from urllib.parse import urlparse
 from loguru import logger
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -26,6 +27,10 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("-t", "--type", type=str, default="mmlu", choices=["mmlu", "tinymmlu"], help="Type of the benchmark to run")
     parser.add_argument("-s", "--skip-failed-prompts", action="store_true", 
                         help="If enabled will skip the failed prompts")
+    parser.add_argument("--postprocess-only", action="store_true", 
+                        help="If enabled will only run postprocessing on existing results")
+    parser.add_argument("--run-id", type=int, 
+                        help="Run ID to postprocess (required when using --postprocess-only)")
     
     return parser.parse_args()
 
@@ -121,7 +126,7 @@ def get_phi35_prompt(
         f"Test {format_prompt(subject_test_df, idx, include_answer=False, add_section_title=True)}"
     )
 
-def check_existing_config_file(file_path: str, config: dict, raise_error: bool = False) -> True:
+def check_existing_config_file(file_path: str, config: dict, raise_error: bool = False) -> bool:
     if os.path.exists(file_path):
         with open(file_path, "r", encoding="utf-8") as f:
             existing_config = json.load(f)
@@ -201,19 +206,64 @@ def save_input_files_and_answers(input_dir: str, subject: str, input_config_temp
     return saved_input_files
 
 def download_zip_with_requests(url, download_path):
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    }
+    """
+    Download a file from a URL or copy from a local file path.
+    
+    Args:
+        url (str): URL to download from (http/https) or local file path (file://)
+        download_path (str): Path where the file should be saved
+    """
     try:
         Path(download_path).parent.mkdir(parents=True, exist_ok=True)
-        response = requests.get(url, headers=headers, stream=True)
-        response.raise_for_status()
-        with open(download_path, 'wb') as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                f.write(chunk)
-        print(f"Successfully downloaded {os.path.getsize(download_path)} bytes to: {download_path}")
+        
+        # Parse the URL to determine if it's a local file or remote URL
+        parsed_url = urlparse(url)
+        
+        if parsed_url.scheme == 'file':
+            # Handle local file:// URLs
+            local_file_path = parsed_url.path
+            
+            # Handle Windows-style paths with backslashes in file:// URLs
+            # First, check if the original URL contains backslashes (Windows style)
+            if '\\' in url:
+                # Extract path after file:// and normalize backslashes
+                path_part = url[7:]  # Remove 'file://' prefix
+                local_file_path = os.path.normpath(path_part)
+            else:
+                # Handle standard file:// URLs with forward slashes
+                # On Windows, handle drive letters properly (e.g., file:///C:/path)
+                if os.name == 'nt' and local_file_path.startswith('/') and len(local_file_path) > 1 and local_file_path[2] == ':':
+                    local_file_path = local_file_path[1:]
+                # Convert forward slashes to backslashes on Windows
+                local_file_path = os.path.normpath(local_file_path)
+            
+            if not os.path.exists(local_file_path):
+                raise FileNotFoundError(f"Local file not found: {local_file_path}")
+            
+            # Copy the local file to the destination
+            shutil.copy2(local_file_path, download_path)
+            print(f"Successfully copied {os.path.getsize(download_path)} bytes from {local_file_path} to: {download_path}")
+            
+        elif parsed_url.scheme in ['http', 'https']:
+            # Handle remote HTTP/HTTPS URLs
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            }
+            response = requests.get(url, headers=headers, stream=True)
+            response.raise_for_status()
+            with open(download_path, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+            print(f"Successfully downloaded {os.path.getsize(download_path)} bytes to: {download_path}")
+            
+        else:
+            raise ValueError(f"Unsupported URL scheme: {parsed_url.scheme}. Only 'http', 'https', and 'file' are supported.")
+            
     except requests.exceptions.HTTPError as e:
         print(f"HTTP Error: {e}")
+        raise
+    except FileNotFoundError as e:
+        print(f"File Error: {e}")
         raise
     except Exception as e:
         print(f"Error: {e}")
@@ -575,6 +625,41 @@ def read_last_json_line(path):
             raise ValueError("File is empty or contains only blank lines")
         return json.loads(last_line)
 
+def find_existing_results(output_dir: str, benchmark_type: str, run_id: int) -> list[str]:
+    """
+    Find all results.json files for a given run ID.
+    
+    Args:
+        output_dir: Base output directory from config
+        benchmark_type: Type of benchmark (mmlu/tinymmlu)
+        run_id: The run ID to find results for
+        
+    Returns:
+        List of paths to results.json files
+    """
+    results_jsons = []
+    run_dir = os.path.join(output_dir, benchmark_type, str(run_id))
+    
+    if not os.path.exists(run_dir):
+        raise ValueError(f"Run directory does not exist: {run_dir}")
+    
+    # Find all results.json files in subdirectories
+    for root, dirs, files in os.walk(run_dir):
+        if "results.json" in files:
+            results_path = os.path.join(root, "results.json")
+            # Check if it's a valid results file by trying to read it
+            try:
+                read_last_json_line(results_path)
+                results_jsons.append(results_path)
+            except Exception as e:
+                logger.warning(f"Skipping invalid results file {results_path}: {e}")
+    
+    if not results_jsons:
+        raise ValueError(f"No valid results.json files found in {run_dir}")
+    
+    logger.info(f"Found {len(results_jsons)} results files for run ID {run_id}")
+    return results_jsons
+
 def run_mlperf(mlperf_program_path: str, config_paths: list[tuple[str, bool]], skip_failed_prompts) -> tuple[list[str], int]:
     """
     This function executes the MLPerf program with the specified configurations and handles the results.
@@ -656,12 +741,16 @@ def postprocess(config: dict, results_jsons: list, elapsed_time: float, skipped_
     with open(mlperf_config_filepath, "r", encoding="utf-8") as f:
         mlperf_config = json.load(f)
     scenarios = mlperf_config["Scenarios"]
-    for scenario in scenarios:
-        scenario_name = scenario["Name"]
-        providers = scenario["ExecutionProviders"]
-        for provider in providers:
-            provider_name = provider["Name"]
-            correct_answers[scenario_name + provider_name] = 0
+    
+    # Initialize keys from the actual results files to avoid case mismatches
+    # The results.json uses the actual scenario/provider names as reported by MLPerf
+    for results_file_path in results_jsons:
+        result_json = read_last_json_line(results_file_path)
+        scenario_name = result_json["Scenario Name"]
+        provider_name = result_json["Execution Provider Name"]
+        answer_key = scenario_name + provider_name
+        if answer_key not in correct_answers:
+            correct_answers[answer_key] = 0
     
     subjects = set()
     total_answers_per_subject = {}
@@ -719,6 +808,13 @@ def postprocess(config: dict, results_jsons: list, elapsed_time: float, skipped_
     
     logger.info(f"Total duration: {elapsed_time:.2f} seconds")
     
+    # Build a map of actual scenario+provider keys from correct_answers
+    # to handle case mismatches between config and results
+    actual_keys = {}
+    for key in correct_answers.keys():
+        if not any(subject in key for subject in subjects):  # Only base keys, not subject-specific ones
+            actual_keys[key.lower()] = key
+    
     for scenario in scenarios:
         scenario_name = scenario["Name"]
         models = scenario["Models"]
@@ -729,7 +825,14 @@ def postprocess(config: dict, results_jsons: list, elapsed_time: float, skipped_
         providers = scenario["ExecutionProviders"]
         for provider in providers:
             provider_name = provider["Name"]
-            answer_key = scenario_name + provider_name
+            config_key = scenario_name + provider_name
+            # Use case-insensitive lookup to find the actual key used in results
+            answer_key = actual_keys.get(config_key.lower(), config_key)
+            
+            if answer_key not in correct_answers:
+                logger.warning(f"No results found for {answer_key}, skipping")
+                continue
+                
             correct_answer = correct_answers[answer_key]
             
             mmlu_score = correct_answer / total_answers * 100
@@ -783,20 +886,36 @@ if __name__ == "__main__":
         config = json.load(f)
     
     try:
-        if not os.path.exists(config["MLPerfProgramPath"]):
-            raise ValueError(f"{config['MLPerfProgramPath']} does not exist")
-        if config["InputConfigTemplate"] is None and config["InputConfigPath"] is None:
-            raise ValueError(f"Either 'InputConfigTemplate' or 'InputConfigPath' must be provided in the config file. Both cannot be null.")
-        if config["RunConfigTemplate"] is None and config["RunConfigPath"] is None:
-            raise ValueError(f"Either 'RunConfigTemplate' or 'RunConfigPath' must be provided in the config file. Both cannot be null.")
-    
-        generated_mlperf_config_paths = preprocess(config, args.type)
+        # Validate postprocess-only mode arguments
+        if args.postprocess_only:
+            if args.run_id is None:
+                raise ValueError("--run-id is required when using --postprocess-only")
+            
+            logger.info(f"Running in postprocess-only mode for run ID {args.run_id}")
+            
+            # Find existing results for the specified run ID
+            results_jsons = find_existing_results(config["OutputDir"], args.type, args.run_id)
+            
+            # Run postprocessing with dummy values for elapsed_time and skipped_prompts_count
+            # since we don't have the original timing information
+            postprocess(config, results_jsons, 0.0, 0)
+            
+        else:
+            # Normal full pipeline execution
+            if not os.path.exists(config["MLPerfProgramPath"]):
+                raise ValueError(f"{config['MLPerfProgramPath']} does not exist")
+            if config["InputConfigTemplate"] is None and config["InputConfigPath"] is None:
+                raise ValueError(f"Either 'InputConfigTemplate' or 'InputConfigPath' must be provided in the config file. Both cannot be null.")
+            if config["RunConfigTemplate"] is None and config["RunConfigPath"] is None:
+                raise ValueError(f"Either 'RunConfigTemplate' or 'RunConfigPath' must be provided in the config file. Both cannot be null.")
         
-        start_time = time.time()
-        results_jsons, skipped_prompts_count = run_mlperf(config["MLPerfProgramPath"], generated_mlperf_config_paths, args.skip_failed_prompts)
-        elapsed_time = time.time() - start_time
-        
-        postprocess(config, results_jsons, elapsed_time, skipped_prompts_count)
+            generated_mlperf_config_paths = preprocess(config, args.type)
+            
+            start_time = time.time()
+            results_jsons, skipped_prompts_count = run_mlperf(config["MLPerfProgramPath"], generated_mlperf_config_paths, args.skip_failed_prompts)
+            elapsed_time = time.time() - start_time
+            
+            postprocess(config, results_jsons, elapsed_time, skipped_prompts_count)
         
     except Exception as e:
         logger.error(e)

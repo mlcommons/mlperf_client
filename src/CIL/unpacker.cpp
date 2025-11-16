@@ -12,7 +12,6 @@
 #include "scope_exit.h"
 
 #include "assets/assets.h"
-
 #include "config.h"
 #include "execution_provider.h"
 #include "minizip/mz.h"
@@ -35,9 +34,12 @@
 #pragma comment(lib, "Shell32.lib")
 #pragma comment(lib, "Shlwapi.lib")
 #undef GetCurrentDirectory
-#else
+
+#elif MACOS
+
 #include <TargetConditionals.h>
 #include <sys/statvfs.h>
+
 #endif
 
 // utils.h includes Windows.h, which we want to include manually here to include
@@ -484,32 +486,36 @@ static const std::map<Unpacker::Asset, std::string>& GetAssetFileMapping() {
   // An asset to file mapping for both Windows, MacOS and iOS
 
   static const std::map<Unpacker::Asset, std::string> file_map = {
-      {kLog4cxxConfig, "Log4CxxConfig.xml"},
-      {kConfigSchema, "ConfigSchema.json"},
-      {kLLMInputFileSchema, "LLMInputSchema.json"},
-      {kOutputResultsSchema, "OutputResultsSchema.json"},
-      {kDataVerificationFile, "data_verification.json"},
-      {kDataVerificationFileSchema, "DataVerificationSchema.json"},
-      {kConfigVerificationFile, "config_verification.json"},
-      {kConfigExperimentalVerificationFile,
-       "config_experimental_verification.json"},
-      {kEPDependenciesConfig, "ep_dependencies_config.json"},
-      {kEPDependenciesConfigSchema, "EPDependenciesConfigSchema.json"},
-      {kVendorsDefault, "vendors_default.zip"},
+    {kLog4cxxConfig, "Log4CxxConfig.xml"},
+    {kConfigSchema, "ConfigSchema.json"},
+    {kLLMInputFileSchema, "LLMInputSchema.json"},
+    {kOutputResultsSchema, "OutputResultsSchema.json"},
+    {kDataVerificationFile, "data_verification.json"},
+    {kDataVerificationFileSchema, "DataVerificationSchema.json"},
+    {kConfigVerificationFile, "config_verification.json"},
+    {kConfigExperimentalVerificationFile,
+     "config_experimental_verification.json"},
+    {kConfigExtendedVerificationFile, "config_extended_verification.json"},
+    {kEPDependenciesConfig, "ep_dependencies_config.json"},
+    {kEPDependenciesConfigSchema, "EPDependenciesConfigSchema.json"},
+    {kVendorsDefault, "vendors_default.zip"},
 #ifdef _WIN32
-      {kNativeOpenVINO, "IHV_NativeOpenVINO.dll"},
-      {kNativeQNN, "IHV_NativeQNN.dll"},
-      {kOrtGenAI, "IHV_OrtGenAI.dll"},
-      {kOrtGenAIRyzenAI, "IHV_OrtGenAI_RyzenAI.dll"},
-      {kWindowsML, "IHV_WindowsML.dll"},
-      {kGGML_EPs, "IHV_GGML_EPs.dll"},
-      {kGGML_Vulkan, "GGML_Vulkan.dll"},
-      {kGGML_CUDA, "GGML_CUDA.dll"},
-#elif !TARGET_OS_IOS
-      {kGGML_EPs, "libIHV_GGML_EPs.dylib"},
-      {kGGML_Vulkan, "libGGML_Vulkan.dylib"},
-      {kGGML_Metal, "libGGML_Metal.dylib"},
-      {kMLX, "libIHV_MLX.dylib"}
+    {kNativeOpenVINO, "IHV_NativeOpenVINO.dll"},
+    {kNativeQNN, "IHV_NativeQNN.dll"},
+    {kOrtGenAI, "IHV_OrtGenAI.dll"},
+    {kOrtGenAIRyzenAI, "IHV_OrtGenAI_RyzenAI.dll"},
+    {kWindowsML, "IHV_WindowsML.dll"},
+    {kGGML_EPs, "IHV_GGML_EPs.dll"},
+    {kGGML_Vulkan, "GGML_Vulkan.dll"},
+    {kGGML_CUDA, "GGML_CUDA.dll"},
+    {kGGML_ROCm, "GGML_ROCm.dll"},
+#elif __linux__
+    {kNativeOpenVINO, "libIHV_NativeOpenVINO.so"},
+#else  // Apple
+    {kGGML_EPs, "libIHV_GGML_EPs.dylib"},
+    {kGGML_Vulkan, "libGGML_Vulkan.dylib"},
+    {kGGML_Metal, "libGGML_Metal.dylib"},
+    {kMLX, "libIHV_MLX.dylib"}
 #endif
   };
   return file_map;
@@ -539,6 +545,8 @@ GetAssetMemoryMapping() {
   ADD_ASSET_MAP_ENTRY(kConfigVerificationFile, config_verification_json);
   ADD_ASSET_MAP_ENTRY(kConfigExperimentalVerificationFile,
                       config_experimental_verification_json);
+  ADD_ASSET_MAP_ENTRY(kConfigExtendedVerificationFile,
+                      config_extended_verification_json);
   ADD_ASSET_MAP_ENTRY(kEPDependenciesConfigSchema,
                       EPDependenciesConfigSchema_json);
 #if VENDORS_DEFAULT_PACKED
@@ -583,16 +591,40 @@ GetAssetMemoryMapping() {
 
 #if WITH_IHV_GGML_CUDA
   ADD_ASSET_MAP_ENTRY(kGGML_CUDA, GGML_CUDA_dll);
+#endif  // WITH_IHV_GGML_CUDA
+
+#if WITH_IHV_GGML_ROCM
+  ADD_ASSET_MAP_ENTRY(kGGML_ROCm, GGML_ROCm_dll);
+#endif  // WITH_IHV_GGML_ROCM
+
+#elif __linux__  // _WIN32
+
+  ADD_ASSET_MAP_ENTRY(kEPDependenciesConfig,
+                      ep_dependencies_config_linux_x64_json);
+
+#if WITH_IHV_NATIVE_OPENVINO
+  ADD_ASSET_MAP_ENTRY(kNativeOpenVINO, libIHV_NativeOpenVINO_so);
+#endif  // WITH_IHV_NATIVE_OPENVINO
+#if WITH_IHV_ORT_GENAI
+  ADD_ASSET_MAP_ENTRY(kOrtGenAI, libIHV_OrtGenAI_so);
+#endif  // WITH_IHV_ORT_GENAI
+#if WITH_IHV_GGML
+  ADD_ASSET_MAP_ENTRY(kGGML_EPs, libIHV_GGML_EPs_so);
+#endif  // WITH_IHV_GGML
+
+#if WITH_IHV_GGML_VULKAN
+  ADD_ASSET_MAP_ENTRY(kGGML_Vulkan, libGGML_Vulkan_so);
 #endif  // WITH_IHV_GGML_VULKAN
 
-#else
+#else  // __linux__
 
 #if TARGET_OS_IOS
   ADD_ASSET_MAP_ENTRY(kEPDependenciesConfig, ep_dependencies_config_iOS_json);
 #else
   ADD_ASSET_MAP_ENTRY(kEPDependenciesConfig, ep_dependencies_config_macOS_json);
 #endif
-#if WITH_IHV_GGML && !TARGET_OS_IOS
+
+#if WITH_IHV_GGML
   ADD_ASSET_MAP_ENTRY(kGGML_EPs, libIHV_GGML_EPs_dylib);
 #endif
 
@@ -600,11 +632,11 @@ GetAssetMemoryMapping() {
   ADD_ASSET_MAP_ENTRY(kGGML_Vulkan, libGGML_Vulkan_dylib);
 #endif
 
-#if WITH_IHV_GGML_METAL && !TARGET_OS_IOS
+#if WITH_IHV_GGML_METAL
   ADD_ASSET_MAP_ENTRY(kGGML_Metal, libGGML_Metal_dylib);
 #endif
 
-#if WITH_IHV_MLX && !TARGET_OS_IOS
+#if WITH_IHV_MLX
   ADD_ASSET_MAP_ENTRY(kMLX, libIHV_MLX_dylib);
 #endif
 
@@ -686,6 +718,9 @@ bool Unpacker::UnpackAsset(Asset asset, std::string& path, bool forced) {
     case kGGML_Metal:
       adjust_for_ep(EP::kIHVMetal);
       break;
+    case kGGML_ROCm:
+      adjust_for_ep(EP::kIHVROCm);
+      break;
     case kMLX:
       adjust_for_ep(EP::kIHVMLX);
       break;
@@ -732,12 +767,13 @@ bool Unpacker::UnpackAsset(Asset asset, std::string& path, bool forced) {
     case kDataVerificationFileSchema:
     case kConfigVerificationFile:
     case kConfigExperimentalVerificationFile:
+    case kConfigExtendedVerificationFile:
     case kEPDependenciesConfig:
     case kEPDependenciesConfigSchema:
 #if VENDORS_DEFAULT_PACKED
     case kVendorsDefault:
 #endif
-#if defined(_WIN32) && WITH_IHV_NATIVE_OPENVINO
+#if (defined(_WIN32) || defined(linux) || defined(__linux__)) && WITH_IHV_NATIVE_OPENVINO
     case kNativeOpenVINO:
 #endif  // WITH_IHV_NATIVE_OPENVINO
 #if defined(_WIN32) && WITH_IHV_ORT_GENAI
@@ -763,6 +799,9 @@ bool Unpacker::UnpackAsset(Asset asset, std::string& path, bool forced) {
 #if !defined(_WIN32) && WITH_IHV_GGML_METAL
     case kGGML_Metal:
 #endif
+#if defined(_WIN32) && WITH_IHV_GGML_ROCM
+    case kGGML_ROCm:
+#endif
 #endif  // WITH_IHV_GGML
 #if !defined(_WIN32) && WITH_IHV_MLX
     case kMLX:
@@ -772,33 +811,6 @@ bool Unpacker::UnpackAsset(Asset asset, std::string& path, bool forced) {
       LOG4CXX_ERROR(loggerUnpacker, "Unknown packed file type: " << (int)asset);
       return false;
   }
-}
-
-size_t Unpacker::GetAllDataSize() const {
-  size_t data_size = 0;
-  data_size += assets::Log4CxxConfig_xmlSize;
-  data_size += assets::ConfigSchema_jsonSize;
-  data_size += assets::OutputResultsSchema_jsonSize;
-  data_size += assets::data_verification_jsonSize;
-  data_size += assets::DataVerificationSchema_jsonSize;
-
-#ifdef _WIN32
-#if !defined(_M_ARM64) && !defined(_M_ARM)
-  data_size += assets::ep_dependencies_config_windows_x64_jsonSize;
-
-#else
-  data_size += assets::ep_dependencies_config_windows_ARM_jsonSize;
-#endif
-
-#elif TARGET_OS_IOS
-  data_size += assets::ep_dependencies_config_iOS_jsonSize;
-#else
-  data_size += assets::ep_dependencies_config_macOS_jsonSize;
-#endif
-
-  data_size += assets::EPDependenciesConfigSchema_jsonSize;
-
-  return data_size;
 }
 
 std::vector<std::string> Unpacker::UnpackFilesFromZIP(

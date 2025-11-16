@@ -14,20 +14,20 @@ ResultsReportPage::ResultsReportPage(QWidget* parent)
 
 void ResultsReportPage::SetupUi() {
   ui_.setupUi(this);
-  m_show_sub_tasks_result_button_ = new ToggleButton();
-  ui_.top_rh_layout_->addWidget(m_show_sub_tasks_result_button_);
-
   ui_.results_button_->setProperty("class", "secondary_button_with_icon");
   ui_.title_label_->setProperty("class", "title");
   ui_.export_button_->setProperty("class", "secondary_button_with_icon");
   ui_.export_button_->setProperty("has_border", true);
 #ifdef Q_OS_IOS
-  ui_.export_button_->setEnabled(false);
+  ui_.bottom_layout_->addStretch();
+  ui_.export_button_->hide();
 #endif
   ui_.run_new_benchmark_button_->setProperty("class", "primary_button");
   ui_.TTFT_label_->setProperty("class", "medium_normal_label");
   ui_.TPS_label1_->setProperty("class", "medium_normal_label");
   ui_.TPS_label2_->setProperty("class", "medium_normal_label");
+  ui_.ext_label1_->setProperty("class", "medium_normal_label");
+  ui_.ext_label2_->setProperty("class", "medium_normal_label");
 
 #ifdef Q_OS_IOS
   QScroller::grabGesture(ui_.result_table_frame_);
@@ -41,8 +41,6 @@ void ResultsReportPage::InstallSignalHandlers() {
           &ResultsReportPage::RunNewBenchmarkClicked);
   connect(ui_.export_button_, &QPushButton::clicked, this,
           &ResultsReportPage::ExportButtonClicked);
-  connect(m_show_sub_tasks_result_button_, &ToggleButton::toggled, this,
-          &ResultsReportPage::ShowSubTasksResultsToggled);
 }
 
 void ResultsReportPage::InitResultsTable(

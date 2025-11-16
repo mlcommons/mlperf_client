@@ -7,13 +7,22 @@
 
 class ResultComponentWrapperWidget;
 
+/**
+ * @class CircularGauge
+ * @brief Circular gauge widget for metric visualization.
+ */
 class CircularGauge : public QWidget {
   Q_OBJECT
 
  public:
   explicit CircularGauge(const QString &title, const QIcon &icon,
                          const QString tooltip_text, QWidget *parent = nullptr);
+
   void SetValue(double value);
+
+  /**
+   * @brief Gets the wrapper widget.
+   */
   ResultComponentWrapperWidget *wrapper() const { return wrapper_widget_; }
 
  protected:

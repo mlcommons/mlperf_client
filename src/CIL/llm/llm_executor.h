@@ -11,6 +11,7 @@
 #include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
+#include <atomic>
 
 #include "execution_provider.h"
 #include "executor_base.h"
@@ -152,7 +153,7 @@ class LLMExecutor : public ExecutorBase {
 
   log4cxx::LoggerPtr& llm_executor_logger_;
 
-  const bool skip_failed_prompts_;
+  const bool skip_failed_required_prompts_;
 };
 
 class Llama2Executor : public LLMExecutor {

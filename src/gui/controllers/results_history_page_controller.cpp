@@ -67,11 +67,6 @@ void ResultsHistoryPageController::LoadHistory(
       }
     }
 
-    bool contains_only_4k_8k = true;
-    for (const auto& file_name : result.data_file_names)
-      contains_only_4k_8k &=
-          file_name.ends_with("4k.json") || file_name.ends_with("8k.json");
-
     QString datetime_str = QString::fromStdString(result.benchmark_start_time);
     if (overall_entry_found) perf_results.insert("Overall", overall_entry);
     QDateTime datetime =
@@ -88,29 +83,20 @@ void ResultsHistoryPageController::LoadHistory(
     QString ep_display_name = gui::utils::EPCardName(
         QString::fromStdString(config_file_name), ep_name);
 
-    auto model_full_name = cil::BenchmarkRunner::GetModelFullName(
-        cil::utils::StringToLowerCase(result.scenario_name));
+    auto model_display_name =
+        gui::utils::ModelDisplayName(result.scenario_name);
 
-    auto model_display_name = model_full_name.has_value()
-                                  ? model_full_name.value()
-                                  : result.scenario_name;
-
-    // The long prompts contains one or 2 prompts that end with 4k/8k
-    bool support_long_prompts =
-        ((perf_results.size() == 1 || perf_results.size() == 2) &&
-         contains_only_4k_8k);
-
-    HistoryEntry entry{model_display_name.c_str(),
+    HistoryEntry entry{model_display_name,
                        ep_name,
                        ep_display_name,
                        result.device_type.c_str(),
                        datetime,
                        result.benchmark_success,
                        result.config_verified,
-                       result.config_experimental,
+                       result.config_category.c_str(),
                        perf_results,
-                       result.error_message.c_str(),
-                       support_long_prompts};
+                       QString::fromStdString(result.error_message).trimmed(),
+                       result.config_file_comment.c_str()};
     if (!result.system_info.cpu_model.empty() &&
         !result.system_info.cpu_architecture.empty()) {
       entry.system_info_.cpu_name =
@@ -120,16 +106,13 @@ void ResultsHistoryPageController::LoadHistory(
     }
     entry.system_info_.os_name =
         QString::fromStdString(result.system_info.os_name);
-    entry.system_info_.ram =
-        result.system_info.ram > 0
-            ? gui::utils::BytesToGbString(result.system_info.ram)
-            : "";
+    auto ram_gb = gui::utils::BytesToNearestGB(result.system_info.ram);
+    entry.system_info_.ram = ram_gb > 0.5 ? gui::utils::GBToString(ram_gb) : "";
     entry.system_info_.gpu_name =
         QString::fromStdString(result.system_info.gpu_name);
+    auto gpu_ram_gb = gui::utils::BytesToNearestGB(result.system_info.gpu_ram);
     entry.system_info_.gpu_ram =
-        result.system_info.gpu_ram > 0
-            ? gui::utils::BytesToGbString(result.system_info.gpu_ram)
-            : "";
+        gpu_ram_gb > 0.5 ? gui::utils::GBToString(gpu_ram_gb) : "";
     entries.append(entry);
   }
 

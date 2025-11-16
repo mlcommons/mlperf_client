@@ -25,10 +25,17 @@ add_library(${PROJECT_NAME} STATIC ${SOURCES} ${HEADERS})
 
 set_target_properties(${PROJECT_NAME} PROPERTIES CXX_CLANG_TIDY "${CLANG_TIDY_COMMAND}")
 
-target_compile_options(${PROJECT_NAME}
-	PRIVATE
+if(UNIX AND NOT APPLE)  # Linux
+    set(EXTRA_LIBRARIES pthread dl)
+endif()
+
+# Set compiler-specific options
+target_compile_options(${PROJECT_NAME} PRIVATE
 	$<$<CXX_COMPILER_ID:MSVC>:/w45038 /w45205 /w44061 /EHsc>
 	$<$<CXX_COMPILER_ID:Clang>:-Wreorder -fexceptions>
+    $<$<CXX_COMPILER_ID:GNU>:-fPIC -Wall -Wextra -fexceptions>
+    $<$<CXX_COMPILER_ID:AppleClang>:-fexceptions>
+    $<$<CXX_COMPILER_ID:Intel>:-fexceptions>
 )
 
 # Force enable exceptions for extern C functions

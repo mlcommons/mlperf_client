@@ -62,7 +62,7 @@ LLMInference::LLMInference(
       first_token_latency_ms_{0} {}
 
 void LLMInference::Init(const nlohmann::json& model_config,
-                           std::optional<API_IHV_DeviceID_t> device_id) {
+                        std::optional<API_IHV_DeviceID_t> device_id) {
   if (error_message_ != "") {
     return;
   }
@@ -74,33 +74,34 @@ void LLMInference::Init(const nlohmann::json& model_config,
   std::filesystem::path file_path(model_path_);
   std::filesystem::path directory_path = file_path.parent_path();
 
-  std::string device = device_id.has_value() ? devices_[device_id.value()] :
-    default_device_;
+  std::string device =
+      device_id.has_value() ? devices_[device_id.value()] : default_device_;
 
   ov::AnyMap pipeline_config;
   if (device.find("NPU") != std::string::npos) {
-
     pipeline_config["MAX_PROMPT_LEN"] = static_cast<int>(
         config_.search.max_total_length - config_.search.max_length);
+    pipeline_config["PREFILL_HINT"] = "STATIC";
     if (config_.search.max_total_length > kMaxNpuAllocSize) {
-      putenv("DISABLE_OPENVINO_GENAI_NPU_L0=1");
+      pipeline_config["PREFILL_HINT"] = "DYNAMIC";
     }
-    if ((config_.search.max_total_length <= kMaxNpuAllocSize) || (model_name_ != "llama2")) {
+    if ((config_.search.max_total_length <= kMaxNpuAllocSize) ||
+        (model_name_ != "llama2")) {
       pipeline_config["GENERATE_HINT"] = "BEST_PERF";
     }
   } else {
     ov::genai::SchedulerConfig scheduler_config;
-    scheduler_config.max_num_batched_tokens = std::numeric_limits<size_t>::max();
+    scheduler_config.max_num_batched_tokens =
+        std::numeric_limits<size_t>::max();
     scheduler_config.enable_prefix_caching = false;
     pipeline_config[ov::genai::scheduler_config.name()] = scheduler_config;
   }
 
   try {
     logger_(LogLevel::kInfo,
-        std::format("Creating pipeline on {} device", device));
+            std::format("Creating pipeline on {} device", device));
     pipeline_.reset();  // Destroy old pipeline and free memory
-    pipeline_.reset(new ov::genai::LLMPipeline(directory_path.string(),
-                                               device,
+    pipeline_.reset(new ov::genai::LLMPipeline(directory_path.string(), device,
                                                pipeline_config));
   } catch (const std::exception& e) {
     logger_(LogLevel::kError,
@@ -113,7 +114,7 @@ void LLMInference::Init(const nlohmann::json& model_config,
 }
 
 void LLMInference::Run(std::span<const uint32_t> input_data,
-                          std::function<void(uint32_t)> token_callback) {
+                       std::function<void(uint32_t)> token_callback) {
   if (input_data.size() + config_.search.max_length >
       config_.search.max_total_length) {
     error_message_ = "Input tokens + max_length exceeds max_total_length";
@@ -217,10 +218,6 @@ void LLMInference::Reset() {
 }
 
 void LLMInference::Deinit() {
-  if (getenv("DISABLE_OPENVINO_GENAI_NPU_L0")) {
-    putenv("DISABLE_OPENVINO_GENAI_NPU_L0=");
-  }
-
   pipeline_.reset();  // Destroy pipeline object
   error_message_.clear();
 }

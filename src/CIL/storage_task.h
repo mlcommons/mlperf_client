@@ -2,7 +2,7 @@
 #define STORAGE_TASK_H_
 
 #include "progressable_task.h"
-
+#include <atomic>
 namespace cil {
 
 class Storage;

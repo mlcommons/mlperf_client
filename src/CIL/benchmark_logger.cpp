@@ -176,8 +176,8 @@ void BenchmarkLogger::DisplayAllResults() {
   oss << "\nBenchmark Results " << utils::GetCurrentDateTimeString() << ":\n\n";
 
   oss << "== Application Version: " << application_version_string_ << " ==\n";
-  if (config_experimental_) {
-    oss << "== Configuration is experimental ==\n\n";
+  if (!config_category_.empty()) {
+    oss << "== Configuration is " << config_category_ << " ==\n\n";
   } else if (config_verified_) {
     oss << "== Configuration tested by MLCommons ==\n\n";
   } else {
@@ -281,7 +281,8 @@ void BenchmarkLogger::DisplayAllResults() {
         if (!exec_result.error_message.empty() ||
             !exec_result.ep_error_messages.empty()) {
           if (!exec_result.error_message.empty()) {
-            oss << Indent(3) << "Error: "
+            oss << "\n"
+                << Indent(3) << "Error: "
                 << utils::CleanErrorMessageFromStaticPaths(
                        exec_result.error_message);
             if (!exec_result.ep_error_messages.empty()) {
@@ -329,8 +330,8 @@ void BenchmarkLogger::SetConfigVerified(bool is_verified) {
   config_verified_ = is_verified;
 }
 
-void BenchmarkLogger::SetConfigExperimental(bool is_experimental) {
-  config_experimental_ = is_experimental;
+void BenchmarkLogger::SetConfigCategory(std::string_view category) {
+  config_category_ = category;
 }
 
 const std::vector<BenchmarkResult>& BenchmarkLogger::GetResults() const {
@@ -347,8 +348,9 @@ nlohmann::ordered_json BenchmarkLogger::BenchmarkResultToJson(
     json_obj["Config"] = "Configuration NOT tested by MLCommons";
   }
 
-  json_obj["Config Is Experimental"] = config_experimental_;
+  json_obj["Config Category"] = config_category_;
   json_obj["ConfigFile"] = result.config_file_name;
+  json_obj["ConfigComment"] = result.config_file_comment;
   json_obj["ConfigHash"] = result.config_file_hash;
   json_obj["Scenario Name"] = result.scenario_name;
   json_obj["Model Name"] = result.model_name;
@@ -369,6 +371,7 @@ nlohmann::ordered_json BenchmarkLogger::BenchmarkResultToJson(
   json_obj["Benchmark Duration"] = result.benchmark_duration;
   json_obj["Results Verified"] = result.results_verified;
   json_obj["Skipped Prompts"] = result.skipped_prompts;
+  json_obj["Has Non-base Prompts"] = result.has_non_base_prompts;
   if (!result.ep_error_messages.empty()) {
     if (result.error_message.empty()) {
       json_obj["Error Message"] = result.ep_error_messages;
@@ -435,7 +438,7 @@ nlohmann::ordered_json BenchmarkLogger::BenchmarkResultToJson(
 
   const auto& cpu_info = system_info_provider_->GetCpuInfo();
   json_obj["SysInfo_CPUArchitecture"] = cpu_info.architecture;
-  json_obj["SysInfo_CPUModel"] = cpu_info.model_name;
+  json_obj["SysInfo_CPUModel"] = utils::CleanAndTrimString(cpu_info.model_name);
   json_obj["SysInfo_CPUCores"] = cpu_info.physical_cpus;
   json_obj["SysInfo_CPULogicalCores"] = cpu_info.logical_cpus;
   json_obj["SysInfo_CPUClockSpeed"] = cpu_info.frequency;
@@ -462,7 +465,7 @@ nlohmann::ordered_json BenchmarkLogger::BenchmarkResultToJson(
   json_obj["SysInfo_RAMAvailable"] = memory_info.physical_available;
 
   const auto& os_info = system_info_provider_->GetOsInfo();
-  json_obj["SysInfo_OSName"] = os_info.full_name;
+  json_obj["SysInfo_OSName"] = utils::CleanAndTrimString(os_info.full_name);
   json_obj["SysInfo_OSVersion"] = os_info.version;
 
   return json_obj;
@@ -510,7 +513,16 @@ std::vector<BenchmarkResult> BenchmarkLogger::ReadResultsFromFile(
     result.results_verified = item.value("Results Verified", false);
     result.config_verified =
         item.value("Config", "") == "Configuration tested by MLCommons";
-    result.config_experimental = item.value("Config Is Experimental", false);
+    result.has_non_base_prompts = item.value("Has Non-base Prompts", false);
+
+    if (item.contains("Config Category")) {
+      result.config_category = item.value("Config Category", "");
+    } else if (item.contains("Config Is Experimental") &&
+               item.value("Config Is Experimental", false)) {
+      result.config_category = "experimental";
+    }
+
+    result.config_file_comment = item.value("ConfigComment", "");
     result.device_type = item.value("Device Type", "");
     result.error_message = item.value("Error Message", "");
     result.config_file_name = item.value("ConfigFile", "");
@@ -544,8 +556,10 @@ std::vector<BenchmarkResult> BenchmarkLogger::ReadResultsFromFile(
           value.value("Avg Time to First Token", 0.0);
       result.performance_results[category] = category_result;
     }
-    result.system_info.os_name = item.value("SysInfo_OSName", "unknown");
-    result.system_info.cpu_model = item.value("SysInfo_CPUModel", "unknown");
+    result.system_info.os_name =
+        utils::CleanAndTrimString(item.value("SysInfo_OSName", "unknown"));
+    result.system_info.cpu_model =
+        utils::CleanAndTrimString(item.value("SysInfo_CPUModel", "unknown"));
     result.system_info.cpu_architecture =
         item.value("SysInfo_CPUArchitecture", "unknown");
     result.system_info.ram =

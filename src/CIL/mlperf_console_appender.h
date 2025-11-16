@@ -1,7 +1,7 @@
 #ifndef MLPERF_CONSOLE_APPENDER_H_
 #define MLPERF_CONSOLE_APPENDER_H_
 
-#include <log4cxx/ConsoleAppender.h>
+#include <log4cxx/consoleappender.h>
 
 #include <iostream>
 

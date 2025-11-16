@@ -2,8 +2,13 @@
 #define CIRCULAR_THERMOMETER_H_
 
 #include <QWidget>
+
 class ResultComponentWrapperWidget;
 
+/**
+ * @class ThermometerWidget
+ * @brief Widget for displaying temperature measurements.
+ */
 class ThermometerWidget : public QWidget {
   Q_OBJECT
 
@@ -14,6 +19,11 @@ class ThermometerWidget : public QWidget {
 
   void SetRange(double min_temp, double max_temp);
   void SetTemperature(double temperature);
+
+
+  /**
+   * @brief Gets the wrapper widget.
+   */
   ResultComponentWrapperWidget *wrapper() const { return wrapper_widget_; }
 
  protected:
@@ -26,4 +36,4 @@ class ThermometerWidget : public QWidget {
   ResultComponentWrapperWidget *wrapper_widget_;
 };
 
-#endif
+#endif  // CIRCULAR_THERMOMETER_H_

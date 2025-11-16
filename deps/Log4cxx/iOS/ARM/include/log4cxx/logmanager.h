@@ -35,7 +35,7 @@ typedef std::shared_ptr<LoggerFactory> LoggerFactoryPtr;
 }
 
 /**
-* Use the <code>LogManager</code> class to retreive Logger
+* Use the <code>LogManager</code> class to retrieve Logger
 * instances or to operate on the current
 * {@link log4cxx::spi::LoggerRepository LoggerRepository}.
 * DefaultConfigurator::configure will be used to configure LoggerRepository

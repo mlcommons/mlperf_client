@@ -2,7 +2,6 @@
 #define BENCHMARK_RESULT_H_
 
 #include <nlohmann/json.hpp>
-#include <set>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -33,10 +32,12 @@ using CategoryPerformanceResult =
 struct BenchmarkResult {
   std::string config_file_name;
   std::string config_file_hash;
+  std::string config_file_comment;
   std::string scenario_name;
   std::string model_path;
   std::vector<std::string> asset_paths;
   std::vector<std::string> data_paths;
+  bool has_non_base_prompts;
   std::string results_file;
   std::string model_name;
   std::string model_file_name;
@@ -52,7 +53,7 @@ struct BenchmarkResult {
   double duration = 0.0;  // Average time per iteration
   bool results_verified = false;
   bool config_verified = false;
-  bool config_experimental = false;
+  std::string config_category;
   std::string benchmark_duration;
   std::string error_message;
   std::string ep_error_messages;
@@ -71,9 +72,11 @@ struct BenchmarkResult {
   CategoryPerformanceResult performance_results;
 
   static inline const std::string kLLMOverallCategory = "Overall";
-  static inline const std::set<std::string> kLLMRequiredCategories = {
+  static inline const std::vector<std::string> kLLMRequiredCategories = {
       "Content Generation", "Creative Writing", "Summarization, Light",
       "Summarization, Moderate", "Code Analysis"};
+  static inline const std::vector<std::string> kLLMExtendedCategories = {
+      "Summarization, Intermediate", "Summarization, Substantial"};
 };
 
 }  // namespace cil

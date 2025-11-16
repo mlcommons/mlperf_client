@@ -13,22 +13,31 @@ class ResultTableWidget;
 namespace gui {
 namespace views {
 
+/**
+ * @class ResultsReportPage
+ * @brief Page for displaying detailed benchmark performance reports.
+ */
 class ResultsReportPage : public AbstractView {
   Q_OBJECT
+
  public:
   explicit ResultsReportPage(QWidget* parent = nullptr);
   ~ResultsReportPage() = default;
 
+  /**
+   * @brief Initialize the results table with specified headers.
+   */
   void InitResultsTable(const QList<custom_widgets::HeaderInfo>& headers);
-  void AddResultsTableTitle(const QString& title, const QString& sub_title);
-  void AddResultsTableRow(const QStringList& row_data, bool bold);
-  bool DisplaySubTasksEnabled() {
-    return m_show_sub_tasks_result_button_->isChecked();
-  }
-  void SetSubTasksChecked(bool checked) {
-    m_show_sub_tasks_result_button_->setChecked(checked);
-  }
 
+  /**
+   * @brief Add title and subtitle to the results table.
+   */
+  void AddResultsTableTitle(const QString& title, const QString& sub_title);
+
+  /**
+   * @brief Add a data row to the results table.
+   */
+  void AddResultsTableRow(const QStringList& row_data, bool bold);
  protected:
   void SetupUi() override;
   void InstallSignalHandlers() override;
@@ -37,11 +46,9 @@ class ResultsReportPage : public AbstractView {
   void BackButtonClicked();
   void RunNewBenchmarkClicked();
   void ExportButtonClicked();
-  void ShowSubTasksResultsToggled(bool checked);
 
  private:
   Ui::ResultsReportPage ui_;
-  ToggleButton* m_show_sub_tasks_result_button_;
   custom_widgets::ResultTableWidget* table_;
 };
 

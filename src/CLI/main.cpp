@@ -44,7 +44,7 @@
 #include "system_controller.h"
 #include "unpacker.h"
 #include "utils.h"
-#include "version.h"  // NOLINT
+#include "../CIL/version.h"  // NOLINT
 
 using namespace log4cxx;
 using namespace log4cxx::xml;
@@ -119,6 +119,20 @@ void generate_command_options(CommandParser& command_parser) {
       download_behaviour_option,
       {"forced", "prompt", "skip_all", "deps_only", "normal"});
 
+  // Add prompts option
+  CommandOption prompts_option(
+      "prompts", 'q',
+      "Allows to specify prompts types to run the benchmark on. 'base' runs "
+      "the benchmark on base prompts only; 'ext' runs the benchmark on "
+      "extended(4k/8k) prompts only; 'both' runs the benchmark on both base "
+      "and extended prompts.",
+      false);
+
+  prompts_option.SetDefaultValue("base");
+  prompts_option.SetCustomErrorMessage(
+      "You must provide either base, ext, or both.");
+  command_parser.AddEnumOption(prompts_option, {"base", "ext", "both"});
+
   // Add no-cach-local-files option
   CommandOption cache_local_files_option(
       "cache-local-files", 'n',
@@ -179,9 +193,21 @@ void generate_command_options(CommandParser& command_parser) {
 
   // set the display order
   command_parser.SetDisplayOptionOrder({
-    "help", "version", "config", "logger", "output-dir", "data-dir", "temp-dir",
-        "enumerate-devices", "device-id",
-        "pause", "list-models", "download_behaviour", "cache-local-files", "skip-failed-prompts",
+      "help",
+      "version",
+      "config",
+      "logger",
+      "output-dir",
+      "data-dir",
+      "temp-dir",
+      "enumerate-devices",
+      "device-id",
+      "pause",
+      "list-models",
+      "download_behaviour",
+      "prompts",
+      "cache-local-files",
+      "skip-failed-prompts",
   });
 }
 
@@ -190,6 +216,8 @@ int main(int argc, char* argv[]) {
   CommandParser command_parser("mlperf-windows.exe", app_description);
 #elif defined(__APPLE__)
   CommandParser command_parser("mlperf-mac", app_description);
+#elif defined(__linux__)
+  CommandParser command_parser("mlperf-linux", app_description);
 #endif
   generate_command_options(command_parser);
   bool is_parsed_successfully = command_parser.Process(argc, argv);
@@ -395,6 +423,12 @@ int main(int argc, char* argv[]) {
     auto download_behaviour_option_value =
         command_parser.GetOptionValue("download_behaviour");
     controller.SetSystemDownloadBehavior(download_behaviour_option_value);
+  }
+
+  if (command_parser.OptionPassed("prompts")) {
+    auto prompts_value = command_parser.GetOptionValue("prompts");
+    if (prompts_value == "ext") prompts_value = "extended";
+    controller.SetAllowedPromptsType(prompts_value);
   }
 
   if (command_parser.OptionPassed("cache-local-files")) {

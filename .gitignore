@@ -2,6 +2,7 @@ build
 build-ninja
 build-ARM64
 bin
+Bin
 *.idea
 *.fleet
 .cache

@@ -36,6 +36,28 @@ if(NOT IOS)
     set(GIT_EXECUTABLE_ARG -DGIT_EXECUTABLE=${GIT_EXECUTABLE})
 endif()
 
+# Forward hip_DIR from the top-level so the child configure can find HIP
+set(HIP_DIR_ARG)
+if(DEFINED hip_DIR AND hip_DIR)
+    file(TO_CMAKE_PATH "${hip_DIR}" hip_DIR_CMAKE)
+    set(HIP_DIR_ARG -Dhip_DIR:PATH=${hip_DIR_CMAKE})
+endif()
+
+# Forward hipblas_DIR and rocblas_DIR if available
+set(HIPBLAS_DIR_ARG)
+if(DEFINED hipblas_DIR AND hipblas_DIR)
+    file(TO_CMAKE_PATH "${hipblas_DIR}" hipblas_DIR_CMAKE)
+    set(HIPBLAS_DIR_ARG -Dhipblas_DIR:PATH=${hipblas_DIR_CMAKE})
+    # Derive hipblas-common config dir as sibling of hipblas
+    get_filename_component(_HIPBLAS_PARENT "${hipblas_DIR_CMAKE}" DIRECTORY)
+    set(HIPBLAS_COMMON_DIR_ARG -Dhipblas-common_DIR:PATH=${_HIPBLAS_PARENT}/hipblas-common)
+endif()
+set(ROCBLAS_DIR_ARG)
+if(DEFINED rocblas_DIR AND rocblas_DIR)
+    file(TO_CMAKE_PATH "${rocblas_DIR}" rocblas_DIR_CMAKE)
+    set(ROCBLAS_DIR_ARG -Drocblas_DIR:PATH=${rocblas_DIR_CMAKE})
+endif()
+
 set(IOS_ARGS "")
 if(IOS)
     list(APPEND IOS_ARGS
@@ -59,8 +81,13 @@ ExternalProject_Add(ihv_ggml
         -DGGML_METAL=${MLPERF_IHV_GGML_METAL}
         -DGGML_VULKAN=${MLPERF_IHV_GGML_VULKAN}
         -DGGML_CUDA=${MLPERF_IHV_GGML_CUDA}
+        -DGGML_ROCM=${MLPERF_IHV_GGML_ROCM}
         -DIOS=${IOS}
         ${GIT_EXECUTABLE_ARG}
+        ${HIP_DIR_ARG}
+        ${HIPBLAS_DIR_ARG}
+        ${HIPBLAS_COMMON_DIR_ARG}
+        ${ROCBLAS_DIR_ARG}
         ${GGML_VERSION_INFO}
         ${IOS_ARGS}
 

@@ -8,13 +8,19 @@ namespace views {
 class SettingsPage;
 }
 namespace controllers {
+/**
+ * @class SettingsPageController
+ * @brief Manages user preferences and paths for the settings page.
+ */
 class SettingsPageController : public AbstractController {
   Q_OBJECT
  public:
   explicit SettingsPageController(const QString& data_default_path,
                                   const QString& logs_default_path,
                                   QObject* parent = nullptr);
+
   void SetView(views::SettingsPage* view);
+
   QString GetDataPath() const;
   QString GetLogsPath() const;
   bool GetKeepLogs() const;

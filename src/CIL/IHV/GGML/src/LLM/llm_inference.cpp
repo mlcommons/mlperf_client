@@ -68,7 +68,7 @@ void LLMInference::Init(const nlohmann::json& model_config) {
   model_params.use_mmap = ep_settings_.GetNoMmap().value_or(false);
   if (ep_settings_.GetNoMmap().value_or(false))
     logger_(LogLevel::kInfo, "Not using mmap!");
-  model_ = llama_load_model_from_file(model_path_.c_str(), model_params);
+  model_ = llama_model_load_from_file(model_path_.c_str(), model_params);
   if (!model_) {
     logger_(LogLevel::kError, "Failed to load the model");
     error_message_ = "Failed to load the model";
@@ -129,7 +129,9 @@ bool LLMInference::LoadModelAndContext(int gpu_layers) {
   ctx_params.n_batch =
       config_.search.max_total_length - config_.search.max_length;
 
-  ctx_params.flash_attn = ep_settings_.GetFa().value_or(false);
+  ctx_params.flash_attn_type = ep_settings_.GetFa().value_or(false) 
+                               ? LLAMA_FLASH_ATTN_TYPE_ENABLED 
+                               : LLAMA_FLASH_ATTN_TYPE_DISABLED;
   if (ep_settings_.GetFa().value_or(false))
     logger_(LogLevel::kInfo, "Using Flash attention!");
   context_ = llama_new_context_with_model(model_, ctx_params);
@@ -260,7 +262,7 @@ void LLMInference::Run(const std::span<uint32_t const> input_data,
       }
     }
 
-    llama_kv_self_clear(context_);
+    llama_memory_clear(llama_get_memory(context_), true);
 
     end_time_ = std::chrono::high_resolution_clock::now();
   } catch (const std::exception& e) {

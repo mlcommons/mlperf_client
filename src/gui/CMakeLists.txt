@@ -61,34 +61,6 @@ endif()
 target_link_libraries(GUI PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Svg Qt6::PdfWidgets CIL)
 if(APPLE)
     target_link_libraries(GUI PRIVATE IOReport)
-    if (IOS)
-        set(FRAMEWORKS_LIST "")
-        if(MLPERF_IHV_GGML_METAL)
-            get_property(EP_IHVS_GGML_LIB GLOBAL PROPERTY EP_IHVS_GGML_LIB)
-            string(REPLACE "$<CONFIG>" "$(CONFIGURATION)" EP_IHVS_GGML_LIB_XCODE_FMT "${EP_IHVS_GGML_LIB}")
-            list(APPEND FRAMEWORKS_LIST ${EP_IHVS_GGML_LIB_XCODE_FMT})
-
-            get_property(EP_IHVS_GGML_METAL_LIB GLOBAL PROPERTY EP_IHVS_GGML_METAL_LIB)
-            string(REPLACE "$<CONFIG>" "$(CONFIGURATION)" EP_IHVS_GGML_METAL_LIB_XCODE_FMT "${EP_IHVS_GGML_METAL_LIB}")
-            list(APPEND FRAMEWORKS_LIST ${EP_IHVS_GGML_METAL_LIB_XCODE_FMT})
-        endif()
-        if(MLPERF_IHV_MLX)
-            get_property(EP_IHVS_MLX_LIB GLOBAL PROPERTY EP_IHVS_MLX_LIB)
-            string(REPLACE "$<CONFIG>" "$(CONFIGURATION)" EP_IHVS_MLX_LIB_XCODE_FMT "${EP_IHVS_MLX_LIB}")
-            list(APPEND FRAMEWORKS_LIST ${EP_IHVS_MLX_LIB_XCODE_FMT})
-
-            get_property(MLX_METALLIB GLOBAL PROPERTY MLX_METALLIB)        
-            set(MLX_METALLIB_DEST "$<TARGET_FILE_DIR:GUI>/Frameworks/IHV_MLX.framework/default.metallib")
-            add_custom_command(
-            TARGET GUI POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different 
-            "${MLX_METALLIB}" "${MLX_METALLIB_DEST}" 
-            COMMENT "Copying MLX metallib into the app bundle"
-            )
-        endif()
-
-        list(JOIN FRAMEWORKS_LIST ";" XCODE_EMBED_FRAMEWORKS_LIST)
-        set_target_properties(GUI PROPERTIES XCODE_EMBED_FRAMEWORKS_CODE_SIGN_ON_COPY ON XCODE_EMBED_FRAMEWORKS "${XCODE_EMBED_FRAMEWORKS_LIST}")
-    endif()
 endif()
 target_compile_definitions(GUI PUBLIC "EULA_ENABLED=1")
 
@@ -138,6 +110,9 @@ if (WIN32)
     # Use windeployqt to copy the required Qt libraries
     add_custom_command(TARGET GUI POST_BUILD
         COMMAND ${WINDEPLOYQT_EXECUTABLE} --release --no-translations $<TARGET_FILE:GUI>)
+
+    set(EP_DEPENDENCIES_DEST_DIR $<TARGET_FILE_DIR:GUI>/deps/IHV)
+
 else()
     # https://doc.qt.io/qt-6/macos-deployment.html
     # https://cmake.org/cmake/help/latest/prop_tgt/MACOSX_BUNDLE_INFO_PLIST.html
@@ -145,6 +120,8 @@ else()
     set_source_files_properties(${app_icon_macos} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
 
     get_property(APP_VERSION_STRING GLOBAL PROPERTY APP_VERSION_STRING)
+
+    set(GITHUB_RUN_ID "$ENV{GITHUB_RUN_ID}")
 
     if(IOS)
         file(READ "${CMAKE_SOURCE_DIR}/version.json" VERSION_JSON)
@@ -155,8 +132,6 @@ else()
         
         set(IOS_SHORT_VERSION_STRING "${MAJOR_VERSION}.${MINOR_VERSION}.${PATCH_VERSION}")
         set(IOS_BUNDLE_VERSION "${MAJOR_VERSION}.${MINOR_VERSION}.${PATCH_VERSION}")
-        
-        set(GITHUB_RUN_ID "$ENV{GITHUB_RUN_ID}")
 
         if(NOT GITHUB_RUN_ID STREQUAL "")
             set(IOS_BUNDLE_VERSION "${GITHUB_RUN_ID}")
@@ -167,7 +142,7 @@ else()
     endif()
     
     set_target_properties(GUI PROPERTIES 
-        OUTPUT_NAME "mlperf-macos-gui" 
+        OUTPUT_NAME "MLPerf Client" 
         MACOSX_BUNDLE ON
         MACOSX_BUNDLE_BUNDLE_NAME "${MLPERF_MAC_BUNDLE_NAME}"
         MACOSX_BUNDLE_GUI_IDENTIFIER "${MLPERF_MAC_BUNDLE_IDENTIFIER}"
@@ -175,6 +150,8 @@ else()
         MACOSX_BUNDLE_SHORT_VERSION_STRING "${APP_VERSION_STRING}"
         MACOSX_BUNDLE_LONG_VERSION_STRING "${APP_VERSION_STRING}"
         MACOSX_BUNDLE_ICON_FILE "AppIcon.icns"
+        MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/macos/Info.plist.app.in
+        XCODE_ATTRIBUTE_CODE_SIGN_ENTITLEMENTS ${CMAKE_CURRENT_SOURCE_DIR}/macos/mlperf-macos.entitlements
         XCODE_ATTRIBUTE_DEVELOPMENT_TEAM "${MLPERF_XCODE_DEVELOPMENT_TEAM}"
         XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY "${MLPERF_XCODE_SIGN_IDENTITY}"
         XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED "${XCODE_SIGN_REQUIRED}"

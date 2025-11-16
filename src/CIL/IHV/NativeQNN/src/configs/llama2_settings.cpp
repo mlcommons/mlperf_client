@@ -29,7 +29,6 @@ std::string LlmInference::formConfigStringLlama2(
                                        {"cpu-mask", "0xe0"},
                                        {"kv-dim", 128},
                                        {"allow-async-init", false},
-                                       {"enable-graph-switching", false},
                                        {"kv-update-method", "SMART_MASK"}};
 
     npu_engine["backend"]["extensions"] =
@@ -51,7 +50,7 @@ std::string LlmInference::formConfigStringLlama2(
     cpu_engine["backend"]["type"] = "QnnGenAiTransformer";
     cpu_engine["backend"]["QnnGenAiTransformer"] = {
         {"version", 1},  {"n-layer", 32},         {"n-embd", 4096},
-        {"n-heads", 32}, {"use-in-memory", true}, {"kv-quantization" , true}};
+        {"n-heads", 32}, {"enable-in-memory-kv-share", true}, {"kv-quantization" , true}};
     cpu_engine["model"]["version"] = 1;
     cpu_engine["model"]["type"] = "library";
     cpu_engine["model"]["library"] = {{"version", 1},

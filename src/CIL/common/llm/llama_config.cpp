@@ -13,42 +13,19 @@ bool LlamaConfig::LoadFromJson(const nlohmann::json& j) {
   model.bos_token_id = model_config["bos_token_id"];
   model.context_length = model_config["context_length"];
   model.eos_token_id = model_config["eos_token_id"];
-  model.pad_token_id = model_config["pad_token_id"];
   model.vocab_size = model_config["vocab_size"];
-  auto decoder_config = model_config["decoder"];
-  model.head_size = decoder_config["head_size"];
-  model.hidden_size = decoder_config["hidden_size"];
-  model.num_attention_heads = decoder_config["num_attention_heads"];
-  model.num_hidden_layers = decoder_config["num_hidden_layers"];
-  model.num_key_value_heads = decoder_config["num_key_value_heads"];
-  auto input_names = decoder_config["inputs"];
-  for (auto& [key, value] : input_names.items()) {
-    model.input_names[key] = value;
-  }
-  auto output_names = decoder_config["outputs"];
-  for (auto& [key, value] : output_names.items()) {
-    model.output_names[key] = value;
-  }
 
   // Load search config
   auto search_config = j["search"];
   auto search_method = search_config["method"];
   if (search_method == "greedy") {
     search.method = SearchMethod::kGreedy;
-    search.num_beams = 1;
   } else if (search_method == "top_k") {
     search.method = SearchMethod::kTopK;
     search.top_k = search_config["top_k"];
-    search.num_beams = 1;
   } else if (search_method == "top_p") {
     search.method = SearchMethod::kTopP;
     search.top_p = search_config["top_p"];
-    search.num_beams = 1;
-  } else if (search_method == "beam_search") {
-    search.method = SearchMethod::kBeamSearch;
-    search.top_k = search_config["top_k"];
-    search.top_p = search_config["top_p"];
-    search.num_beams = search_config["num_beams"];
   } else {
     return false;
   }

@@ -11,11 +11,10 @@ namespace fs = std::filesystem;
 
 namespace {
 
-const std::unordered_set<std::string> kSupportedLLMModels {
-    "llama2", "llama3", "phi3.5", "phi4"
-  };
+const std::unordered_set<std::string> kSupportedLLMModels{"llama2", "llama3",
+                                                          "phi3.5", "phi4"};
 
-} // namespace
+}  // namespace
 
 const std::unordered_map<std::string, std::string> kModelFullNames = {
     {"llama2", "Llama 2 7B Chat"},
@@ -32,7 +31,8 @@ BenchmarkRunner::BenchmarkRunner(Params& params)
       ep_dependencies_manager_(params.ep_dependencies_manager),
       results_logger_(std::make_unique<BenchmarkLogger>(params.output_dir)),
       logger_(params.logger),
-      enumerate_only_(params.enumerate_only) {
+      enumerate_only_(params.enumerate_only),
+      collect_remote_sizes_only_(params.collect_remote_sizes_only) {
   if (!logger_) {
     throw std::invalid_argument("Logger is not provided.");
   }
@@ -51,6 +51,9 @@ BenchmarkRunner::BenchmarkRunner(Params& params)
 
   if (params.enumerate_only) {
     config_->GetSystemConfig().SetDownloadBehavior("deps_only_enumeration");
+  }
+  if (params.collect_remote_sizes_only) {
+    config_->GetSystemConfig().SetDownloadBehavior("collect_remote_sizes_only");
   }
 
   auto download_stage = std::make_shared<DownloadStage>(
@@ -102,6 +105,11 @@ void BenchmarkRunner::ClearCache(const std::string& deps_dir) {
 std::vector<BenchmarkRunner::PreparedEPList> BenchmarkRunner::GetPreparedEPs()
     const {
   return prepared_eps_;
+}
+
+const std::map<std::string, uint64_t>& BenchmarkRunner::GetRemoteFileSizes()
+    const {
+  return remote_file_sizes_;
 }
 
 std::optional<std::string> BenchmarkRunner::GetModelFullName(
@@ -197,6 +205,9 @@ bool BenchmarkRunner::Run() {
       }
     }
     if (enumerate_only_) prepared_eps_.push_back(scenario_data.prepared_eps);
+    if (collect_remote_sizes_only_)
+      remote_file_sizes_.insert(scenario_data.remote_file_sizes.begin(),
+                                scenario_data.remote_file_sizes.end());
   }
 
   return !was_error;

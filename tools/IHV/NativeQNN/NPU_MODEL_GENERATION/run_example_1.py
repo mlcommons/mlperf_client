@@ -24,9 +24,10 @@ else:
     print(f"Model not supported")
     sys.exit(1)
 
-print(f"QNN SDK ROOT: {QNN_SDK_ROOT} model_id: {model_id}")
+block_quant_size = 128    
+print(f"QNN SDK ROOT: {QNN_SDK_ROOT} model_id: {model_id} BLOCK_QUANT_SIZE: {block_quant_size}")
 
-parameters={"QNN_SDK_ROOT": QNN_SDK_ROOT, "model_id": model_id}
+parameters={"QNN_SDK_ROOT": QNN_SDK_ROOT, "model_id": model_id, "BLOCK_QUANT_SIZE": block_quant_size}
 
 
 
@@ -42,6 +43,8 @@ def modify_notebook(notebook_path, output_path, variable_changes):
                     pattern = r'model_id\s*=\s*os\.getenv\(["\']MODEL_ID["\'](?:\s*,\s*[^)]*)?\)'
                 elif (model_name == "llama3.1" and var_name == "QNN_SDK_ROOT"):
                     pattern = r'QNN_SDK_ROOT\s*=\s*os\.getenv\(["\']QNN_SDK_ROOT["\'](?:\s*,\s*[^)]*)?\)'
+                elif var_name == "BLOCK_QUANT_SIZE":
+                    pattern = r'BLOCK_QUANT_SIZE\s*=\s*\d+'
                 else:
                     pattern = rf"^\s*{var_name}\s*=\s*[\"'].*?[\"']"
                 replacement = f"{var_name} = {repr(new_value)}"

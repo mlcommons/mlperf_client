@@ -10,29 +10,40 @@ set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 set(OPENVINO_INSTALL_DIR "" CACHE PATH "Path to the OpenVINO installation directory")
 
-include(FetchContent)
-
 if(NOT OPENVINO_INSTALL_DIR)
-    message(STATUS "OPENVINO_INSTALL_DIR is not set. Using 2025.0.1 OpenVINO GenAI from official source")
-	
-# Download and unpack the ZIP file
-FetchContent_Declare(
-  OPENVINO_GENAI
-  URL https://storage.openvinotoolkit.org/repositories/openvino_genai/packages/pre-release/2025.2.0.0rc3/openvino_genai_windows_2025.2.0.0rc3_x86_64.zip # URL to the ZIP file
-)
+    message(STATUS "OPENVINO_INSTALL_DIR is not set. Using 2025.3 OpenVINO GenAI from official source")
 
-FetchContent_MakeAvailable(OPENVINO_GENAI)
-set(OPENVINO_INSTALL_DIR ${openvino_genai_SOURCE_DIR} CACHE PATH "Path to the OpenVINO installation directory" FORCE)
+    include(FetchContent)
+
+    if(WIN32)
+        set(OPENVINO_GENAI_URL "https://storage.openvinotoolkit.org/repositories/openvino_genai/packages/2025.3/windows/openvino_genai_windows_2025.3.0.0_x86_64.zip")
+    else() # Linux
+        set(OPENVINO_GENAI_URL "https://storage.openvinotoolkit.org/repositories/openvino_genai/packages/2025.3/linux/openvino_genai_ubuntu24_2025.3.0.0_x86_64.tar.gz")
+    endif()
+	
+    # Download and unpack the ZIP file
+     FetchContent_Declare(
+         OPENVINO_GENAI
+         URL ${OPENVINO_GENAI_URL} # URL to the ZIP file
+     )
+
+    FetchContent_MakeAvailable(OPENVINO_GENAI)
+    set(OPENVINO_INSTALL_DIR ${openvino_genai_SOURCE_DIR} CACHE PATH "Path to the OpenVINO installation directory" FORCE)
 endif()
 
-find_file(OPENVINO_SETUPVARS_PATH NAMES "setupvars.bat" PATHS ${OPENVINO_INSTALL_DIR} NO_DEFAULT_PATH REQUIRED) 
-
 set(OpenVINO_DIR "${OPENVINO_INSTALL_DIR}/runtime/cmake")
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${OpenVINO_DIR})
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${OPENVINO_INSTALL_DIR}/runtime/3rdparty/tbb/lib/cmake/TBB")
 
-find_package(OpenVINO REQUIRED HINTS ${OpenVINO_DIR})
-find_package(OpenVINOGenAI REQUIRED HINTS ${OpenVINO_DIR})
+find_package(OpenVINO REQUIRED PATHS ${OpenVINO_DIR} NO_CMAKE_FIND_ROOT_PATH)
+find_package(OpenVINOGenAI REQUIRED PATHS ${OpenVINO_DIR} NO_CMAKE_FIND_ROOT_PATH)
 
-set(OPENVINO_COMMAND ${CMAKE_COMMAND} -E env ${OPENVINO_SETUPVARS_PATH} && )
+if(WIN32)
+    find_file(OPENVINO_SETUPVARS_PATH NAMES "setupvars.bat" PATHS ${OPENVINO_INSTALL_DIR} NO_DEFAULT_PATH REQUIRED)
+    set(OPENVINO_COMMAND ${CMAKE_COMMAND} -E env ${OPENVINO_SETUPVARS_PATH} && )
+else()
+    set(OPENVINO_COMMAND "")
+endif()
 
 include(ExternalProject)
 

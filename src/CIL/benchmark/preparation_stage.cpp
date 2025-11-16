@@ -8,9 +8,8 @@
 
 #ifdef __APPLE__
 #include <TargetConditionals.h>
-#if TARGET_OS_IOS
-#include "ios/ios_utils.h"
-#endif
+
+#include "apple/apple_utils.h"
 #endif  //__APPLE__
 
 using namespace log4cxx;
@@ -96,8 +95,7 @@ bool PreparationStage::Impl::PrepareIHVDevicesIfNeeded(
 
     std::string error;
     std::string log;
-    auto devices = API_Handler::EnumerateDevices(
-        API_Handler::Type::kIHV, library_path, ep_name,
+    auto devices = API_Handler::EnumerateDevices(library_path, ep_name,
         scenario_config_.GetName(), ep_config, error, log);
 
     if (!error.empty()) {
@@ -221,6 +219,7 @@ void PreparationStage::Impl::UnpackLibraryIfNeeded(
       throw std::runtime_error(error);
     }
   }
+
   if (try_to_load) CanLoadLibrary(ep_type, ep_name, library_path);
 }
 
@@ -228,7 +227,7 @@ void PreparationStage::Impl::CanLoadLibrary(EP ep_type,
                                             const std::string& ep_name,
                                             const std::string& library_path) {
   if (auto error =
-          API_Handler::CanBeLoaded(API_Handler::Type::kIHV, library_path);
+          API_Handler::CanBeLoaded(library_path);
       !error.empty()) {
     throw std::runtime_error("Failed to load required libraries for " +
                              ep_name + "\n" + error);
@@ -237,10 +236,10 @@ void PreparationStage::Impl::CanLoadLibrary(EP ep_type,
 }
 
 #if WITH_IHV_WIN_ML
-static bool InstallWindowsMLMSIX(const std::string& library_path,
-                                 const log4cxx::LoggerPtr& logger) {
-  // Helper to run command hidden
-  auto RunHiddenCommand = [](const std::string& cmd) -> bool {
+static bool EnsureWindowsAppRuntimeInstalled(const std::string& library_path,
+                                             const log4cxx::LoggerPtr& logger) {
+  // Helper to run command hidden; returns process exit code (0 on success)
+  auto RunHiddenCommand = [](const std::string& cmd) -> DWORD {
     STARTUPINFOA si = {sizeof(si)};
     PROCESS_INFORMATION pi;
     si.dwFlags = STARTF_USESHOWWINDOW;
@@ -259,39 +258,175 @@ static bool InstallWindowsMLMSIX(const std::string& library_path,
       GetExitCodeProcess(pi.hProcess, &exitCode);
       CloseHandle(pi.hProcess);
       CloseHandle(pi.hThread);
-      return (exitCode == 0);
+      return exitCode;
     }
 
-    return false;
+    return (DWORD)-1;
   };
 
-  // Step 1: Check if package is already installed
-  std::string check_cmd =
-      "powershell.exe -ExecutionPolicy Bypass -NoProfile "
-      "-Command \"if (Get-AppxPackage -Name Microsoft.WindowsMLRuntime.0.3) { "
-      "exit 0 } else { exit 1 }\"";
+  // Helper to run command hidden and capture stdout; returns process exit code
+  auto RunHiddenCommandCapture = [](const std::string& cmd,
+                                    std::string& stdout_text) -> DWORD {
+    SECURITY_ATTRIBUTES sa;
+    sa.nLength = sizeof(sa);
+    sa.bInheritHandle = TRUE;
+    sa.lpSecurityDescriptor = nullptr;
 
-  if (RunHiddenCommand(check_cmd)) {
+    HANDLE read_pipe = nullptr;
+    HANDLE write_pipe = nullptr;
+    if (!CreatePipe(&read_pipe, &write_pipe, &sa, 0)) {
+      return (DWORD)-1;
+    }
+    if (!SetHandleInformation(read_pipe, HANDLE_FLAG_INHERIT, 0)) {
+      CloseHandle(read_pipe);
+      CloseHandle(write_pipe);
+      return (DWORD)-1;
+    }
+
+    STARTUPINFOA si = {sizeof(si)};
+    PROCESS_INFORMATION pi;
+    ZeroMemory(&pi, sizeof(pi));
+    si.dwFlags = STARTF_USESHOWWINDOW | STARTF_USESTDHANDLES;
+    si.wShowWindow = SW_HIDE;
+    si.hStdOutput = write_pipe;
+    si.hStdError = write_pipe;
+
+    std::string cmd_copy = "cmd.exe /C " + cmd;
+
+    BOOL success = CreateProcessA(nullptr, &cmd_copy[0], nullptr, nullptr, TRUE,
+                                  CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi);
+
+    CloseHandle(write_pipe);
+
+    if (!success) {
+      CloseHandle(read_pipe);
+      return (DWORD)-1;
+    }
+
+    std::string buffer;
+    char chunk[4096];
+    DWORD bytes_read = 0;
+    while (ReadFile(read_pipe, chunk, sizeof(chunk), &bytes_read, nullptr) &&
+           bytes_read) {
+      buffer.append(chunk, chunk + bytes_read);
+    }
+    CloseHandle(read_pipe);
+
+    WaitForSingleObject(pi.hProcess, INFINITE);
+    DWORD exitCode;
+    GetExitCodeProcess(pi.hProcess, &exitCode);
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+
+    // Trim simple whitespace and CR/LF/NULLs from ends
+    size_t l = 0;
+    size_t r = buffer.size();
+    while (l < r &&
+           (buffer[l] == ' ' || buffer[l] == '\t' || buffer[l] == '\r' ||
+            buffer[l] == '\n' || buffer[l] == '\0'))
+      ++l;
+    while (r > l && (buffer[r - 1] == ' ' || buffer[r - 1] == '\t' ||
+                     buffer[r - 1] == '\r' || buffer[r - 1] == '\n' ||
+                     buffer[r - 1] == '\0'))
+      --r;
+    stdout_text.assign(buffer.data() + l, r - l);
+
+    return exitCode;
+  };
+
+  // Step 1: Detect Windows App Runtime presence for required version rail or
+  // greater
+
+  int min_major = 1;
+  int min_minor = 8;
+
+  std::string detect_cmd =
+      std::string("powershell.exe -ExecutionPolicy Bypass -NoProfile ") +
+      "-Command \"$ok=$false; "
+      "Get-AppxPackage -Name 'Microsoft.WindowsAppRuntime.*' | ForEach-Object "
+      "{ "
+      "$m=[regex]::Match($_.Name,'Microsoft\\.WindowsAppRuntime\\.(\\d+)\\.("
+      "\\d+)'); "
+      "if($m.Success){ $maj=[int]$m.Groups[1].Value; "
+      "$min=[int]$m.Groups[2].Value; "
+      "if(($maj -gt " +
+      std::to_string(min_major) + ") -or ($maj -eq " +
+      std::to_string(min_major) + " -and $min -ge " +
+      std::to_string(min_minor) +
+      ")){ $ok=$true } } }; "
+      "if($ok){ exit 0 } else { exit 1 }\"";
+
+  // Build version query command (UTF-8 stdout)
+  std::string version_cmd =
+      std::string("powershell.exe -ExecutionPolicy Bypass -NoProfile ") +
+      "-Command \"[Console]::OutputEncoding = "
+      "[System.Text.UTF8Encoding]::new(); "
+      "$pkg = Get-AppxPackage -Name 'Microsoft.WindowsAppRuntime.*' | "
+      "Sort-Object Version -Descending | Select-Object -First 1; "
+      "if ($pkg) { "
+      "$rail = "
+      "([regex]::Match($pkg.Name,'Microsoft\\.WindowsAppRuntime\\.(\\d+)\\.("
+      "\\d+)')); "
+      "$railVer = if ($rail.Success) { $rail.Groups[1].Value + '.' + "
+      "$rail.Groups[2].Value } else { '' }; "
+      "Write-Output ($railVer + '|' + $pkg.Version) }\"";
+
+  auto detectInstalledAndLog = [&]() -> bool {
+    if (RunHiddenCommand(detect_cmd) != 0) return false;
+    std::string ver_out;
+    RunHiddenCommandCapture(version_cmd, ver_out);
+    if (!ver_out.empty()) {
+      auto pipe_pos = ver_out.find('|');
+      std::string rail = pipe_pos == std::string::npos
+                             ? std::string()
+                             : ver_out.substr(0, pipe_pos);
+      std::string pkgver = pipe_pos == std::string::npos
+                               ? ver_out
+                               : ver_out.substr(pipe_pos + 1);
+      std::string combined = rail.empty() ? pkgver : (rail + "." + pkgver);
+      LOG4CXX_INFO(logger, "Windows App Runtime detected, version="
+                               << combined);
+    } else {
+      LOG4CXX_INFO(logger, "Windows App Runtime detected");
+    }
     return true;
-  }
+  };
 
-  // Step 2: Install the package
-  auto msix_path = (fs::path(library_path).parent_path() /
-                    "Microsoft.Windows.AI.MachineLearning.msix")
-                       .lexically_normal();
+  if (detectInstalledAndLog()) 
+    return true;
 
-  std::string install_cmd =
-      "powershell.exe -ExecutionPolicy Bypass -NoProfile "
-      "-Command \"Add-AppxPackage -Path '" +
-      msix_path.string() + "'\"";
+  // Step 2: Install redistributable silently from the unpacked folder
+  auto parent_dir = fs::path(library_path).parent_path();
+  fs::path installer_path =
+      (parent_dir / "WindowsAppRuntimeInstall.exe").lexically_normal();
 
-  if (!RunHiddenCommand(install_cmd)) {
-    LOG4CXX_ERROR(logger, "Failed to install Windows ML MSIX package: " +
-                              msix_path.string());
+  if (!fs::exists(installer_path)) {
+    LOG4CXX_ERROR(logger, "Windows App Runtime installer not found: " +
+                              installer_path.string());
     return false;
   }
 
-  return true;
+  std::string install_cmd = "\"" + installer_path.string() + "\"";
+  LOG4CXX_INFO(logger, "Installing Windows App Runtime from: "
+                           << installer_path.string());
+  DWORD exit_code = RunHiddenCommand(install_cmd);
+  if (exit_code != 0) {
+    LOG4CXX_ERROR(logger,
+                  std::string("Failed to run Windows App Runtime installer: ") +
+                      installer_path.string() +
+                      ", exit code=" + std::to_string(exit_code));
+    return false;
+  }
+  LOG4CXX_INFO(logger, "Windows App Runtime installer completed successfully");
+
+  // Step 3: Re-check
+  if (detectInstalledAndLog()) 
+    return true;
+
+  LOG4CXX_ERROR(logger,
+                "Windows App Runtime required version not detected after "
+                "installation attempt");
+  return false;
 }
 #endif
 
@@ -313,9 +448,12 @@ bool PreparationStage::Impl::Run() {
         utils::IsEpSupportedOnThisPlatform(scenario_name, ep_name);
 
     try {
-      if (!is_supported ||
-          empty_library_path &&
-              !ep_dependencies_manager_.PrepareDependenciesForEP(ep_name)) {
+      if (!is_supported
+#if !MLPERF_PUBLISHING
+          || empty_library_path &&
+                 !ep_dependencies_manager_.PrepareDependenciesForEP(ep_name)
+#endif
+      ) {
         if (is_supported) {
           throw std::runtime_error("Failed to prepare " + ep_name +
                                    "dependencies, skipping...");
@@ -348,9 +486,9 @@ bool PreparationStage::Impl::Run() {
         }
 #if WITH_IHV_WIN_ML
         if (ep_type == kIHVWindowsML &&
-            !InstallWindowsMLMSIX(library_path, logger_)) {
+            !EnsureWindowsAppRuntimeInstalled(library_path, logger_)) {
           throw std::runtime_error(
-              "Failed to install Windows ML MSIX package, skipping...");
+              "Failed to ensure Windows App Runtime is installed, skipping...");
         }
 #endif
         can_load_library();
@@ -379,33 +517,22 @@ bool PreparationStage::Impl::Run() {
 #if WITH_IHV_WIN_ML
           case kIHVWindowsML: {
             unpack_library_if_needed({kWindowsML}, false);
-            if (!InstallWindowsMLMSIX(library_path, logger_)) {
+            if (!EnsureWindowsAppRuntimeInstalled(library_path, logger_)) {
               throw std::runtime_error(
-                  "Failed to install Windows ML MSIX package, skipping...");
+                  "Failed to ensure Windows App Runtime is installed, "
+                  "skipping...");
             }
             can_load_library();
           } break;
 #endif
 #if WITH_IHV_MLX
           case kIHVMLX:
-#if !TARGET_OS_IOS
             unpack_library_if_needed({kMLX});
-#else
-            library_path =
-                ios_utils::GetIOSLibraryPath("IHV_MLX.framework/IHV_MLX");
-            can_load_library();
-#endif
             break;
 #endif
 #if WITH_IHV_GGML_METAL
           case kIHVMetal:
-#if !TARGET_OS_IOS
             unpack_library_if_needed({kGGML_Metal, kGGML_EPs});
-#else
-            library_path = ios_utils::GetIOSLibraryPath(
-                "IHV_GGML_EPs.framework/IHV_GGML_EPs");
-            can_load_library();
-#endif
             break;
 #endif
 #if WITH_IHV_GGML_VULKAN
@@ -416,6 +543,11 @@ bool PreparationStage::Impl::Run() {
 #if WITH_IHV_GGML_CUDA
           case kIHVCUDA:
             unpack_library_if_needed({kGGML_CUDA, kGGML_EPs});
+            break;
+#endif
+#if WITH_IHV_GGML_ROCM
+          case kIHVROCm:
+            unpack_library_if_needed({kGGML_ROCm, kGGML_EPs});
             break;
 #endif
           default:

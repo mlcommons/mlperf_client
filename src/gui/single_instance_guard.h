@@ -11,18 +11,32 @@
 
 namespace gui {
 
+/**
+ * @class SingleInstanceGuard
+ * @brief Prevents multiple instances of the application using platform-specific
+ * mechanisms.
+ */
 class SingleInstanceGuard {
  public:
+  /**
+   * @brief Construct guard with lock file and window title.
+   */
   explicit SingleInstanceGuard(
       const QString& lock_file_path = "MLPerf_Client.lock",
       const QString& main_window_title = "MLPerf Client")
       : lock_file_(QDir::temp().absoluteFilePath(lock_file_path)),
         main_window_title_(main_window_title) {}
 
-  // Tries to acquire the lock. Returns true if successful, false if another
-  // instance is running.
+  /**
+   * @brief Try to acquire single-instance lock.
+   * @return True if lock was acquired successfully, false if another instance
+   * is running.
+   */
   bool TryLock() { return lock_file_.tryLock(); }
 
+  /**
+   * @brief On Windows, bring running instance window to front.
+   */
   void BringInstanceWindowToFront() {
 #ifdef WIN32
     qint64 pid = 0;
@@ -41,6 +55,10 @@ class SingleInstanceGuard {
 
  private:
 #ifdef WIN32
+  /**
+   * @brief Helper: bring window to front by PID and title.
+   * @return True if window was brought to front successfully.
+   */
   bool BringWindowToFrontByPidAndTitle(DWORD pid,
                                        const std::wstring& window_title) {
     struct IOParam {

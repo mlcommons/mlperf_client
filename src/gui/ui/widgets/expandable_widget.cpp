@@ -77,4 +77,11 @@ void ExpandableWidget::ToggleExpand(bool is_expanded) {
   animation_->start();
 }
 
-void ExpandableWidget::Expand() { expand_button_->click(); }
+void ExpandableWidget::Expand(bool with_animation) {
+  if (with_animation) {
+    expand_button_->click();
+  } else {
+    SetContentHeight(content_widget_->sizeHint().height());
+    expand_button_->setChecked(true);
+  }
+}

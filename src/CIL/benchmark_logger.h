@@ -60,10 +60,10 @@ class BenchmarkLogger {
   void SetConfigVerified(bool is_verified);
 
   /**
-   * @brief Set config experimental flag
+   * @brief Set config category
    *
    */
-  void SetConfigExperimental(bool is_experimental);
+  void SetConfigCategory(std::string_view category);
 
   /**
    * @brief Get the benchmark results.
@@ -90,7 +90,7 @@ class BenchmarkLogger {
       const std::map<std::string, BenchmarkResult>& results);
 
   bool config_verified_{false};
-  bool config_experimental_{false};
+  std::string config_category_;
   std::string application_version_string_;
   std::string filename_;
   std::vector<BenchmarkResult> results_;

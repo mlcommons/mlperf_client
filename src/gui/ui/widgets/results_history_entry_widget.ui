@@ -124,11 +124,20 @@
          </property>
          <item>
           <widget class="QLabel" name="error_icon_label_">
+           <property name="maximumSize">
+            <size>
+             <width>16</width>
+             <height>16</height>
+            </size>
+           </property>
            <property name="text">
             <string/>
            </property>
            <property name="pixmap">
             <pixmap resource="../../app_resources.qrc">:/icons/resources/icons/ep_info_icon.png</pixmap>
+           </property>
+           <property name="scaledContents">
+            <bool>true</bool>
            </property>
           </widget>
          </item>

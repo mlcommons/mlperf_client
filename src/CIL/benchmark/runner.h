@@ -1,8 +1,8 @@
 #ifndef BENCHMARK_RUNNER_H
 #define BENCHMARK_RUNNER_H
 
-#include <string_view>
 #include <optional>
+#include <string_view>
 
 #include "stage.h"
 
@@ -30,6 +30,8 @@ class BenchmarkRunner {
     std::string data_dir;    // needed for downloading files
 
     bool enumerate_only = false;  // enumerate devices too during preparation
+    bool collect_remote_sizes_only =
+        false;  // in downloading stage collect remote file sizes only
     std::optional<int> device_id;  // override device id during preparation
 
     // Needed for preparation stage, must not be empty
@@ -39,7 +41,8 @@ class BenchmarkRunner {
     std::string data_verification_file_schema_path;
     std::string input_file_schema_path;
 
-    bool skip_failed_prompts = false;  // skip failed prompts during benchmarking
+    bool skip_failed_prompts =
+        false;  // skip failed prompts during benchmarking
   };
 
   /**
@@ -99,7 +102,10 @@ class BenchmarkRunner {
       std::vector<std::pair<ExecutionProviderConfig, std::string>>;
   std::vector<PreparedEPList> GetPreparedEPs() const;
 
-  static std::optional<std::string> GetModelFullName(const std::string& model_name);
+  const std::map<std::string, uint64_t>& GetRemoteFileSizes() const;
+
+  static std::optional<std::string> GetModelFullName(
+      const std::string& model_name);
 
  private:
   bool ReportProgress(ProgressTracker& progress_tracker,
@@ -121,6 +127,9 @@ class BenchmarkRunner {
 
   std::vector<PreparedEPList> prepared_eps_;
   bool enumerate_only_;
+
+  bool collect_remote_sizes_only_;
+  std::map<std::string, uint64_t> remote_file_sizes_;
 };
 
 }  // namespace cil

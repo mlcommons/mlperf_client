@@ -15,6 +15,9 @@ class QFrame;
 
 namespace custom_widgets {
 
+/** 
+ * @brief Structure containing benchmark result header information.
+*/
 struct HeaderInfo {
   QString model_name;
   QString ep;
@@ -22,24 +25,35 @@ struct HeaderInfo {
   QString device;
   QDateTime datetime;
   bool tested_by_ml_commons;
-  bool is_experimental;
-  QList<QPair<QString, QString>>  system_info;
+  QString config_category;
+  QList<QPair<QString, QString>> system_info;
+  QString config_file_comment;
 };
 
+/**
+ * @class CellWidget
+ * @brief Individual cell widget for table data display.
+ */
 class CellWidget : public QWidget {
  public:
   CellWidget(const QString& text = "", int index = 0, bool bold = false,
              QWidget* parent = nullptr);
+
   void SetText(const QString& text);
 
  private:
   QLabel* label_;
 };
 
+/**
+ * @class SystemRecordWidget
+ * @brief Widget for displaying key-value system information pairs.
+ */
 class SystemRecordWidget : public QWidget {
  public:
   SystemRecordWidget(const QString& title, const QString& value,
                      QWidget* parent = nullptr);
+
   QLabel* GetKeyLabel() const { return key_label_; }
 
  private:
@@ -48,6 +62,10 @@ class SystemRecordWidget : public QWidget {
   QString value_text_;
 };
 
+/**
+ * @class SystemInfoWidget
+ * @brief Widget for displaying complete system information.
+ */
 class SystemInfoWidget : public QWidget {
  public:
   SystemInfoWidget(const QList<QPair<QString, QString>>& system_info,
@@ -57,6 +75,10 @@ class SystemInfoWidget : public QWidget {
   QList<SystemRecordWidget*> info_records_widgets_;
 };
 
+/**
+ * @class HeaderCell
+ * @brief Header cell widget for benchmark result metadata.
+ */
 class HeaderCell : public QWidget {
  public:
   HeaderCell(const HeaderInfo& header, QWidget* parent = nullptr);
@@ -75,6 +97,10 @@ class HeaderCell : public QWidget {
   SystemInfoWidget* system_info_widget_;
 };
 
+/**
+ * @class ResultTableWidget
+ * @brief Main table widget for displaying benchmark results.
+ */
 class ResultTableWidget : public QWidget {
  public:
   ResultTableWidget(const QVector<HeaderInfo>& headers,
@@ -91,8 +117,8 @@ class ResultTableWidget : public QWidget {
  private:
   void AddRow(const QStringList& text_list, bool is_title,
               bool is_section = false, bool is_bold = false);
-  void SetHeaders(const QVector<HeaderInfo>& header_list);
 
+  void SetHeaders(const QVector<HeaderInfo>& header_list);
   QVector<QRect> GetColumnRects() const;
   QRect GetRowGeometry(int row) const;
   QVector<QRect> GetTitleRowRects() const;
@@ -101,6 +127,7 @@ class ResultTableWidget : public QWidget {
   QRect GetSectionAreas(const QRect& fisrt_rect,
                         const QRect& second_rect) const;
   QVector<QRect> GetSectionRects() const;
+
   QVBoxLayout* outer_layout_;
   QFrame* widget_frame_;
   QGridLayout* main_layout_;

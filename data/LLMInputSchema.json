@@ -12,9 +12,6 @@
             "eos_token_id": {
               "type": "integer"
             },
-            "pad_token_id": {
-              "type": "integer"
-            },
             "vocab_size": {
               "type": "integer",
               "minimum": 1
@@ -22,92 +19,13 @@
             "context_length": {
               "type": "integer",
               "minimum": 1
-            },
-            "decoder": {
-              "properties": {
-                "head_size": {
-                  "type": "integer",
-                  "minimum": 1
-                },
-                "hidden_size": {
-                  "type": "integer",
-                  "minimum": 1
-                },
-                "num_hidden_layers": {
-                  "type": "integer",
-                  "minimum": 1
-                },
-                "num_attention_heads": {
-                  "type": "integer",
-                  "minimum": 1
-                },
-                "num_key_value_heads": {
-                  "type": "integer",
-                  "minimum": 1
-                },
-                "inputs": {
-                  "properties": {
-                    "input_ids": {
-                      "type": "string"
-                    },
-                    "attention_mask": {
-                      "type": "string"
-                    },
-                    "position_ids": {
-                      "type": "string"
-                    },
-                    "past_key_names": {
-                      "type": "string"
-                    },
-                    "past_value_names": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "input_ids",
-                    "attention_mask",
-                    "position_ids",
-                    "past_key_names",
-                    "past_value_names"
-                  ]
-                },
-                "outputs": {
-                  "properties": {
-                    "logits": {
-                      "type": "string"
-                    },
-                    "present_key_names": {
-                      "type": "string"
-                    },
-                    "present_value_names": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "logits",
-                    "present_key_names",
-                    "present_value_names"
-                  ]
-                }
-              },
-              "required": [
-                "head_size",
-                "hidden_size",
-                "num_hidden_layers",
-                "num_attention_heads",
-                "num_key_value_heads",
-                "inputs",
-                "outputs"
-              ]
             }
           },
           "required": [
             "bos_token_id",
             "eos_token_id",
-            "pad_token_id",
             "vocab_size",
-            "context_length",
-            "decoder"
+            "context_length"
           ]
         },
         "search": {
@@ -116,14 +34,9 @@
               "type": "string",
               "enum": [
                 "greedy",
-                "beam_search",
                 "top_k",
                 "top_p"
               ]
-            },
-            "num_beams": {
-              "type": "integer",
-              "minimum": 1
             },
             "temperature": {
               "type": "number",

@@ -31,7 +31,8 @@ const API_IHV_Struct_t* GGML_EPs_Handler::Setup(const API_IHV_Setup_t* api) {
   std::string ep_name = api->ep_name;
   if (ep_name.find("Vulkan") == std::string::npos &&
       ep_name.find("CUDA") == std::string::npos &&
-      ep_name.find("Metal") == std::string::npos) {
+      ep_name.find("Metal") == std::string::npos &&
+      ep_name.find("ROCm") == std::string::npos) {
     api->logger(api->context, API_IHV_LogLevel::API_IHV_FATAL,
                 ("EP " + ep_name + " is not supported").c_str());
     return nullptr;
@@ -48,6 +49,8 @@ const API_IHV_Struct_t* GGML_EPs_Handler::Setup(const API_IHV_Setup_t* api) {
 #endif
   } else if (ep_name.find("CUDA") != std::string::npos) {
     library_name = "GGML_CUDA";
+  } else if (ep_name.find("ROCm") != std::string::npos) {
+    library_name = "GGML_ROCm";
   }
 #ifdef _WIN32
   library_name += ".dll";

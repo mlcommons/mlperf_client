@@ -19,3 +19,5 @@ data/llama2/tokenizer_decode*
 data/llama2/models/*
 clang-tidy-output.txt
 .DS_Store
+*.diff
+*.patch

@@ -34,6 +34,8 @@ class PreparationStage : public StageBase {
 
   std::string GetName() const override { return "Preparation"; }
 
+  static void ClearDeviceEnumerationCache();
+
  private:
   class Impl;
   const bool enumerate_only_;

@@ -4,8 +4,8 @@
       "Name": "MLX",
       "Files": [
         {
-          "Name": "default.metallib",
-          "Path": "https://client.mlcommons-storage.org/deps/1.5/binaries/MLX/default.metallib"
+          "Name": "mlx.metallib",
+          "Path": "https://client.mlcommons-storage.org/deps/1.6/binaries/MLX/mlx.metallib"
         }
       ]
     },
@@ -14,15 +14,15 @@
       "Files": [
         {
           "Name": "libvulkan.1.dylib",
-          "Path": "https://client.mlcommons-storage.org/deps/1.5/binaries/GGML/Vulkan/macOS/libvulkan.1.dylib"
+          "Path": "https://client.mlcommons-storage.org/deps/1.6/binaries/GGML/Vulkan/macOS/libvulkan.1.dylib"
         },
         {
           "Name": "libMoltenVK.dylib",
-          "Path": "https://client.mlcommons-storage.org/deps/1.5/binaries/GGML/Vulkan/macOS/libMoltenVK.dylib"
+          "Path": "https://client.mlcommons-storage.org/deps/1.6/binaries/GGML/Vulkan/macOS/libMoltenVK.dylib"
         },
         {
           "Name": "MoltenVK_icd.json",
-          "Path": "https://client.mlcommons-storage.org/deps/1.5/binaries/GGML/Vulkan/macOS/MoltenVK_icd.json"
+          "Path": "https://client.mlcommons-storage.org/deps/1.6/binaries/GGML/Vulkan/macOS/MoltenVK_icd.json"
         }
       ]
     }

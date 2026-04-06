@@ -43,7 +43,7 @@ class BenchmarkController : public QObject {
                         const std::string& verification_file_schema_path);
 
   void EnumerateDevices(const QList<EPInformationCard>& all_eps);
-  void RunBenchmark(bool download_deps_only);
+  void RunBenchmark(bool download_deps_only, bool ask_before_download);
   void StopBenchmark(bool wait_for_finished);
 
   void ClearCache();
@@ -53,14 +53,16 @@ class BenchmarkController : public QObject {
   const BenchmarkStatus& GetBenchmarkStatus() const;
 
  signals:
+  void EnumerationProgressChanged(int progress);
   void EnumerationFinished();
   void BenchmarkFinished(bool download_deps_only);
   void ClearCacheFinished();
+  void DownloadDoNotAskAgainRequested();
 
  private slots:
   void EnumerateDevicesWorker();
   void BenchmarkWorker(bool download_deps_only);
-  bool CollectRemoteSizesWorker();
+  bool CollectRemoteSizesWorker(bool ask_before_download);
 
  private:
   // Disable copy and assignment

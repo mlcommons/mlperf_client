@@ -17,6 +17,8 @@ extern "C" {
     void llm_free_model(void* llmPtr, const char* modelName);
     void llm_free_kvcache(void* cachesPtr);
     void llm_free_logits(const float* ptr);
+    char* llm_get_gpu_name();
 
     void llm_clear_cache();
+    void llm_free_string(char* ptr);
 }

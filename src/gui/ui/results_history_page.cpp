@@ -178,7 +178,7 @@ void ResultsHistoryPage::OnRowSelectionBoxChecked(bool checked) {
 }
 
 void ResultsHistoryPage::OnDeleteButtonClicked() {
-  PopupWidget *popup = new PopupWidget(this, true);
+  QuestionPopupWidget *popup = new QuestionPopupWidget(this);
   popup->setFixedSize(400, 250);
   popup->setAttribute(Qt::WA_DeleteOnClose);
   popup->setModal(true);

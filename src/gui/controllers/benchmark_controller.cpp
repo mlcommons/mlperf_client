@@ -94,13 +94,16 @@ void BenchmarkController::EnumerateDevices(
   benchmark_thread_->start();
 }
 
-void BenchmarkController::RunBenchmark(bool download_deps_only) {
+void BenchmarkController::RunBenchmark(bool download_deps_only,
+                                       bool ask_before_download) {
   if (benchmark_thread_) benchmark_thread_->wait();
 
   benchmark_status_ = BenchmarkStatus{
       false, false, false, QString::fromStdString(output_dir_), {}};
-  benchmark_thread_ = QThread::create([this, download_deps_only] {
-    if (!CollectRemoteSizesWorker()) return;
+  benchmark_thread_ = QThread::create([this, download_deps_only,
+                                       ask_before_download] {
+    if (ask_before_download && !CollectRemoteSizesWorker(ask_before_download))
+      return;
     BenchmarkWorker(download_deps_only);
   });
   connect(benchmark_thread_, &QThread::finished, benchmark_thread_,
@@ -204,7 +207,8 @@ void BenchmarkController::BenchmarkWorker(bool download_deps_only) {
       bool run_success = benchmark_runner->Run();
       const auto& results = benchmark_runner->GetResultsLogger().GetResults();
       if (!download_deps_only)
-        status.success_ = run_success && !results.empty();
+        status.success_ = run_success && !results.empty() &&
+                          results.front().benchmark_success;
       if (!results.empty()) {
         const auto& res = results.front();
         if (!res.error_message.empty()) {
@@ -231,7 +235,7 @@ void BenchmarkController::BenchmarkWorker(bool download_deps_only) {
   }
 }
 
-bool BenchmarkController::CollectRemoteSizesWorker() {
+bool BenchmarkController::CollectRemoteSizesWorker(bool ask_before_download) {
   QMetaObject::invokeMethod(
       benchmark_page_controller_,
       [&]() {
@@ -307,20 +311,26 @@ bool BenchmarkController::CollectRemoteSizesWorker() {
 
   if (remote_files_size == 0) return true;
 
+  bool download_do_not_ask_again = false;
   QMetaObject::invokeMethod(
       benchmark_page_controller_,
       [&]() {
         benchmark_status_.download_accepted_ =
-            benchmark_page_controller_->RequestDownload(remote_files_size);
+            benchmark_page_controller_->RequestDownload(
+                remote_files_size, download_do_not_ask_again);
       },
       Qt::BlockingQueuedConnection);
+
+  if (download_do_not_ask_again && benchmark_status_.download_accepted_)
+    emit DownloadDoNotAskAgainRequested();
 
   return benchmark_status_.download_accepted_;
 }
 
 void BenchmarkController::EnumerateDevicesWorker() {
   benchmark_status_.success_ = true;
-  for (auto& config : configs_) {
+  for (int i = 0; i < configs_.size(); ++i) {
+    const auto& config = configs_[i];
     if (interrupt_) break;
     auto ep_dependencies_manager = CreateEPDependenciesManager(config);
     auto progress_handler =
@@ -375,6 +385,7 @@ void BenchmarkController::EnumerateDevicesWorker() {
       LOG4CXX_ERROR(loggerBenchmarkController, error_message + e.what());
       benchmark_status_.success_ = false;
     }
+    emit EnumerationProgressChanged((i + 1) * 100 / configs_.size());
   }
 }
 

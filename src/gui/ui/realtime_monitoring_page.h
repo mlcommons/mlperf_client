@@ -30,9 +30,11 @@ class RealTimeMonitoringPage : public AbstractView {
   /**
    * @brief Show a confirmation pop-up for data download.
    * @param size_in_bytes size of the data to be downloaded, in bytes.
+   * @param do_not_ask_again Output parameter. Indicates whether the user
+   * selected an option to avoid being asked again in the future.
    * @return true if the user confirms, false otherwise.
    */
-  bool RequestDownload(uint64_t size_in_bytes);
+  bool RequestDownload(uint64_t size_in_bytes, bool &do_not_ask_again);
 
   /**
    * @brief Show a status dialog with benchmark result details.

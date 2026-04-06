@@ -1,6 +1,6 @@
 {
   "SystemConfig": {
-    "Comment": "Native QNN, NPU CPU",
+    "Comment": "Phi 3.5 Mini Instruct, Native QNN, NPU CPU, Base prompts",
     "TempPath": "",
     "EPDependenciesConfigPath": ""
   },
@@ -10,8 +10,8 @@
       "Models": [
         {
           "ModelName": "Phi-3.5-mini-instruct-qti",
-          "FilePath": "https://client.mlcommons-storage.org/deps/1.5/scenario_files/llm/phi3.5/models/NativeQNN/phi3_5_cpu.bin",
-          "DataFilePath": "https://client.mlcommons-storage.org/deps/1.5/scenario_files/llm/phi3.5/models/NativeQNN/phi3_5_npu.zip",
+          "FilePath": "https://client.mlcommons-storage.org/deps/1.6/scenario_files/llm/phi3.5/models/NativeQNN/Hybrid/phi3_5_cpu.bin",
+          "DataFilePath": "https://client.mlcommons-storage.org/deps/1.6/scenario_files/llm/phi3.5/models/NativeQNN/Hybrid/phi3_5_npu_hybrid.zip",
           "TokenizerPath": "https://client.mlcommons-storage.org/deps/1.5/scenario_files/llm/phi3.5/models/NativeQNN/tokenizer.zip"
         }
       ],

@@ -365,6 +365,17 @@ QTextEdit {
     font-size: 14px;
 }
 
+QProgressBar {
+    border: 1px solid #ACC8DC;
+    border-radius: 6px;
+    background-color: #092A44;
+}
+
+QProgressBar::chunk {
+    border-radius: 5px;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #9FBBD3, stop:0.5 #ACC8DC, stop:1 #BCD6E8);
+}
+
 /****************************** Result Table ************************************/
 
 #result_table {

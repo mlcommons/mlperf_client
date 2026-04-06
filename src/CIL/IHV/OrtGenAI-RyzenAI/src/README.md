@@ -17,31 +17,27 @@ xrt-smi configure --pmode turbo
 ## Run benchmark
 Configure system for best performance and launch the benchmark
 ```
-mlperf-windows.exe -c phi3.5/AMD_ORTGenAI-RyzenAI_NPU-GPU.json
+mlperf-windows.exe -c phi3.5/AMD_ORTGenAI-RyzenAI_NPU.json
 ```
 
-# MLPerf Client v1.5 Runtime Assets
-The following files are required from RyzenAI 1.6. Filenames and `sha256` checksums are listed.
+# MLPerf Client v1.6 Runtime Assets
+The following files are required from Ryzen AI 1.7. Filenames and `sha256` checksums are listed.
 ```
-3d1cd18db9bbab6a896b5ba0aa69211358bb2f2e38c8ae356d67c906f1288283  abseil_dll.dll
-8a23d826b25b4329522ff451cb52b7f2b34d7f2913cfeb878371ce8bd765fe2d  D3D12Core.dll
-9c9e6d822561c6c41b90e6994b3e8857cf1d66dbfb1e0c4c799c7c89b4e92da1  DirectML.dll
-ac97fe437f975ffbf0bb56c7f9548f7e8b46be2b96922795cb9943de6b488b1d  libutf8_validity.dll
-1ff7685ac546c147242b1870bb47fea7eacb40186762091ba9a3a4cdeebdc69f  onnx_custom_ops.dll
-aa60cc1975874ae611366c59946548d4fd3db61cbbc9ce34bc267292ced234e5  onnxruntime.dll
-0bd17dba46cec160d95e4b5dd136357a61039b73aeef2eeafc514fe3f846af51  onnxruntime-genai.dll
-22a7c390af6bebafefab603f67c00cf8c04eb4078c0fd44f1b1fa6f4611d8c23  onnxruntime_providers_shared.dll
-3e514c97e3705cf38a14ed72d2158e49dbc2e6ae315555961df33fd1e9c49daf  ryzenai_onnx_utils.dll
-e1103986ea2f4240fb40b6b0ed4906d03f1d1e1d0f52ea11a287eddeee910ade  ryzen_mm.dll
-91c732f665e9cc53b76a5c1207ef8c9be1a2c812198adcdc7fb642e5072bc6ff  zlib.dll
+b6499663171916a0e298df529541d52bebd029023823bafed75c2531daf97b7b  dyn_bins.dll
+05d33d6f60904cc41d697f079c1cb44a552fe044053ba8efd65531830df80197  dyn_dispatch_core.dll
+ba9e5ecc050f3b7a1bdb18e18aa5dc225d1267745f6330716c9c2388c16ea789  onnxruntime-genai.dll
+4d431431f571d585f9f30bfc43317654349296e971405aad91d8104a37cfdc9e  onnxruntime.dll
+c91e871c516eb4e5193df92970cb9ed92782fcfaac66469d43f3006a31c0b88a  onnxruntime_providers_ryzenai.dll
+0f60f69b93477a851dfcea652eb2e411d253e900791f74af023f75898fc6b96f  onnxruntime_providers_shared.dll
+c7f1a1a61550326b89b7f8730711e6fef7715ed9ad2fd8b8b091e4dc72113b04  ryzen_mm.dll
+264036aea88b5d5327f03b5d1c766a0a60572130baf53b081b150218df840402  zlib.dll
 ```
-- Install Ryzen AI 1.6 [RAI-1.6 Installer](https://account.amd.com/en/forms/downloads/ryzen-ai-software-platform-xef.html?filename=ryzen-ai-lt-1.6.0-GA.exe)
-- DLLs will be in `C:/Program Files/RyzenAI/1.6.0/deployment`. 
-- replace `onnx_custom_ops.dll` with the file in this patch [RAI-1.6-patch](https://account.amd.com/en/forms/downloads/ryzen-ai-software-platform-xef.html?filename=ryzenai-1.6.0-patch.zip)
+- Install Ryzen AI 1.7 [RAI-1.7 Installer](https://account.amd.com/en/forms/downloads/ryzenai-eula-public-xef.html?filename=ryzen-ai-lt-1.7.0.exe)
+- Download and extract this patch [RAI-1.7.0.p1](https://download.amd.com/opendownload/RyzenAI/rai-deployment-dlls-1.7.0.p1.zip) in `C:/Program Files/RyzenAI/1.7.0/deployment`. 
 
 # MLPerf Client Model Creation Procedure
 
-## MLPerf Client v1.5 Model Recipes
+## MLPerf Client v1.6 Model Recipes
 
 ### NPU Model Recipes and Llama 3.1 8B Hybrid Recipe
 First install prerequisites

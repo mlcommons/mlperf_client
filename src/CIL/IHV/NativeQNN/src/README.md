@@ -22,7 +22,7 @@ and npu bin file generated from running instructions mentioned in [<code><b><pat
         }
       ],
       "InputFilePath": [
-        "https://mlperf-public-files.s3.us-east-1.amazonaws.com/scenario_files/llm/llama2/data/prompts/content_generation/greedy-prompt_cot.39329.json"
+        "https://client.mlcommons-storage.org/deps/1.5/scenario_files/llm/llama2/prompts/content_generation/greedy-prompt_cot.39329.json"
       ],
       "AssetsPath": [],
       "ResultsVerificationFile": "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/generation-greedy-results.json",
@@ -63,7 +63,7 @@ and npu bin file generated from running instructions mentioned in [<code><b><pat
         }
       ],
       "InputFilePath": [
-        "https://mlperf-public-files.s3.us-east-1.amazonaws.com/scenario_files/llm/llama3/data/prompts/content_generation/greedy-prompt_cot.39329.json"
+        "https://client.mlcommons-storage.org/deps/1.5/scenario_files/llm/llama3/prompts/content_generation/greedy-prompt_cot.39329.json"
       ],
       "AssetsPath": [],
       "ResultsVerificationFile": "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/generation-greedy-results.json",
@@ -104,7 +104,7 @@ and npu bin file generated from running instructions mentioned in [<code><b><pat
         }
       ],
       "InputFilePath": [
-        "https://mlperf-public-files.s3.us-east-1.amazonaws.com/scenario_files/llm/phi3.5/data/prompts/content_generation/greedy-prompt_cot.39329.json"
+        "https://client.mlcommons-storage.org/deps/1.5/scenario_files/llm/phi3.5/prompts/content_generation/greedy-prompt_cot.39329.json"
       ],
       "AssetsPath": [],
       "ResultsVerificationFile": "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/generation-greedy-results.json",

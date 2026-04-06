@@ -4,6 +4,9 @@
 #include "../CIL/benchmark_result.h"
 #include "controllers/abstract_controller.h"
 
+namespace cil {
+struct BenchmarkResult;
+}
 namespace gui {
 struct HistoryEntry;
 
@@ -32,7 +35,7 @@ class ResultsHistoryPageController : public AbstractController {
 
   void LoadHistory(const std::string& results_path);
 
-  QList<HistoryEntry> GetCurrentEntries() const;
+  QList<QPair<HistoryEntry, cil::BenchmarkResult> > GetCurrentEntries() const;
 
  public slots:
   void OnDeleteHistoryRequested();
@@ -61,7 +64,8 @@ class ResultsHistoryPageController : public AbstractController {
 
   models::ResultsHistoryModel* model_;
   models::ResultsHistoryProxyModel* sort_filter_model_;
-  
+
+  std::vector<cil::BenchmarkResult> results_;
   std::string results_file_path_;
   int current_entry_;
 };

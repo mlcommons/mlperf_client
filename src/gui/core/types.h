@@ -29,15 +29,6 @@ enum class PageType {
 };
 
 /**
- * @brief Performance metrics for a benchmark result.
- */
-struct HistoryEntryPerfResult {
-  QString name;
-  double time_to_first_token_;
-  double token_generation_rate_;
-};
-
-/**
  * @brief System hardware/software details for reproducibility.
  */
 struct SystemInfoDetails {
@@ -60,7 +51,8 @@ struct HistoryEntry {
   bool success_;
   bool tested_by_ml_commons_;
   QString config_category_;
-  QMap<QString, HistoryEntryPerfResult> perf_results_map_;
+  double overall_time_to_first_token_;
+  double overall_token_generation_rate_;
   QString error_message_;
   QString config_file_comment_;
 

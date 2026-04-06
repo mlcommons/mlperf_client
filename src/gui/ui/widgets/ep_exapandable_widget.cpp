@@ -300,11 +300,11 @@ void EPExpandableWidget::SetupUi(const QString &ep_name,
   if (devices.empty()) description += " (No Supported Device)";
   m_header_widget = new EPExpandableHeaderWidget(ep_name, description,
                                                  help_text, category, this);
-  if (devices.empty()) m_header_widget->setEnabled(false);
-
   m_content_widget = new ContentWidget(fields, values, devices, this);
 
   ExpandableWidget::SetupUi(m_header_widget, m_content_widget);
+
+  if (devices.empty()) setEnabled(false);
 }
 
 void EPExpandableWidget::SetupConnections() {

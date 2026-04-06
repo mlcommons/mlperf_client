@@ -45,17 +45,20 @@ void RealTimeMonitoringPage::SetHideCounters(bool hide) {
   stacked_widget_->setCurrentIndex(hide ? 0 : 1);
 }
 
-bool RealTimeMonitoringPage::RequestDownload(uint64_t size_in_bytes) {
-  PopupWidget *popup = new PopupWidget(this, true);
+bool RealTimeMonitoringPage::RequestDownload(uint64_t size_in_bytes,
+                                             bool &do_not_ask_again) {
+  QuestionPopupWidget *popup = new QuestionPopupWidget(this, true);
   popup->setFixedSize(400, 250);
-  popup->setAttribute(Qt::WA_DeleteOnClose);
   popup->setModal(true);
   popup->SetMessage(
       QString("You are about to download\napproximately %1 of data.\nWould you "
               "like to proceed?")
           .arg(gui::utils::BytesToHumanReadableString(size_in_bytes)));
 
-  return popup->exec() == QDialog::Accepted;
+  auto accepted = popup->exec() == QDialog::Accepted;
+  do_not_ask_again = popup->DoNotAskAgainChecked();
+  popup->deleteLater();
+  return accepted;
 }
 
 void RealTimeMonitoringPage::ShowStatus(const QString &action_type,

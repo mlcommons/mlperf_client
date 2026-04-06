@@ -291,7 +291,8 @@
                           "device_type": {
                             "type": "string",
                             "enum": [
-                              "NPU and GPU"
+                              "NPU and GPU",
+                              "NPU"
                             ]
                           }
                         }

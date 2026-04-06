@@ -441,5 +441,22 @@ bool IsEpConfigSupportedOnThisPlatform(
  */
 std::string CleanAndTrimString(std::string str);
 
+#ifdef _WIN32
+std::string GetExecutablePath();
+#endif
+
+double BytesToGb(size_t bytes);
+
+double BytesToNearestGB(size_t bytes);
+
+std::string GBToString(double gb);
+
+std::string FormatCPU(std::string_view cpu_model,
+                      std::string_view cpu_architecture);
+
+std::string FormatMemory(size_t bytes);
+
+std::string DoubleToFixedString(double value, int digits);
+
 }  // namespace utils
 }  // namespace cil

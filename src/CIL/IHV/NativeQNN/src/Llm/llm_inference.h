@@ -16,6 +16,7 @@ limitations under the License.
 #pragma once
 
 #include <nlohmann/json.hpp>
+#include <thread>
 
 #include "../../../IHV.h"
 #include "../base_inference.h"
@@ -38,11 +39,11 @@ namespace infer {
 
 class LlmInference : public BaseInference {
  public:
-  LlmInference(const std::string& model_path,
-                  const std::string& model_name,
-                  const NativeQnnExecutionProviderSettings& ep_settings,
-                  cil::Logger logger);
-
+  LlmInference(const std::string& model_path, const std::string& model_name,
+               const NativeQnnExecutionProviderSettings& ep_settings,
+               cil::Logger logger);
+  std::vector<std::string> listNpuFiles(const std::string& model_folder_,
+                                        const std::string& model_name_);
   void FillConfigString(const nlohmann::json& model_config);
 
   void Init(const nlohmann::json& model_config);
@@ -53,10 +54,9 @@ class LlmInference : public BaseInference {
 
   void Deinit() override;
 
-  static void tokenToTokenCallback(const uint32_t* token, 
-    const uint32_t tokensLength,
-    const GenieDialog_SentenceCode_t sentenceCode, 
-    const void*);
+  static void tokenToTokenCallback(
+      const uint32_t* token, const uint32_t tokensLength,
+      const GenieDialog_SentenceCode_t sentenceCode, const void*);
 
   static inline std::function<void(uint32_t)> token_callback_global;
 
@@ -66,25 +66,25 @@ class LlmInference : public BaseInference {
   std::string model_name_;
   std::string device_type_;
   std::string configString_;
+  std::vector<std::string> npu_bins_;
 
   std::map<std::string, HMODULE> genie_extra_modules_;
-
+ 
   GenieDialog_Handle_t dialogHandle{nullptr};
 
-  std::string formConfigStringLlama2(const nlohmann::json& model_config,
-                                     const std::string& device_type_,
-                                     const std::string& model_folder_,
-                                     const std::string& model_path_);
-  std::string formConfigStringLlama3(const nlohmann::json& model_config,
-                                     const std::string& device_type_,
-                                     const std::string& model_folder_,
-                                     const std::string& model_path_);
-  std::string formConfigStringPhi3_5(const nlohmann::json& model_config,
-                                     const std::string& device_type_,
-                                     const std::string& model_folder_,
-                                     const std::string& model_path_);
+  std::string formConfigStringLlama3_SDX_Elite(
+      const nlohmann::json& model_config, const std::string& device_type_,
+      const std::string& model_folder_, const std::string& model_path_,
+      const std::vector<std::string>& npu_bins_);
+  std::string formConfigStringPhi3_5_SDX_Elite(
+      const nlohmann::json& model_config, const std::string& device_type_,
+      const std::string& model_folder_, const std::string& model_path_,
+      const std::vector<std::string>& npu_bins_);
+  std::string formConfigStringPhi4_SDX_Elite(
+      const nlohmann::json& model_config, const std::string& device_type_,
+      const std::string& model_folder_, const std::string& model_path_,
+      const std::vector<std::string>& npu_bins_);
 };
 }  // namespace infer
 }  // namespace IHV
 }  // namespace cil
-

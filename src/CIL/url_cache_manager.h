@@ -18,7 +18,7 @@ class URLCacheManager {
 
   bool IsUrlInCache(const std::string& url) const;
   bool ValidateFile(const std::string& url, const std::string& filePath,
-                    bool check_version = false) const;
+                    bool check_version = false, bool forced = false) const;
   void AddUrlToCache(const std::string& url, const std::string& file_path,
                      bool with_version = false);
   std::string GetFilePathFromCache(const std::string& url) const;

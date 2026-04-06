@@ -16,6 +16,7 @@
 #include <QString>
 #include <nlohmann/json.hpp>
 
+#include "api_handler.h"
 #include "command_option.h"
 #include "command_parser.h"
 #include "controllers/app_controller.h"
@@ -79,6 +80,15 @@ void generate_command_options(CommandParser& command_parser) {
 }
 
 int main(int argc, char* argv[]) {
+#if IHV_SUBPROCESS
+  for (int i = 1; i < argc; ++i) {
+    if (std::string(argv[i]) == "--ihv-client" && i + 1 < argc) {
+      return cil::API_Handler::RunSubprocessClient(argv[i + 1]);
+    }
+  }
+  cil::API_Handler::SetDefaultSubprocessMode(true);
+#endif
+
 #if defined(_WIN32) || defined(_WIN64)
   CommandParser command_parser("mlperf-windows-gui.exe", app_description);
 #elif defined(__APPLE__)

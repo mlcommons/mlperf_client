@@ -10,9 +10,9 @@
       "Models": [
         {
           "ModelName": "phi-3.5-mini-instruct",
-          "FilePath": "https://client.mlcommons-storage.org/deps/1.5/scenario_files/llm/phi3.5/models/RyzenAI/Hybrid/fusion.onnx",
-          "DataFilePath": "https://client.mlcommons-storage.org/deps/1.5/scenario_files/llm/phi3.5/models/RyzenAI/Hybrid/fusion.onnx.zip",
-          "TokenizerPath": "https://client.mlcommons-storage.org/deps/1.5/scenario_files/llm/phi3.5/models/RyzenAI/Hybrid/tokenizer.zip"
+          "FilePath": "https://client.mlcommons-storage.org/deps/1.6/scenario_files/llm/phi3.5/models/RyzenAI/Hybrid/fusion.onnx",
+          "DataFilePath": "https://client.mlcommons-storage.org/deps/1.6/scenario_files/llm/phi3.5/models/RyzenAI/Hybrid/fusion.onnx.zip",
+          "TokenizerPath": "https://client.mlcommons-storage.org/deps/1.6/scenario_files/llm/phi3.5/models/RyzenAI/Hybrid/tokenizer.zip"
         }
       ],
       "InputFilePath": [

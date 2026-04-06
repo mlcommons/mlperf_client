@@ -8,6 +8,10 @@
 #include "IHV/IHV.h"
 #include "utils.h"
 
+#ifndef IHV_SUBPROCESS
+#define IHV_SUBPROCESS 0
+#endif
+
 class dylib;
 
 namespace cil {
@@ -24,7 +28,20 @@ class API_Handler {
   using Logger = std::function<void(LogLevel, std::string)>;
   using DeviceListPtr = const API_IHV_DeviceList_t*;
 
-  API_Handler(const std::string& library_path, Logger logger, bool force_unload_ep_deps = false);
+#if IHV_SUBPROCESS
+  static void SetDefaultSubprocessMode(bool enabled);
+  static bool GetDefaultSubprocessMode();
+
+  static int RunSubprocessClient(const std::string& token);
+#endif
+
+  API_Handler(const std::string& library_path, Logger logger,
+              bool force_unload_ep_deps = false
+#if IHV_SUBPROCESS
+              ,
+              std::optional<bool> use_subprocess = std::nullopt
+#endif
+  );
   virtual ~API_Handler();
 
   API_Handler(const API_Handler&) = delete;
@@ -46,7 +63,13 @@ class API_Handler {
   bool Deinit();                           // Clear loaded model
   bool Release();                          // Release the library
 
-  static std::string CanBeLoaded(const std::string& library_path);
+  static std::string CanBeLoaded(
+      const std::string& library_path
+#if IHV_SUBPROCESS
+      ,
+      std::optional<bool> use_subprocess = std::nullopt
+#endif
+  );
 
   struct DeviceInfo {
     API_IHV_DeviceID_t device_id;
@@ -55,11 +78,15 @@ class API_Handler {
 
   typedef std::vector<DeviceInfo> DeviceList;
 
-  static DeviceList EnumerateDevices(const std::string& library_path,
-                                     const std::string& ep_name,
-                                     const std::string& model_name,
-                                     const nlohmann::json& ep_settings,
-                                     std::string& error, std::string& log);
+  static DeviceList EnumerateDevices(
+      const std::string& library_path, const std::string& ep_name,
+      const std::string& model_name, const nlohmann::json& ep_settings,
+      std::string& error, std::string& log
+#if IHV_SUBPROCESS
+      ,
+      std::optional<bool> use_subprocess = std::nullopt
+#endif
+  );
 
   std::string GetIHVErrors() const { return ihv_errors_; }
   void ClearErrorMessage() { ihv_errors_.clear(); }
@@ -88,6 +115,17 @@ class API_Handler {
   std::string library_path_directory_;
 
   std::string ihv_errors_;
+
+#if IHV_SUBPROCESS
+  static bool s_default_subprocess_mode_;
+
+  class IPC;
+  class Server;
+  class Client;
+
+  const bool use_subprocess_;
+  std::unique_ptr<Server> subprocess_server_;
+#endif
 };
 
 }  // namespace cil

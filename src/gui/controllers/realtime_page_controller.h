@@ -45,9 +45,11 @@ class RealtimePageController : public AbstractController {
   /**
    * @brief Request confirmation to download data.
    * @param size_in_bytes size of the data to be downloaded, in bytes.
+   * @param do_not_ask_again Output parameter. Indicates whether the user
+   * selected an option to avoid being asked again in the future.
    * @return true if the user confirms the download, false otherwise.
    */
-  bool RequestDownload(uint64_t size_in_bytes);
+  bool RequestDownload(uint64_t size_in_bytes, bool& do_not_ask_again);
 
   /**
    * @brief Show benchmark status.

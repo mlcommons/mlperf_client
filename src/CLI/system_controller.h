@@ -134,6 +134,14 @@ class SystemController {
    */
   void SetSystemCacheLocalFiles(bool cache_local_files);
 
+  /*
+   * @brief Sets the CSV export file path for benchmark results.
+   *
+   * @param csv_path The path to the CSV file where results should be exported.
+   *
+   */
+  void SetCSVExportPath(const std::string& csv_path);
+
   enum class LogLevel { kInfo, kWarning, kError };
   using Logger = std::function<void(LogLevel, std::string)>;
 
@@ -175,6 +183,7 @@ class SystemController {
   const std::string output_dir_;
   const std::string data_dir_;
   const bool skip_failed_prompts_;
+  std::string csv_export_path_;
 };
 
 }  // namespace cli

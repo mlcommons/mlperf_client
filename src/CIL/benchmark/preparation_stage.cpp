@@ -1,5 +1,7 @@
 #include "preparation_stage.h"
 
+#include <shared_mutex>
+
 #include "api_handler.h"
 #include "execution_provider.h"
 #include "file_signature_verifier.h"
@@ -16,6 +18,85 @@ using namespace log4cxx;
 namespace fs = std::filesystem;
 
 namespace cil {
+
+struct DeviceEnumerationCache {
+  struct Ep {
+    std::string library_path_;
+    std::string ep_name_;
+    std::string config_hash_;  // Hash of relevant ep_config
+
+    bool operator==(const Ep& other) const = default;
+
+    explicit Ep(const std::string& library_path, const std::string& ep,
+        const nlohmann::json& ep_config)
+        : library_path_(library_path), ep_name_(ep) {
+      std::string hash;
+      if (ep_config.contains("device_type")) {
+        hash += "dt:" + ep_config["device_type"].get<std::string>() + ";";
+      }
+      if (ep_config.contains("device_vendor")) {
+        hash += "dv:" + ep_config["device_vendor"].get<std::string>() + ";";
+      }
+      if (ep_config.contains("device_ep")) {
+        hash += "de:" + ep_config["device_ep"].get<std::string>() + ";";
+      }
+      config_hash_ = hash;
+    }
+
+    struct Hash {
+      size_t operator()(const Ep& key) const {
+        size_t h1 = std::hash<std::string>{}(key.library_path_);
+        size_t h2 = std::hash<std::string>{}(key.ep_name_);
+        size_t h3 = std::hash<std::string>{}(key.config_hash_);
+        return h1 ^ (h2 << 1) ^ (h3 << 2);
+      }
+    };
+  };
+
+  struct Result {
+    cil::API_Handler::DeviceList devices;
+    std::string log;
+  };
+
+  std::shared_mutex mutex_;
+  std::unordered_map<Ep, Result, Ep::Hash> cache_;
+
+  std::optional<Result> Get(const std::string& library_path,
+                            const std::string& ep_name,
+                            const nlohmann::json& ep_config) {
+    Ep ep{library_path, ep_name, ep_config};
+
+    std::shared_lock lock(mutex_);
+
+    if (auto it = cache_.find(ep); it != cache_.end()) {
+      return it->second;
+    }
+
+    return std::nullopt;
+  }
+
+  void Set(const std::string& library_path, const std::string& ep_name,
+           const nlohmann::json& ep_config,
+           const cil::API_Handler::DeviceList& devices,
+           const std::string& log) {
+    Ep ep{library_path, ep_name, ep_config};
+
+    std::unique_lock lock(mutex_);
+
+    cache_[ep] = Result{devices, log};
+  }
+
+  void Clear() {
+    std::unique_lock lock(mutex_);
+    cache_.clear();
+  }
+};
+
+static DeviceEnumerationCache& GetDeviceEnumCache() {
+  static DeviceEnumerationCache cache;
+  return cache;
+}
+
 class PreparationStage::Impl {
  public:
   static bool Run(PreparationStage& stage,
@@ -64,7 +145,7 @@ class PreparationStage::Impl {
 
   std::vector<std::pair<ExecutionProviderConfig, std::string>>& prepared_eps_;
   std::unordered_set<std::string> failed_ep_names_;
-  std::unordered_set<std::string> prepared_ep_names_;
+  std::unordered_map<std::string, int> prepared_ep_names_;
   std::map<Unpacker::Asset, bool> unpacked_map_;
   std::map<EP, std::set<std::string>> eps_libraries_;
 
@@ -79,10 +160,16 @@ bool PreparationStage::Run(const ScenarioConfig& scenario_config,
                    enumerate_only_, device_id_);
 }
 
+void PreparationStage::ClearDeviceEnumerationCache() {
+  GetDeviceEnumCache().Clear();
+}
+
 bool PreparationStage::Impl::PrepareIHVDevicesIfNeeded(
     const EP ep_type, const std::string_view& ep_library_path) {
   std::vector<std::pair<ExecutionProviderConfig, std::string>> adjusted_eps;
   int valid_eps = 0;
+
+  auto& device_enum_cache = GetDeviceEnumCache();
 
   for (const auto& [ep, library_path] : prepared_eps_) {
     const auto& ep_name = ep.GetName();
@@ -95,13 +182,29 @@ bool PreparationStage::Impl::PrepareIHVDevicesIfNeeded(
 
     std::string error;
     std::string log;
-    auto devices = API_Handler::EnumerateDevices(library_path, ep_name,
-        scenario_config_.GetName(), ep_config, error, log);
+    API_Handler::DeviceList devices;
+
+    // Check if we have cached enumeration results for this IHV + settings
+    // Device enumeration does not depend on model type, only on IHV and
+    // device settings (device_type, device_vendor, device_ep)
+    auto cached_result =
+        device_enum_cache.Get(library_path, ep_name, ep_config);
+    if (cached_result.has_value()) {
+      devices = cached_result->devices;
+      log = cached_result->log;
+      LOG4CXX_DEBUG(logger_, "Using cached device enumeration for " << ep_name);
+    } else {
+      devices = API_Handler::EnumerateDevices(library_path, ep_name,
+                                              scenario_config_.GetName(),
+                                              ep_config, error, log);
+
+      if (error.empty()) {
+        device_enum_cache.Set(library_path, ep_name, ep_config, devices, log);
+      }
+    }
 
     if (!error.empty()) {
       LOG4CXX_ERROR(logger_, error);
-      failed_ep_names_.insert(ep_name);
-      prepared_ep_names_.erase(ep_name);
       continue;
     }
 
@@ -153,16 +256,13 @@ bool PreparationStage::Impl::PrepareIHVDevicesIfNeeded(
         LOG4CXX_ERROR(logger_, "Failed to prepare "
                                    << ep_name
                                    << " EP, device_id is out of range");
-        failed_ep_names_.insert(ep_name);
-        prepared_ep_names_.erase(ep_name);
       }
     }
   }
 
   prepared_eps_ = adjusted_eps;
-  if (enumerate_only_) return true;
 
-  return valid_eps > 0;
+  return enumerate_only_ || valid_eps > 0;
 }
 
 void PreparationStage::Impl::PrepareDeviceIdsIfNeeded() {
@@ -170,8 +270,10 @@ void PreparationStage::Impl::PrepareDeviceIdsIfNeeded() {
                                     const std::string& ep_library_path) {
     for (const auto& [ep, library_path] : prepared_eps_) {
       const auto& ep_name = ep.GetName();
-      if (NameToEP(ep_name) == ep_type && library_path == ep_library_path)
-        prepared_ep_names_.erase(ep_name);
+      if (NameToEP(ep_name) != ep_type || library_path != ep_library_path)
+        continue;
+      --prepared_ep_names_[ep_name];
+      failed_ep_names_.insert(ep_name);
     }
   };
 
@@ -188,6 +290,9 @@ void PreparationStage::Impl::PrepareDeviceIdsIfNeeded() {
         case EP::kIHVOrtGenAI:
         case EP::kIHVNativeOpenVINO:
         case EP::kIHVWindowsML:
+        case EP::kIHVVulkan:
+        case EP::kIHVCUDA:
+        case EP::kIHVROCm:
           check_devices(ep_type, library_path);
           break;
         default:
@@ -226,9 +331,7 @@ void PreparationStage::Impl::UnpackLibraryIfNeeded(
 void PreparationStage::Impl::CanLoadLibrary(EP ep_type,
                                             const std::string& ep_name,
                                             const std::string& library_path) {
-  if (auto error =
-          API_Handler::CanBeLoaded(library_path);
-      !error.empty()) {
+  if (auto error = API_Handler::CanBeLoaded(library_path); !error.empty()) {
     throw std::runtime_error("Failed to load required libraries for " +
                              ep_name + "\n" + error);
   }
@@ -238,195 +341,212 @@ void PreparationStage::Impl::CanLoadLibrary(EP ep_type,
 #if WITH_IHV_WIN_ML
 static bool EnsureWindowsAppRuntimeInstalled(const std::string& library_path,
                                              const log4cxx::LoggerPtr& logger) {
-  // Helper to run command hidden; returns process exit code (0 on success)
-  auto RunHiddenCommand = [](const std::string& cmd) -> DWORD {
-    STARTUPINFOA si = {sizeof(si)};
-    PROCESS_INFORMATION pi;
-    si.dwFlags = STARTF_USESHOWWINDOW;
-    si.wShowWindow = SW_HIDE;
+  static std::once_flag s_checkFlag;
+  static bool s_installed = false;
 
-    std::string cmd_copy = "cmd.exe /C " + cmd;
+  std::call_once(s_checkFlag, [&library_path, &logger]() {
+    // Helper to run command hidden; returns process exit code (0 on success)
+    auto RunHiddenCommand = [](const std::string& cmd) -> DWORD {
+      STARTUPINFOA si = {sizeof(si)};
+      PROCESS_INFORMATION pi;
+      si.dwFlags = STARTF_USESHOWWINDOW;
+      si.wShowWindow = SW_HIDE;
 
-    BOOL success = CreateProcessA(nullptr,
-                                  &cmd_copy[0],  // Command line (mutable)
-                                  nullptr, nullptr, FALSE, CREATE_NO_WINDOW,
-                                  nullptr, nullptr, &si, &pi);
+      std::string cmd_copy = "cmd.exe /C " + cmd;
 
-    if (success) {
+      BOOL success = CreateProcessA(nullptr,
+                                    &cmd_copy[0],  // Command line (mutable)
+                                    nullptr, nullptr, FALSE, CREATE_NO_WINDOW,
+                                    nullptr, nullptr, &si, &pi);
+
+      if (success) {
+        WaitForSingleObject(pi.hProcess, INFINITE);
+        DWORD exitCode;
+        GetExitCodeProcess(pi.hProcess, &exitCode);
+        CloseHandle(pi.hProcess);
+        CloseHandle(pi.hThread);
+        return exitCode;
+      }
+
+      return (DWORD)-1;
+    };
+
+    // Helper to run command hidden and capture stdout; returns process exit
+    // code
+    auto RunHiddenCommandCapture = [](const std::string& cmd,
+                                      std::string& stdout_text) -> DWORD {
+      SECURITY_ATTRIBUTES sa;
+      sa.nLength = sizeof(sa);
+      sa.bInheritHandle = TRUE;
+      sa.lpSecurityDescriptor = nullptr;
+
+      HANDLE read_pipe = nullptr;
+      HANDLE write_pipe = nullptr;
+      if (!CreatePipe(&read_pipe, &write_pipe, &sa, 0)) {
+        return (DWORD)-1;
+      }
+      if (!SetHandleInformation(read_pipe, HANDLE_FLAG_INHERIT, 0)) {
+        CloseHandle(read_pipe);
+        CloseHandle(write_pipe);
+        return (DWORD)-1;
+      }
+
+      STARTUPINFOA si = {sizeof(si)};
+      PROCESS_INFORMATION pi;
+      ZeroMemory(&pi, sizeof(pi));
+      si.dwFlags = STARTF_USESHOWWINDOW | STARTF_USESTDHANDLES;
+      si.wShowWindow = SW_HIDE;
+      si.hStdOutput = write_pipe;
+      si.hStdError = write_pipe;
+
+      std::string cmd_copy = "cmd.exe /C " + cmd;
+
+      BOOL success =
+          CreateProcessA(nullptr, &cmd_copy[0], nullptr, nullptr, TRUE,
+                         CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi);
+
+      CloseHandle(write_pipe);
+
+      if (!success) {
+        CloseHandle(read_pipe);
+        return (DWORD)-1;
+      }
+
+      std::string buffer;
+      char chunk[4096];
+      DWORD bytes_read = 0;
+      while (ReadFile(read_pipe, chunk, sizeof(chunk), &bytes_read, nullptr) &&
+             bytes_read) {
+        buffer.append(chunk, chunk + bytes_read);
+      }
+      CloseHandle(read_pipe);
+
       WaitForSingleObject(pi.hProcess, INFINITE);
       DWORD exitCode;
       GetExitCodeProcess(pi.hProcess, &exitCode);
       CloseHandle(pi.hProcess);
       CloseHandle(pi.hThread);
+
+      // Trim simple whitespace and CR/LF/NULLs from ends
+      size_t l = 0;
+      size_t r = buffer.size();
+      while (l < r &&
+             (buffer[l] == ' ' || buffer[l] == '\t' || buffer[l] == '\r' ||
+              buffer[l] == '\n' || buffer[l] == '\0'))
+        ++l;
+      while (r > l && (buffer[r - 1] == ' ' || buffer[r - 1] == '\t' ||
+                       buffer[r - 1] == '\r' || buffer[r - 1] == '\n' ||
+                       buffer[r - 1] == '\0'))
+        --r;
+      stdout_text.assign(buffer.data() + l, r - l);
+
       return exitCode;
+    };
+
+    // Step 1: Detect Windows App Runtime presence for required version rail or
+    // greater
+
+    int min_major = 1;
+    int min_minor = 8;
+
+    std::string detect_cmd =
+        std::string("powershell.exe -ExecutionPolicy Bypass -NoProfile ") +
+        "-Command \"$ok=$false; "
+        "Get-AppxPackage -Name 'Microsoft.WindowsAppRuntime.*' | "
+        "ForEach-Object "
+        "{ "
+        "$m=[regex]::Match($_.Name,'Microsoft\\.WindowsAppRuntime\\.(\\d+)\\.("
+        "\\d+)'); "
+        "if($m.Success){ $maj=[int]$m.Groups[1].Value; "
+        "$min=[int]$m.Groups[2].Value; "
+        "if(($maj -gt " +
+        std::to_string(min_major) + ") -or ($maj -eq " +
+        std::to_string(min_major) + " -and $min -ge " +
+        std::to_string(min_minor) +
+        ")){ $ok=$true } } }; "
+        "if($ok){ exit 0 } else { exit 1 }\"";
+
+    // Build version query command (UTF-8 stdout)
+    std::string version_cmd =
+        std::string("powershell.exe -ExecutionPolicy Bypass -NoProfile ") +
+        "-Command \"[Console]::OutputEncoding = "
+        "[System.Text.UTF8Encoding]::new(); "
+        "$pkg = Get-AppxPackage -Name 'Microsoft.WindowsAppRuntime.*' | "
+        "Sort-Object Version -Descending | Select-Object -First 1; "
+        "if ($pkg) { "
+        "$rail = "
+        "([regex]::Match($pkg.Name,'Microsoft\\.WindowsAppRuntime\\.(\\d+)\\.("
+        "\\d+)')); "
+        "$railVer = if ($rail.Success) { $rail.Groups[1].Value + '.' + "
+        "$rail.Groups[2].Value } else { '' }; "
+        "Write-Output ($railVer + '|' + $pkg.Version) }\"";
+
+    auto detectInstalledAndLog = [&]() -> bool {
+      if (RunHiddenCommand(detect_cmd) != 0) return false;
+      std::string ver_out;
+      RunHiddenCommandCapture(version_cmd, ver_out);
+      if (!ver_out.empty()) {
+        auto pipe_pos = ver_out.find('|');
+        std::string rail = pipe_pos == std::string::npos
+                               ? std::string()
+                               : ver_out.substr(0, pipe_pos);
+        std::string pkgver = pipe_pos == std::string::npos
+                                 ? ver_out
+                                 : ver_out.substr(pipe_pos + 1);
+        std::string combined = rail.empty() ? pkgver : (rail + "." + pkgver);
+        LOG4CXX_INFO(logger,
+                     "Windows App Runtime detected, version=" << combined);
+      } else {
+        LOG4CXX_INFO(logger, "Windows App Runtime detected");
+      }
+      return true;
+    };
+
+    if (detectInstalledAndLog()) {
+      s_installed = true;
+      return;
     }
 
-    return (DWORD)-1;
-  };
+    // Step 2: Install redistributable silently from the unpacked folder
+    auto parent_dir = fs::path(library_path).parent_path();
+    fs::path installer_path =
+        (parent_dir / "WindowsAppRuntimeInstall.exe").lexically_normal();
 
-  // Helper to run command hidden and capture stdout; returns process exit code
-  auto RunHiddenCommandCapture = [](const std::string& cmd,
-                                    std::string& stdout_text) -> DWORD {
-    SECURITY_ATTRIBUTES sa;
-    sa.nLength = sizeof(sa);
-    sa.bInheritHandle = TRUE;
-    sa.lpSecurityDescriptor = nullptr;
-
-    HANDLE read_pipe = nullptr;
-    HANDLE write_pipe = nullptr;
-    if (!CreatePipe(&read_pipe, &write_pipe, &sa, 0)) {
-      return (DWORD)-1;
-    }
-    if (!SetHandleInformation(read_pipe, HANDLE_FLAG_INHERIT, 0)) {
-      CloseHandle(read_pipe);
-      CloseHandle(write_pipe);
-      return (DWORD)-1;
+    if (!fs::exists(installer_path)) {
+      LOG4CXX_ERROR(logger, "Windows App Runtime installer not found: " +
+                                installer_path.string());
+      s_installed = false;
+      return;
     }
 
-    STARTUPINFOA si = {sizeof(si)};
-    PROCESS_INFORMATION pi;
-    ZeroMemory(&pi, sizeof(pi));
-    si.dwFlags = STARTF_USESHOWWINDOW | STARTF_USESTDHANDLES;
-    si.wShowWindow = SW_HIDE;
-    si.hStdOutput = write_pipe;
-    si.hStdError = write_pipe;
-
-    std::string cmd_copy = "cmd.exe /C " + cmd;
-
-    BOOL success = CreateProcessA(nullptr, &cmd_copy[0], nullptr, nullptr, TRUE,
-                                  CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi);
-
-    CloseHandle(write_pipe);
-
-    if (!success) {
-      CloseHandle(read_pipe);
-      return (DWORD)-1;
-    }
-
-    std::string buffer;
-    char chunk[4096];
-    DWORD bytes_read = 0;
-    while (ReadFile(read_pipe, chunk, sizeof(chunk), &bytes_read, nullptr) &&
-           bytes_read) {
-      buffer.append(chunk, chunk + bytes_read);
-    }
-    CloseHandle(read_pipe);
-
-    WaitForSingleObject(pi.hProcess, INFINITE);
-    DWORD exitCode;
-    GetExitCodeProcess(pi.hProcess, &exitCode);
-    CloseHandle(pi.hProcess);
-    CloseHandle(pi.hThread);
-
-    // Trim simple whitespace and CR/LF/NULLs from ends
-    size_t l = 0;
-    size_t r = buffer.size();
-    while (l < r &&
-           (buffer[l] == ' ' || buffer[l] == '\t' || buffer[l] == '\r' ||
-            buffer[l] == '\n' || buffer[l] == '\0'))
-      ++l;
-    while (r > l && (buffer[r - 1] == ' ' || buffer[r - 1] == '\t' ||
-                     buffer[r - 1] == '\r' || buffer[r - 1] == '\n' ||
-                     buffer[r - 1] == '\0'))
-      --r;
-    stdout_text.assign(buffer.data() + l, r - l);
-
-    return exitCode;
-  };
-
-  // Step 1: Detect Windows App Runtime presence for required version rail or
-  // greater
-
-  int min_major = 1;
-  int min_minor = 8;
-
-  std::string detect_cmd =
-      std::string("powershell.exe -ExecutionPolicy Bypass -NoProfile ") +
-      "-Command \"$ok=$false; "
-      "Get-AppxPackage -Name 'Microsoft.WindowsAppRuntime.*' | ForEach-Object "
-      "{ "
-      "$m=[regex]::Match($_.Name,'Microsoft\\.WindowsAppRuntime\\.(\\d+)\\.("
-      "\\d+)'); "
-      "if($m.Success){ $maj=[int]$m.Groups[1].Value; "
-      "$min=[int]$m.Groups[2].Value; "
-      "if(($maj -gt " +
-      std::to_string(min_major) + ") -or ($maj -eq " +
-      std::to_string(min_major) + " -and $min -ge " +
-      std::to_string(min_minor) +
-      ")){ $ok=$true } } }; "
-      "if($ok){ exit 0 } else { exit 1 }\"";
-
-  // Build version query command (UTF-8 stdout)
-  std::string version_cmd =
-      std::string("powershell.exe -ExecutionPolicy Bypass -NoProfile ") +
-      "-Command \"[Console]::OutputEncoding = "
-      "[System.Text.UTF8Encoding]::new(); "
-      "$pkg = Get-AppxPackage -Name 'Microsoft.WindowsAppRuntime.*' | "
-      "Sort-Object Version -Descending | Select-Object -First 1; "
-      "if ($pkg) { "
-      "$rail = "
-      "([regex]::Match($pkg.Name,'Microsoft\\.WindowsAppRuntime\\.(\\d+)\\.("
-      "\\d+)')); "
-      "$railVer = if ($rail.Success) { $rail.Groups[1].Value + '.' + "
-      "$rail.Groups[2].Value } else { '' }; "
-      "Write-Output ($railVer + '|' + $pkg.Version) }\"";
-
-  auto detectInstalledAndLog = [&]() -> bool {
-    if (RunHiddenCommand(detect_cmd) != 0) return false;
-    std::string ver_out;
-    RunHiddenCommandCapture(version_cmd, ver_out);
-    if (!ver_out.empty()) {
-      auto pipe_pos = ver_out.find('|');
-      std::string rail = pipe_pos == std::string::npos
-                             ? std::string()
-                             : ver_out.substr(0, pipe_pos);
-      std::string pkgver = pipe_pos == std::string::npos
-                               ? ver_out
-                               : ver_out.substr(pipe_pos + 1);
-      std::string combined = rail.empty() ? pkgver : (rail + "." + pkgver);
-      LOG4CXX_INFO(logger, "Windows App Runtime detected, version="
-                               << combined);
-    } else {
-      LOG4CXX_INFO(logger, "Windows App Runtime detected");
-    }
-    return true;
-  };
-
-  if (detectInstalledAndLog()) 
-    return true;
-
-  // Step 2: Install redistributable silently from the unpacked folder
-  auto parent_dir = fs::path(library_path).parent_path();
-  fs::path installer_path =
-      (parent_dir / "WindowsAppRuntimeInstall.exe").lexically_normal();
-
-  if (!fs::exists(installer_path)) {
-    LOG4CXX_ERROR(logger, "Windows App Runtime installer not found: " +
-                              installer_path.string());
-    return false;
-  }
-
-  std::string install_cmd = "\"" + installer_path.string() + "\"";
-  LOG4CXX_INFO(logger, "Installing Windows App Runtime from: "
-                           << installer_path.string());
-  DWORD exit_code = RunHiddenCommand(install_cmd);
-  if (exit_code != 0) {
-    LOG4CXX_ERROR(logger,
-                  std::string("Failed to run Windows App Runtime installer: ") +
+    std::string install_cmd = "\"" + installer_path.string() + "\"";
+    LOG4CXX_INFO(logger, "Installing Windows App Runtime from: "
+                             << installer_path.string());
+    DWORD exit_code = RunHiddenCommand(install_cmd);
+    if (exit_code != 0) {
+      LOG4CXX_ERROR(
+          logger, std::string("Failed to run Windows App Runtime installer: ") +
                       installer_path.string() +
                       ", exit code=" + std::to_string(exit_code));
-    return false;
-  }
-  LOG4CXX_INFO(logger, "Windows App Runtime installer completed successfully");
+      s_installed = false;
+      return;
+    }
+    LOG4CXX_INFO(logger,
+                 "Windows App Runtime installer completed successfully");
 
-  // Step 3: Re-check
-  if (detectInstalledAndLog()) 
-    return true;
+    // Step 3: Re-check
+    if (detectInstalledAndLog()) {
+      s_installed = true;
+      return;
+    }
 
-  LOG4CXX_ERROR(logger,
-                "Windows App Runtime required version not detected after "
-                "installation attempt");
-  return false;
+    LOG4CXX_ERROR(logger,
+                  "Windows App Runtime required version not detected after "
+                  "installation attempt");
+    s_installed = false;
+  });
+
+  return s_installed;
 }
 #endif
 
@@ -449,10 +569,8 @@ bool PreparationStage::Impl::Run() {
 
     try {
       if (!is_supported
-#if !MLPERF_PUBLISHING
           || empty_library_path &&
                  !ep_dependencies_manager_.PrepareDependenciesForEP(ep_name)
-#endif
       ) {
         if (is_supported) {
           throw std::runtime_error("Failed to prepare " + ep_name +
@@ -519,7 +637,7 @@ bool PreparationStage::Impl::Run() {
             unpack_library_if_needed({kWindowsML}, false);
             if (!EnsureWindowsAppRuntimeInstalled(library_path, logger_)) {
               throw std::runtime_error(
-                  "Failed to ensure Windows App Runtime is installed, "
+                  "Failed to ensure whether Windows App Runtime is installed, "
                   "skipping...");
             }
             can_load_library();
@@ -555,7 +673,7 @@ bool PreparationStage::Impl::Run() {
         }
       }
 
-      prepared_ep_names_.insert(ep_name);
+      ++prepared_ep_names_[ep_name];
       prepared_eps_.emplace_back(ep.OverrideConfig(ep_config_json),
                                  library_path);
     } catch (const std::exception& e) {
@@ -565,6 +683,9 @@ bool PreparationStage::Impl::Run() {
   }
 
   PrepareDeviceIdsIfNeeded();
+
+  std::erase_if(prepared_ep_names_,
+                [](const auto& pair) { return pair.second <= 0; });
 
   std::stringstream not_prepared_eps_str;
   for (const auto& ep : failed_ep_names_) {

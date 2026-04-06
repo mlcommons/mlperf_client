@@ -14,20 +14,19 @@ qairt_path = os.path.abspath(qairt_path)
 qairt_version_path = os.listdir(qairt_path)[0]
 print(f"Qairt Version Used: {qairt_version_path}")
 QNN_SDK_ROOT = os.path.join(qairt_path, qairt_version_path) + "/"
-if model_name == "llama2":
-    model_id = os.path.abspath(os.path.join(qairt_path, "..", "Llama-2-7b-chat-hf")) + "/"
-elif model_name == "phi3.5":
-    model_id = os.path.abspath(os.path.join(qairt_path, "..", "Phi-3.5-mini-instruct")) + "/"
+if model_name == "phi3.5":
+    model_id = os.path.abspath(os.path.join(qairt_path, "..", "adascale_dir_temp")) + "/"
 elif model_name == "llama3.1":
-    model_id = os.path.abspath(os.path.join(qairt_path, "..", "Llama-3.1-8B-Instruct")) + "/"
+    model_id = os.path.abspath(os.path.join(qairt_path, "..", "adascale_dir_temp")) + "/"
+elif model_name == "phi4":
+    model_id = os.path.abspath(os.path.join(qairt_path, "..", "Phi-4-reasoning")) + "/"
 else:
     print(f"Model not supported")
     sys.exit(1)
+    
+print(f"QNN SDK ROOT: {QNN_SDK_ROOT} model_id: {model_id}")
 
-block_quant_size = 128    
-print(f"QNN SDK ROOT: {QNN_SDK_ROOT} model_id: {model_id} BLOCK_QUANT_SIZE: {block_quant_size}")
-
-parameters={"QNN_SDK_ROOT": QNN_SDK_ROOT, "model_id": model_id, "BLOCK_QUANT_SIZE": block_quant_size}
+parameters={"QNN_SDK_ROOT": QNN_SDK_ROOT, "model_id": model_id}
 
 
 
@@ -39,33 +38,23 @@ def modify_notebook(notebook_path, output_path, variable_changes):
     for cell in nb.cells:
         if cell.cell_type == "code" and isinstance(cell.source, str):
             for var_name, new_value in variable_changes.items():
-                if (model_name == "llama3.1" and var_name == "model_id"):
+                if ((model_name == "llama3.1" or model_name == "phi3.5") and var_name == "model_id"):
                     pattern = r'model_id\s*=\s*os\.getenv\(["\']MODEL_ID["\'](?:\s*,\s*[^)]*)?\)'
-                elif (model_name == "llama3.1" and var_name == "QNN_SDK_ROOT"):
+                elif ((model_name == "llama3.1" or model_name == "phi3.5") and var_name == "QNN_SDK_ROOT"):
                     pattern = r'QNN_SDK_ROOT\s*=\s*os\.getenv\(["\']QNN_SDK_ROOT["\'](?:\s*,\s*[^)]*)?\)'
-                elif var_name == "BLOCK_QUANT_SIZE":
-                    pattern = r'BLOCK_QUANT_SIZE\s*=\s*\d+'
-                else:
-                    pattern = rf"^\s*{var_name}\s*=\s*[\"'].*?[\"']"
+                elif model_name == "phi4":
+                    pattern = rf"^\s*{re.escape(var_name)}\s*=\s*os\.getenv\(\s*['\"][^'\"]+['\"]\s*(?:,\s*[^)]*)?\)"
                 replacement = f"{var_name} = {repr(new_value)}"
                 cell.source = re.sub(pattern, replacement, cell.source, flags=re.MULTILINE)
 
-                
     with open(output_path, "w", encoding="utf-8") as f:
         nbformat.write(nb, f)
 
-if model_name == "llama2":
-    modify_notebook("llama2-lpbq.ipynb", "updated-llama2-lpbq.ipynb", parameters)
+if model_name == "phi3.5":
+    modify_notebook("Phi3p5.ipynb", "updated-Phi3p5.ipynb", parameters)
     pm.execute_notebook(
-        "updated-llama2-lpbq.ipynb",
-        "output-llama2-lpbq.ipynb",
-        kernel_name="python"
-    )
-elif model_name == "phi3.5":
-    modify_notebook("phi-3.5-quantization.ipynb", "updated-phi-3.5-quantization.ipynb", parameters)
-    pm.execute_notebook(
-        "updated-phi-3.5-quantization.ipynb",
-        "output-phi-3.5-quantization.ipynb",
+        "updated-Phi3p5.ipynb",
+        "output-Phi3p5.ipynb",
         kernel_name="python"
     )
 elif model_name == "llama3.1":
@@ -73,5 +62,12 @@ elif model_name == "llama3.1":
     pm.execute_notebook(
         "updated-llama3.1.ipynb",
         "output-llama3.1.ipynb",
+        kernel_name="python"
+    )
+elif model_name == "phi4":
+    modify_notebook("Phi4_Reasoning.ipynb", "updated-phi4.ipynb", parameters)
+    pm.execute_notebook(
+        "updated-phi4.ipynb",
+        "output-phi4.ipynb",
         kernel_name="python"
     )

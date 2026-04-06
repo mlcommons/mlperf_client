@@ -7,7 +7,6 @@
 namespace gui {
 namespace views {
 
-
 /**
  * @class SettingsPage
  * @brief Page for managing application settings and preferences.
@@ -19,21 +18,23 @@ class SettingsPage : public AbstractView {
   SettingsPage(QWidget* parent = nullptr);
   ~SettingsPage() = default;
 
-
   void SetDataPaths(const QStringList& paths);
   void SetLogPaths(const QStringList& paths);
   void SetDataCurrentPath(const QString& path);
   void SetLogsCurrentPath(const QString& path);
   void SetKeepLogs(bool keep);
+  void SetAskBeforeDownload(bool ask);
 
   QString GetDataCurrentPath() const;
   QString GetLogsCurrentPath() const;
   bool GetKeepLogs() const;
+  bool AskBeforeDownload() const;
 
  signals:
   void DataPathChanged(const QString& new_path);
   void LogsPathChanged(const QString& new_path);
   void KeepLogsChanged(bool keep);
+  void AskBeforeDownloadChanged(bool ask);
   void ClearCacheRequested();
   void ResetToDefaultsRequested();
 

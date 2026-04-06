@@ -22,16 +22,19 @@ static double GetDurationInMs(
 }
 
 class CallbackStreamer final : public ov::genai::StreamerBase {
- public:
+public:
   using clock = std::chrono::high_resolution_clock;
   using time_point = CallbackStreamer::clock::time_point;
+  using Status     = ov::genai::StreamingStatus;
 
   CallbackStreamer() = default;
 
-  bool put(int64_t token) override {
-    token_callback_(static_cast<uint32_t>(token));
-    token_time_.emplace_back(clock::now());  // Record token generation time
-    return false;                            // Continue tokens generation
+  Status write(int64_t token) override {
+      if (token_callback_) {
+          token_callback_(static_cast<uint32_t>(token));
+      }
+      token_time_.emplace_back(clock::now());  // Record token generation time
+      return Status::RUNNING;                  // Continue tokens generation
   }
 
   void end() override {}
@@ -39,10 +42,10 @@ class CallbackStreamer final : public ov::genai::StreamerBase {
   void reset(size_t max_tokens = 0,
              std::function<void(uint32_t)> token_callback = 0) {
     token_callback_ = token_callback;
-    token_time_.clear();
-    if (max_tokens > 0) {
-      token_time_.reserve(max_tokens);
-    }
+      token_time_.clear();
+      if (max_tokens > 0) {
+          token_time_.reserve(max_tokens);
+      }
   }
 
   CallbackStreamer::time_point GetTokenTimeOr(
@@ -50,10 +53,10 @@ class CallbackStreamer final : public ov::genai::StreamerBase {
     return idx < token_time_.size() ? token_time_[idx] : def;
   }
 
-  double GetMsCI(size_t start_token,
-                 CallbackStreamer::time_point start_time) const;
+double GetMsCI(size_t start_token,
+               CallbackStreamer::time_point start_time) const;
 
- private:
+private:
   std::vector<CallbackStreamer::time_point> token_time_;
   std::function<void(uint32_t)> token_callback_;
 };

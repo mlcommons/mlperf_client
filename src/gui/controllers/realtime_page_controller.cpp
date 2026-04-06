@@ -83,8 +83,9 @@ QString RealtimePageController::GetEPDisplayName(int index) const {
   return GetExecutionProgressWidget()->GetEPDisplayName(index);
 }
 
-bool RealtimePageController::RequestDownload(uint64_t size_in_bytes) {
-  return GetView()->RequestDownload(size_in_bytes);
+bool RealtimePageController::RequestDownload(uint64_t size_in_bytes,
+                                             bool& do_not_ask_again) {
+  return GetView()->RequestDownload(size_in_bytes, do_not_ask_again);
 }
 
 void RealtimePageController::ShowStatus(const QString& action_type,

@@ -300,18 +300,16 @@ void LLMInference::SetupGenaiConfigForEP(const std::string& model_path) {
   // Update OpenVINO specific options
   const auto update_ov_config = [&](auto& options, auto& genai_config) {
     constexpr size_t kMaxNpuAllocSize = 4032;
-
-    genai_config["search"]["max_length"] = config_.search.max_total_length;
-
     const int max_prompt_len = static_cast<int>(
-        config_.search.max_total_length - config_.search.max_length);
+      config_.search.max_total_length - config_.search.max_length);
+    genai_config["search"]["max_length"] = config_.search.max_total_length;
+    
     options["load_config"] = std::format(
-        "{{\"NPU\":{{\"MAX_PROMPT_LEN\":\"{}\",\"MIN_RESPONSE_LEN\":\"{}\"{}{}}}}}",
+        R"({{"NPU": {{"MAX_PROMPT_LEN":"{}","MIN_RESPONSE_LEN":"{}", "NPU_TURBO":"YES", 
+        "GENERATE_HINT":"BEST_PERF", "PREFILL_HINT":"{}"}}}})",
         max_prompt_len,
         config_.search.max_length,
-        (config_.search.max_total_length <= kMaxNpuAllocSize) || (model_name_ != "llama2") ?
-          ", \"GENERATE_HINT\":\"BEST_PERF\"" : "",
-        std::string{", \"PREFILL_HINT\":"} + (config_.search.max_total_length > kMaxNpuAllocSize ? "\"DYNAMIC\"" : "\"STATIC\""));
+        (config_.search.max_total_length > kMaxNpuAllocSize ? "DYNAMIC" : "STATIC"));
 
     const auto& device_type = ep_settings_.GetDeviceType();
     if (device_type.substr(0, 3) == "GPU" && count_openvino_devices("GPU") > 1) {

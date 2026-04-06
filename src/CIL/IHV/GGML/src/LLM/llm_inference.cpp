@@ -1,6 +1,6 @@
 #include "llm_inference.h"
 
-#include "../../common/common.h"
+#include "ggml-backend.h"
 #include "llama.h"
 
 namespace cil {
@@ -35,13 +35,34 @@ LLMInference::LLMInference(
   llama_backend_init();
 
   llama_numa_init(GGML_NUMA_STRATEGY_DISABLED);
+
+  InitGGMLDevicesList(ep_settings_.GetDeviceVendor(), device_type_ == "CPU");
+}
+
+const API_IHV_DeviceList_t* const LLMInference::EnumerateDevices() {
+  if (nullptr != device_list_) return device_list_.get();
+
+  API_IHV_DeviceList_t* dl = AllocateDeviceList(devices_.size());
+
+  dl->count = devices_.size();
+  for (int i = 0; i < devices_.size(); i++) {
+    dl->device_info_data[i].device_id = i;
+    std::strncpy(dl->device_info_data[i].device_name,
+                 devices_[i].second.c_str(),
+                 API_IHV_MAX_DEVICE_NAME_LENGTH - 1);
+    dl->device_info_data[i].device_name[API_IHV_MAX_DEVICE_NAME_LENGTH - 1] =
+        '\0';
+  }
+  device_list_.reset(dl);
+
+  return device_list_.get();
 }
 
 void LLMInference::Init(const nlohmann::json& model_config) {
   bool loaded = config_.LoadFromJson(model_config);
   if (!loaded) {
-    logger_(LogLevel::kError, "Failed to load model configuration");
     error_message_ = "Failed to load model configuration";
+    logger_(LogLevel::kError, error_message_);
     return;
   }
 
@@ -50,8 +71,13 @@ void LLMInference::Init(const nlohmann::json& model_config) {
 
   gpu_layers_deduction_in_progress_ = true;
 
+  auto device_id = ep_settings_.GetDeviceId().value_or(0);
+  if (device_id < 0 || device_id >= devices_.size()) {
+    error_message_ = "Unknown device Id: " + std::to_string(device_id);
+    logger_(LogLevel::kError, error_message_);
+  }
   // Try to load the model and context with the specified gpu_layers
-  if (LoadModelAndContext(initial_gpu_layers)) {
+  if (LoadModelAndContext(initial_gpu_layers, device_id)) {
     gpu_layers_deduction_in_progress_ = false;
     return;
   }
@@ -70,8 +96,8 @@ void LLMInference::Init(const nlohmann::json& model_config) {
     logger_(LogLevel::kInfo, "Not using mmap!");
   model_ = llama_model_load_from_file(model_path_.c_str(), model_params);
   if (!model_) {
-    logger_(LogLevel::kError, "Failed to load the model");
     error_message_ = "Failed to load the model";
+    logger_(LogLevel::kError, error_message_);
     return;
   }
 
@@ -84,7 +110,7 @@ void LLMInference::Init(const nlohmann::json& model_config) {
   int low = 1, high = total_layers, best = 0;
   while (low <= high) {
     int mid = (low + high) / 2;
-    if (LoadModelAndContext(mid)) {
+    if (LoadModelAndContext(mid, device_id)) {
       llama_free(context_);
       llama_free_model(model_);
       context_ = nullptr;
@@ -101,10 +127,10 @@ void LLMInference::Init(const nlohmann::json& model_config) {
   // Apply a safety margin to avoid crashes during inference
   best = std::max(best - 2, 0);
 
-  if (!LoadModelAndContext(best)) {
-    logger_(LogLevel::kError,
-            "Failed to load the model after multiple attempts");
-    error_message_ = "Failed to load the model";
+  if (!LoadModelAndContext(best, device_id)) {
+    error_message_ = "Failed to load the model after multiple attempts";
+    logger_(LogLevel::kError, error_message_);
+
     return;
   }
 
@@ -116,9 +142,41 @@ bool LLMInference::GPULayersDeductionIsInProgress() const {
   return gpu_layers_deduction_in_progress_;
 }
 
-bool LLMInference::LoadModelAndContext(int gpu_layers) {
+void LLMInference::InitGGMLDevicesList(const std::string& vendor,
+                                       bool type_cpu) {
+  const size_t n = ggml_backend_dev_count();
+  devices_.clear();
+  devices_.reserve(n);
+
+  for (size_t i = 0; i < n; ++i) {
+    auto dev = ggml_backend_dev_get(i);
+    if (!dev) continue;
+
+    const auto type = ggml_backend_dev_type(dev);
+    if ((type_cpu && type != GGML_BACKEND_DEVICE_TYPE_CPU) ||
+        (!type_cpu && type != GGML_BACKEND_DEVICE_TYPE_GPU &&
+         type != GGML_BACKEND_DEVICE_TYPE_IGPU))
+      continue;
+
+    const char* desc = ggml_backend_dev_description(dev);
+    if (!desc) continue;
+
+    if (!vendor.empty() &&
+        std::string_view(desc).find(vendor) == std::string_view::npos)
+      continue;
+
+    devices_.emplace_back(dev, desc);
+  }
+}
+
+bool LLMInference::LoadModelAndContext(int gpu_layers, int device_id) {
   llama_model_params model_params = llama_model_default_params();
   model_params.main_gpu = 0;
+
+  // Allocate a NULL-terminated list (1 device + terminator)
+  ggml_backend_dev_t device_list[2] = {devices_[device_id].first, nullptr};
+
+  model_params.devices = device_list;
   model_params.n_gpu_layers = gpu_layers;
   model_params.split_mode = LLAMA_SPLIT_MODE_NONE;
   model_ = llama_load_model_from_file(model_path_.c_str(), model_params);
@@ -129,9 +187,9 @@ bool LLMInference::LoadModelAndContext(int gpu_layers) {
   ctx_params.n_batch =
       config_.search.max_total_length - config_.search.max_length;
 
-  ctx_params.flash_attn_type = ep_settings_.GetFa().value_or(false) 
-                               ? LLAMA_FLASH_ATTN_TYPE_ENABLED 
-                               : LLAMA_FLASH_ATTN_TYPE_DISABLED;
+  ctx_params.flash_attn_type = ep_settings_.GetFa().value_or(false)
+                                   ? LLAMA_FLASH_ATTN_TYPE_ENABLED
+                                   : LLAMA_FLASH_ATTN_TYPE_DISABLED;
   if (ep_settings_.GetFa().value_or(false))
     logger_(LogLevel::kInfo, "Using Flash attention!");
   context_ = llama_new_context_with_model(model_, ctx_params);
@@ -145,7 +203,7 @@ bool LLMInference::LoadModelAndContext(int gpu_layers) {
 }
 
 void LLMInference::Run(const std::span<uint32_t const> input_data,
-                          std::function<void(uint32_t)> token_callback) {
+                       std::function<void(uint32_t)> token_callback) {
   start_time_ = std::chrono::high_resolution_clock::now();
 
   if (input_data.size() == 0) {
@@ -217,8 +275,8 @@ void LLMInference::Run(const std::span<uint32_t const> input_data,
   try {
     // Evaluate the prompt batch
     if (llama_decode(context_, batch) != 0) {
-      logger_(LogLevel::kError, "Failed to evaluate the prompt");
       error_message_ = "Failed to evaluate the prompt";
+      logger_(LogLevel::kError, error_message_);
       llama_batch_free(batch);
       llama_sampler_free(sampler_chain);
       return;

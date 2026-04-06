@@ -5,9 +5,9 @@
 #include <log4cxx/logmanager.h>
 #include <log4cxx/xml/domconfigurator.h>
 
-#include "../CIL/unpacker.h"
 #include "../CIL/execution_config.h"
 #include "../CIL/execution_provider.h"
+#include "../CIL/unpacker.h"
 #include "../CIL/utils.h"
 #include "benchmark_controller.h"
 #include "core/gui_utils.h"
@@ -185,7 +185,7 @@ void AppController::InitStartPage() {
   start_page_controller_->LoadSystemInformation();
 
   emit SwitchToPage(PageType::kStartPage);
-  emit ShowGlobalPopup("Downloading benchmark assets.\nPlease wait.");
+  emit ShowGlobalPopup("Downloading benchmark assets.\nPlease wait.", true);
 
   benchmark_controller_->SetConfigs(base_configs_);
   benchmark_controller_->SetDataDir(
@@ -246,12 +246,19 @@ void AppController::InstallSignalHandlers() {
           &SettingsPageController::ClearCacheRequested, this,
           &AppController::OnClearCacheRequested);
 
+  connect(benchmark_controller_,
+          &BenchmarkController::EnumerationProgressChanged, this,
+          &AppController::UpdateProgressPopup);
   connect(benchmark_controller_, &BenchmarkController::EnumerationFinished,
           this, &AppController::OnEnumerationFinished);
   connect(benchmark_controller_, &BenchmarkController::BenchmarkFinished, this,
           &AppController::OnBenchmarkFinished);
   connect(benchmark_controller_, &BenchmarkController::ClearCacheFinished, this,
           &AppController::OnClearCacheFinished);
+  connect(benchmark_controller_,
+          &BenchmarkController::DownloadDoNotAskAgainRequested,
+          settings_page_controller_,
+          &SettingsPageController::SetDoNotAskBeforeDownload);
 }
 
 void AppController::InitLogs() {
@@ -381,7 +388,8 @@ void AppController::RunBenchmark(bool download_deps_only) {
   gui::ios_utils::SetIdleTimerDisabled(true);
 #endif
 
-  benchmark_controller_->RunBenchmark(download_deps_only);
+  benchmark_controller_->RunBenchmark(
+      download_deps_only, settings_page_controller_->AskBeforeDownload());
 
   emit SwitchToPage(PageType::kRealTimeMonitoringPage);
 }

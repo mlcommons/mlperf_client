@@ -80,6 +80,11 @@ class StartPage : public AbstractView {
   bool IsEPCardVisible(int index) const;
 
   /**
+   * @brief Check if EP card at index is enabled.
+   */
+  bool IsEPCardEnabled(int index) const;
+
+  /**
    * @brief Set visibility of EP card at specified index.
    */
   void SetEPCardVisible(int index, bool visible);

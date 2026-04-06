@@ -82,37 +82,6 @@ target_link_libraries(${PROJECT_NAME}
     common_cil
 )
 
-function(apply_git_patch patch_file working_dir)
-    execute_process(
-        COMMAND ${GIT_EXECUTABLE} apply --ignore-whitespace --check ${patch_file}
-        WORKING_DIRECTORY ${working_dir}
-        RESULT_VARIABLE PATCH_APPLY_CHECK_RESULT
-        OUTPUT_VARIABLE PATCH_APPLY_OUTPUT
-        ERROR_VARIABLE PATCH_APPLY_ERROR
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-        ERROR_STRIP_TRAILING_WHITESPACE
-    )
-    message(STATUS "git apply --check returned: ${PATCH_APPLY_CHECK_RESULT}")
-    message(STATUS "stdout: ${PATCH_APPLY_OUTPUT}")
-    message(WARNING "stderr: ${PATCH_APPLY_ERROR}")
-    if (PATCH_APPLY_CHECK_RESULT EQUAL 0)
-        execute_process(
-            COMMAND ${GIT_EXECUTABLE} apply --ignore-whitespace --allow-empty --reject ${patch_file}
-            WORKING_DIRECTORY ${working_dir}
-            RESULT_VARIABLE PATCH_APPLY_RESULT
-        )
-        if (PATCH_APPLY_RESULT EQUAL 0)
-            message(STATUS "Patch ${patch_file} applied successfully")
-        else ()
-            message(STATUS "Patch ${patch_file} could not be applied. Review reject files")
-        endif ()
-    else ()
-        message(STATUS "Patch ${patch_file} already applied or not applicable")
-    endif ()
-endfunction()
-
-apply_git_patch(${CMAKE_CURRENT_SOURCE_DIR}/mlx.patch ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../deps/mlx-swift/Source/Cmlx/mlx)
-
 if(IOS)
     set(LLAMA_MLX_DESTINATION "generic/platform=iOS")
     set(DERIVED_DATA_DIR "${CMAKE_BINARY_DIR}/build/Build/Products/${CMAKE_BUILD_TYPE}-iphoneos")

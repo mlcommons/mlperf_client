@@ -11,7 +11,7 @@ import requests
 import argparse
 import subprocess
 import pandas as pd
-from urllib.parse import urlparse
+from urllib.parse import urlparse, unquote
 from loguru import logger
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -205,47 +205,60 @@ def save_input_files_and_answers(input_dir: str, subject: str, input_config_temp
             
     return saved_input_files
 
+def resolve_file_uri(url, base_dir=None):
+    """Resolve a file:// URI to an absolute local path, or None for non-file URIs."""
+    parsed = urlparse(url)
+    if parsed.scheme != 'file':
+        return None
+
+    raw_path = url[len('file://'):] if url.startswith('file://') else url[len('file:'):]
+    raw_path = unquote(raw_path)
+
+    # Strip leading slash before Windows drive letter (e.g. /C:/...)
+    if os.name == 'nt' and len(raw_path) > 2 and raw_path[0] == '/' and raw_path[2] == ':':
+        raw_path = raw_path[1:]
+
+    local_path = os.path.normpath(raw_path)
+
+    if not os.path.isabs(local_path):
+        if base_dir:
+            local_path = os.path.normpath(os.path.join(base_dir, local_path))
+        else:
+            local_path = os.path.abspath(local_path)
+
+    return local_path
+
+
+def to_absolute_file_uri(url, base_dir=None):
+    """Convert a relative file:// URI to absolute. Non-file URIs pass through unchanged."""
+    local_path = resolve_file_uri(url, base_dir=base_dir)
+    if local_path is None:
+        return url
+    return "file://" + local_path
+
+
+def _get_base_dir(config_template):
+    """Return the resolved BaseDir from a run config template, or None."""
+    raw = config_template.get("SystemConfig", {}).get("BaseDir", "")
+    if not raw:
+        return None
+    return resolve_file_uri(raw)
+
+
 def download_zip_with_requests(url, download_path):
-    """
-    Download a file from a URL or copy from a local file path.
-    
-    Args:
-        url (str): URL to download from (http/https) or local file path (file://)
-        download_path (str): Path where the file should be saved
-    """
     try:
         Path(download_path).parent.mkdir(parents=True, exist_ok=True)
         
-        # Parse the URL to determine if it's a local file or remote URL
         parsed_url = urlparse(url)
-        
-        if parsed_url.scheme == 'file':
-            # Handle local file:// URLs
-            local_file_path = parsed_url.path
-            
-            # Handle Windows-style paths with backslashes in file:// URLs
-            # First, check if the original URL contains backslashes (Windows style)
-            if '\\' in url:
-                # Extract path after file:// and normalize backslashes
-                path_part = url[7:]  # Remove 'file://' prefix
-                local_file_path = os.path.normpath(path_part)
-            else:
-                # Handle standard file:// URLs with forward slashes
-                # On Windows, handle drive letters properly (e.g., file:///C:/path)
-                if os.name == 'nt' and local_file_path.startswith('/') and len(local_file_path) > 1 and local_file_path[2] == ':':
-                    local_file_path = local_file_path[1:]
-                # Convert forward slashes to backslashes on Windows
-                local_file_path = os.path.normpath(local_file_path)
-            
+        local_file_path = resolve_file_uri(url)
+
+        if local_file_path is not None:
             if not os.path.exists(local_file_path):
                 raise FileNotFoundError(f"Local file not found: {local_file_path}")
-            
-            # Copy the local file to the destination
             shutil.copy2(local_file_path, download_path)
             print(f"Successfully copied {os.path.getsize(download_path)} bytes from {local_file_path} to: {download_path}")
-            
+
         elif parsed_url.scheme in ['http', 'https']:
-            # Handle remote HTTP/HTTPS URLs
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
             }
@@ -255,7 +268,7 @@ def download_zip_with_requests(url, download_path):
                 for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
             print(f"Successfully downloaded {os.path.getsize(download_path)} bytes to: {download_path}")
-            
+
         else:
             raise ValueError(f"Unsupported URL scheme: {parsed_url.scheme}. Only 'http', 'https', and 'file' are supported.")
             
@@ -275,12 +288,14 @@ def generate_mmlu_input_files(input_dir: str, input_config_template: dict, run_c
     kwargs = {}
     saved_input_files = []
     tokenizer_config_extra = {"trust_remote_code": True}
+    base_dir = _get_base_dir(run_config_template)
     tokenizer_data_path = (
         run_config_template
         .get("Scenarios", [{}])[0]
         .get("Models", [{}])[0]
         .get("TokenizerPath", "")
     )
+    tokenizer_data_path = to_absolute_file_uri(tokenizer_data_path, base_dir=base_dir)
     execution_provider_name = (
         run_config_template
         .get("Scenarios", [{}])[0]
@@ -417,12 +432,19 @@ def generate_mlperf_config_file(input_files: list[str], config_template: dict):
         mlperf_config_filepath = os.path.join(input_dir, "mlperf_config.json")
         
         mlperf_config = config_template.copy()
+        base_dir = _get_base_dir(config_template)
         
         for i in range(len(mlperf_config["Scenarios"])):
             mlperf_config["Scenarios"][i]["InputFilePath"] = ["file://" + input_file_path]
             mlperf_config["Scenarios"][i]["ResultsVerificationFile"] = "file://" + dummy_results_verification_filepath
             mlperf_config["Scenarios"][i]["Iterations"] = 1
             mlperf_config["Scenarios"][i]["WarmUp"] = 0
+
+            if not base_dir:
+                for model in mlperf_config["Scenarios"][i].get("Models", []):
+                    for key, value in model.items():
+                        if isinstance(value, str) and value.startswith("file:"):
+                            model[key] = to_absolute_file_uri(value)
         
         if check_existing_config_file(mlperf_config_filepath, mlperf_config):
             valid_results = False
@@ -476,12 +498,14 @@ def generate_tinymmlu_input_config_files(working_dir: str, config: dict, input_c
     answers = ["A", "B", "C", "D"]
     
     tokenizer_config_extra = {"trust_remote_code": True}
+    base_dir = _get_base_dir(run_config_template)
     tokenizer_data_path = (
         run_config_template
         .get("Scenarios", [{}])[0]
         .get("Models", [{}])[0]
         .get("TokenizerPath", "")
     )
+    tokenizer_data_path = to_absolute_file_uri(tokenizer_data_path, base_dir=base_dir)
     execution_provider_name = (
         run_config_template
         .get("Scenarios", [{}])[0]

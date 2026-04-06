@@ -1,0 +1,7 @@
+datasets==4.2.0
+# these are the versions the recipes were last validated with
+onnxruntime-genai-cuda==0.11.2
+onnxruntime-gpu==1.24.1
+optimum==2.0.0
+# newer transformers might have incompatibility with gptq passes
+transformers==4.57.3

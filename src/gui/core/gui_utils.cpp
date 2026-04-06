@@ -54,12 +54,14 @@ QString GetOSIcon(const QString& name) {
   return ":/icons/resources/icons/os.png";
 }
 
-double BytesToGb(size_t bytes) { return bytes / (1024.0 * 1024.0 * 1024.0); }
+double BytesToGb(size_t bytes) { return cil::utils::BytesToGb(bytes); }
 
-QString GBToString(double gb) { return QString::number(qRound(gb)) + " GB"; }
+QString GBToString(double gb) {
+  return QString::fromStdString(cil::utils::GBToString(gb));
+}
 
 double BytesToNearestGB(size_t bytes) {
-  return std::round(bytes / (1024.0 * 1024.0 * 1024.0));
+  return cil::utils::BytesToNearestGB(bytes);
 }
 
 QString BytesToHumanReadableString(uint64_t bytes) {

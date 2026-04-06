@@ -24,6 +24,33 @@ LLMInference::LLMInference(
           FindSafeTensorsDir(std::filesystem::path(model_path_).parent_path());
 }
 
+const API_IHV_DeviceList_t* const LLMInference::EnumerateDevices() {
+  if (device_type_ != "GPU") return BaseInferenceCommon::EnumerateDevices();
+
+  static DeviceListPtr dev_list = []() -> DeviceListPtr {
+    char* gpu_name_ptr = llm_get_gpu_name();
+    if (!gpu_name_ptr) {
+      API_IHV_DeviceList_t* dl = AllocateDeviceList(0);
+      dl->count = 0;
+      return DeviceListPtr(dl);
+    }
+
+    API_IHV_DeviceList_t* dl = AllocateDeviceList(1);
+    dl->count = 1;
+    dl->device_info_data[0].device_id = 0;
+
+    std::strncpy(dl->device_info_data[0].device_name, gpu_name_ptr,
+                 API_IHV_MAX_DEVICE_NAME_LENGTH - 1);
+    dl->device_info_data[0].device_name[API_IHV_MAX_DEVICE_NAME_LENGTH - 1] =
+        '\0';
+
+    llm_free_string(gpu_name_ptr);
+    return DeviceListPtr(dl);
+  }();
+
+  return dev_list.get();
+}
+
 std::filesystem::path LLMInference::FindSafeTensorsDir(const std::filesystem::path& dir) {
     for (const auto& entry : std::filesystem::recursive_directory_iterator(dir)) {
         if (std::filesystem::is_regular_file(entry) && entry.path().extension() == ".safetensors") {

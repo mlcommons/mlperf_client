@@ -7,8 +7,8 @@ let package = Package(
     name: "LlamaMLX",
 
     platforms: [
-        .macOS("13.3"),
-        .iOS(.v16),
+        .macOS("14.0"),
+        .iOS(.v17),
         .visionOS(.v1),
     ],
 
@@ -24,6 +24,7 @@ let package = Package(
             name: "LlamaMLX",
             dependencies: [
                 .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXFast", package: "mlx-swift"),
                 .product(name: "MLXRandom", package: "mlx-swift"),
                 .product(name: "MLXNN", package: "mlx-swift"),
                 .product(name: "MLXOptimizers", package: "mlx-swift"),

@@ -56,7 +56,8 @@ class AppController : public QObject {
 
  signals:
   void SwitchToPage(PageType page_type);
-  void ShowGlobalPopup(const QString& message);
+  void ShowGlobalPopup(const QString& message, bool is_progress = false);
+  void UpdateProgressPopup(int progress);
   void HidePopup();
 
  private slots:

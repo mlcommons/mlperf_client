@@ -9,9 +9,7 @@
 #include <OpenCL/opencl.h>
 #endif
 #include <log4cxx/logger.h>
-
-#include <infoware/cpu.hpp>
-#include <infoware/system.hpp>
+#include <sys/sysctl.h>
 
 using namespace log4cxx;
 LoggerPtr loggerSystemInfoProviderMacOS(
@@ -19,20 +17,37 @@ LoggerPtr loggerSystemInfoProviderMacOS(
 
 namespace cil {
 
-static std::string cpu_architecture_name(
-    iware::cpu::architecture_t architecture) noexcept {
-  switch (architecture) {
-    case iware::cpu::architecture_t::x64:
-      return "x64";
-    case iware::cpu::architecture_t::arm:
-      return "ARM";
-    case iware::cpu::architecture_t::itanium:
-      return "Itanium";
-    case iware::cpu::architecture_t::x86:
-      return "x86";
-    default:
-      return "Unknown";
+static std::string SysCtlGetString(const std::string& name) {
+  size_t size = 0;
+  if (sysctlbyname(name.c_str(), nullptr, &size, nullptr, 0) != 0 ||
+      size == 0) {
+    LOG4CXX_ERROR(loggerSystemInfoProviderMacOS,
+                  "Failed to retrieve size of (" + name + ")");
+    return {};
   }
+
+  std::string result(size, '\0');
+  if (sysctlbyname(name.c_str(), result.data(), &size, nullptr, 0) != 0) {
+    LOG4CXX_ERROR(loggerSystemInfoProviderMacOS,
+                  "Failed to retrieve (" + name + ")");
+    return {};
+  }
+
+  if (!result.empty() && result.back() == '\0') result.pop_back();
+
+  return result;
+}
+
+template <typename NumberType>
+static NumberType SysCtlGetNumber(const std::string& name) {
+  NumberType value = {};
+  size_t size = sizeof(value);
+  if (sysctlbyname(name.c_str(), &value, &size, nullptr, 0) != 0) {
+    LOG4CXX_ERROR(loggerSystemInfoProviderMacOS,
+                  "Failed to retrieve (" + name + ")");
+    return {};
+  }
+  return value;
 }
 
 SystemInfoProviderMacOS::SystemInfoProviderMacOS()
@@ -45,19 +60,20 @@ SystemInfoProviderMacOS::SystemInfoProviderMacOS()
 }
 
 void SystemInfoProviderMacOS::FetchCpuInfo() {
-  try {
-    auto quantities = iware::cpu::quantities();
-    cpu_info_ = CPUInfo{cpu_architecture_name(iware::cpu::architecture()),
-                        iware::cpu::model_name(),
-                        iware::cpu::vendor_id(),
-                        iware::cpu::frequency(),
-                        quantities.logical,
-                        quantities.physical};
-  } catch (const std::exception& e) {
-    LOG4CXX_ERROR(loggerSystemInfoProviderMacOS,
-                  "Failed to fetch CPU info: " << e.what());
-    cpu_info_ = CPUInfo{"", "", "", 0, 0, 0};
-  }
+  std::string architecture;
+  cpu_type_t cpu_type = SysCtlGetNumber<cpu_type_t>("hw.cputype");
+  if (cpu_type == CPU_TYPE_ARM64)
+    architecture = "arm64";
+  else if (cpu_type == CPU_TYPE_ARM)
+    architecture = "arm";
+
+  unsigned logical_cpus = SysCtlGetNumber<unsigned>("hw.logicalcpu");
+  unsigned physical_cpus = SysCtlGetNumber<unsigned>("hw.physicalcpu");
+  std::string cpu_model = SysCtlGetString("machdep.cpu.brand_string");
+
+  cpu_info_ = CPUInfo{
+      architecture, cpu_model, "Apple", 0, logical_cpus, physical_cpus,
+  };
 }
 
 void SystemInfoProviderMacOS::FetchGpuInfo() {
@@ -108,7 +124,7 @@ void SystemInfoProviderMacOS::FetchGpuInfo() {
 }
 
 void SystemInfoProviderMacOS::FetchNpuInfo() {
-  if (cpu_info_.architecture == "ARM") {
+  if (cpu_info_.architecture == "arm64") {
     npu_info_.name = "ANE";
     npu_info_.dedicated_memory_size = npu_info_.shared_memory_size = 0;
     npu_info_.vendor = "Apple";
@@ -116,29 +132,18 @@ void SystemInfoProviderMacOS::FetchNpuInfo() {
 }
 
 void SystemInfoProviderMacOS::FetchSystemMemoryInfo() {
-  try {
-    auto memory = iware::system::memory();
-    memory_info_ =
-        MemoryInfo{memory.physical_available, memory.physical_total, 0};
-  } catch (const std::exception& e) {
-    LOG4CXX_ERROR(loggerSystemInfoProviderMacOS,
-                  "Failed to fetch memory info: " << e.what());
-    memory_info_ = MemoryInfo{0, 0, 0};
-  }
+  size_t physical_total = SysCtlGetNumber<size_t>("hw.memsize");
+  size_t physical_available = physical_total - getMemoryUsage();
+  memory_info_ = MemoryInfo{physical_available, physical_total, 0};
 }
 
 void SystemInfoProviderMacOS::FetchOsInfo() {
-  try {
-    auto os_info = iware::system::OS_info();
-    os_info_ = OSInfo{os_info.name, os_info.name,
-                      std::to_string(os_info.major) + '.' +
-                          std::to_string(os_info.minor) + '.' +
-                          std::to_string(os_info.patch) + " build " +
-                          std::to_string(os_info.build_number)};
-  } catch (const std::exception& e) {
-    LOG4CXX_ERROR(loggerSystemInfoProviderMacOS,
-                  "Failed to fetch OS info: " << e.what());
-  }
+  std::string os_type = SysCtlGetString("kern.ostype");
+  std::string os_release = SysCtlGetString("kern.osrelease");
+  size_t build_number = SysCtlGetNumber<size_t>("kern.osrevision");
+
+  os_info_ = OSInfo{os_type, os_type,
+                    os_release + " build " + std::to_string(build_number)};
 }
 
 void SystemInfoProviderMacOS::FetchPerformanceInfo() {
@@ -192,6 +197,10 @@ void SystemInfoProviderMacOS::FetchCpuUsage() {
 }
 
 void SystemInfoProviderMacOS::FetchMemoryUsage() {
+  performance_info_.memory_usage = getMemoryUsage();
+}
+
+size_t SystemInfoProviderMacOS::getMemoryUsage() const {
   vm_statistics64_data_t vmStats;
   mach_msg_type_number_t count = HOST_VM_INFO64_COUNT;
 
@@ -200,14 +209,13 @@ void SystemInfoProviderMacOS::FetchMemoryUsage() {
   if (ret != KERN_SUCCESS) {
     LOG4CXX_ERROR(loggerSystemInfoProviderMacOS,
                   "Failed to fetch memory statistics, ret: " << ret);
-    return;
+    return 0;
   }
 
   mach_vm_size_t pageSize = vm_kernel_page_size;
-  performance_info_.memory_usage =
-      (size_t)(vmStats.wire_count + vmStats.compressor_page_count +
-               vmStats.internal_page_count) *
-      pageSize;
+  return (size_t)(vmStats.wire_count + vmStats.compressor_page_count +
+                  vmStats.internal_page_count) *
+         pageSize;
 }
 
 void SystemInfoProviderMacOS::FetchNpuGpuUsages() {

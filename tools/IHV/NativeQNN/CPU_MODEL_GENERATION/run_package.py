@@ -67,16 +67,7 @@ def run_process(env_name, qairt_path='qairt', model_name="llama2"):
         print("Rust has been installed successfully in virtual environment...")
         
         print("Clonning the git repository...")
-        if model_name == "llama2":
-            if(os.path.exists("Llama-2-7b-chat-hf")):
-                print("Repository already exists...")
-            else:
-                git_clone_command = f"git clone https://huggingface.co/meta-llama/Llama-2-7b-chat-hf"
-                subprocess.run(git_clone_command, shell=True, check=True)
-                print("Git repo is clonned successfully...")
-            model_file_path = os.path.abspath("Llama-2-7b-chat-hf") 
-            out_file_path = os.path.join(os.path.abspath(""), "llama2_cpu.bin")
-        elif model_name == "llama3":
+        if model_name == "llama3":
             if(os.path.exists("Llama-3.1-8B-Instruct")):
                 print("Repository already exists...")
             else:
@@ -94,6 +85,16 @@ def run_process(env_name, qairt_path='qairt', model_name="llama2"):
                 print("Git repo is clonned successfully...")
             model_file_path = os.path.abspath("Phi-3.5-mini-instruct") 
             out_file_path = os.path.join(os.path.abspath(""), "phi3_5_cpu.bin")
+        elif model_name == "phi4":
+            if(os.path.exists("Phi-4-reasoning")):
+                print("Repository already exists...")
+            else:
+                git_clone_command = f"git clone https://huggingface.co/microsoft/Phi-4-reasoning"
+                subprocess.run(git_clone_command, shell=True, check=True)
+                print("Git repo is clonned successfully...")
+            model_file_path = os.path.abspath("Phi-4-reasoning") 
+            out_file_path = os.path.join(os.path.abspath(""), "phi4_cpu.bin")
+            phi4_config_file = "phi4_config_file.json" 
         
 
         path_composer = os.path.join(env["QAIRT_SDK_ROOT"], "bin", "x86_64-windows-msvc", "qnn-genai-transformer-composer")
@@ -101,7 +102,10 @@ def run_process(env_name, qairt_path='qairt', model_name="llama2"):
         
         
         print("Running Bin Generation...")
-        command = f"python {path_composer} --quantize Z8 --outfile {out_file_path} --model {model_file_path}" 
+        command = f"python {path_composer} --quantize Z8 --outfile {out_file_path} --model {model_file_path}"
+        if(model_name == "phi4"):
+            command = command + f" --config_file {phi4_config_file}"
+
         subprocess.run(command, shell=True, check=True, env=env)
         print("Bin Generation is completed successfully for model " + model_name + "....")
         
@@ -112,7 +116,7 @@ def run_process(env_name, qairt_path='qairt', model_name="llama2"):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Run package script.')
     parser.add_argument('--qairt', default='qairt', help='Path to QAIRT SDK (default: qairt)')
-    parser.add_argument('--model', default='llama2', help='Path to Model (default: llama2)')
+    parser.add_argument('--model', default='llama3', help='Path to Model (default: llama3)')
     args = parser.parse_args()
     print(args.model)
 

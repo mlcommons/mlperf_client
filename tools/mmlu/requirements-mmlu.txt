@@ -3,3 +3,4 @@ loguru
 tqdm
 huggingface_hub
 transformers
+requests

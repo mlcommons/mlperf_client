@@ -13,7 +13,7 @@
             "ov_quant_config": {
                 "weight_format": "int4",
                 "group_size": -1,
-                "dataset": "wikitext2",
+                "dataset": "c4-new",
                 "ratio": 1,
                 "all-layers": true,
                 "awq": true,

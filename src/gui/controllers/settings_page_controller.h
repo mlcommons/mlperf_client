@@ -24,7 +24,9 @@ class SettingsPageController : public AbstractController {
   QString GetDataPath() const;
   QString GetLogsPath() const;
   bool GetKeepLogs() const;
+  bool AskBeforeDownload() const;
 
+  void SetDoNotAskBeforeDownload();
  signals:
   void DataPathChanged(const QString& path);
   void LogsPathChanged(const QString& path);
@@ -35,6 +37,7 @@ class SettingsPageController : public AbstractController {
   void OnDataPathChanged(const QString& path);
   void OnLogsPathChanged(const QString& path);
   void OnKeepLogsChanged(bool keep);
+  void OnAskBeforeDownloadChanged(bool ask);
   void OnResetToDefaultsRequested();
 
  private:

@@ -208,3 +208,21 @@ bool cil::IHV::NativeOpenVINO::Deinit(const API_IHV_Deinit_t& api) {
 DEFINE_API_IHV_BASIC_IMPL(cil::IHV::NativeOpenVINO,
                           API_IHV_NATIVE_OPENVINO_NAME,
                           API_IHV_NATIVE_OPENVINO_VERSION)
+
+#ifdef _WIN32
+#include <Windows.h>
+
+BOOL WINAPI DllMain(HINSTANCE hinstDLL,
+                    DWORD fdwReason,
+                    LPVOID lpvReserved ) {
+  if (fdwReason == DLL_PROCESS_ATTACH) {
+    // FIXME Workaround to be removed in the next version
+    // Increase library counter to avoid static objects
+    // destructors ordering issue.
+    LoadLibraryExA("IHV_NativeOpenVINO.dll",
+                   0,
+                   LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
+  }
+  return TRUE;
+}
+#endif

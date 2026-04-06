@@ -60,12 +60,12 @@ source ~/.zshrc
 ```
 
 #### macOS GUI Mode
-To build the application in GUI mode on macOS, you need to have the latest Qt 6.8.0 installed. Follow these steps:
+To build the application in GUI mode on macOS, you need Qt 6.10.2 (or compatible 6.x).
 
-1. Install Qt 6.8.0:
-   - Download and install Qt 6.8.0 from the [official Qt website](https://www.qt.io/download).
+1. **Install Qt 6.10.2:**
+   - Download and install Qt 6.10.2 from the [official Qt website](https://www.qt.io/download).
    - During the installation process, select the following:
-     - Qt 6.8.0 and add
+     - Qt 6.10.2 and add
        - Desktop
 
 ### iOS
@@ -89,9 +89,10 @@ The prerequisites listed under [macOS GUI Mode](#macos-gui-mode) also apply to i
   - Option 2: As an alternative to LLVM, you can install Conda from https://conda.io/projects/conda/en/latest/user-guide/install/index.html. After installing Conda, use it to install clang tools from https://anaconda.org/conda-forge/clang-tools. Then, ensure you run CMake from within the Conda environment; this setup helps resolve any configuration errors by ensuring CMake recognizes the clang tools.
 
 #### Windows GUI Mode
-To build the application in GUI mode on Windows, you need to have the latest Qt 6.9.0 installed. Follow these steps:
-1. Install Qt 6:
-   - Required Version: Qt 6.9.0.
+To build the application in GUI mode on Windows, you need Qt 6.10.2 (or compatible 6.x).
+
+1. **Install Qt 6.10.2:**
+   - Required Version: Qt 6.10.2.
    - Official Download / Installation [official Qt website](https://www.qt.io/download):
 
      You can use the official precompiled binaries of the library for Release builds, no need to compile it yourself, but for debug mode you will need to build it from source and configure the runtime flags correctly.
@@ -164,7 +165,7 @@ The application will be located in `Bin/MacOS/Debug/mlperf-macos`.
 1. Generate the build configuration with CMake
     ```bash
     mkdir -p "build"
-    cmake -G "Xcode" -S . -B "build" -DMLPERF_BUILD_GUI=ON -DCMAKE_PREFIX_PATH="/Users/user/Qt/6.8.0/macos"
+    cmake -G "Xcode" -S . -B "build" -DMLPERF_BUILD_GUI=ON -DCMAKE_PREFIX_PATH="/Users/user/Qt/6.10.2/macos"
     cd build
     xcodebuild -arch arm64 -scheme GUI -configuration Release -verbose
     ```
@@ -189,7 +190,7 @@ The application will be located in `Bin/MacOS/Debug/mlperf-macos`.
 1. Generate the build configuration with CMake
     ```bash
     mkdir -p "build"
-    cmake -G "Xcode" -S . -B "build" -DMLPERF_BUILD_GUI=ON -DCMAKE_PREFIX_PATH="/[Qt Dir]/6.8.0/ios" -DCMAKE_TOOLCHAIN_FILE=toolchain/ios.toolchain.cmake -DMLPERF_XCODE_SIGN_IDENTITY="Apple Development" -DMLPERF_XCODE_DEVELOPMENT_TEAM=[Dev Team Id]
+    cmake -G "Xcode" -S . -B "build" -DMLPERF_BUILD_GUI=ON -DCMAKE_PREFIX_PATH="/[Qt Dir]/6.10.2/ios" -DCMAKE_TOOLCHAIN_FILE=toolchain/ios.toolchain.cmake -DMLPERF_XCODE_SIGN_IDENTITY="Apple Development" -DMLPERF_XCODE_DEVELOPMENT_TEAM=[Dev Team Id]
     ```
 2. Build and Run the application
 - Open the `MLPerf.xcodeproj` project file in Xcode and select `GUI` as the target.
@@ -262,7 +263,7 @@ The application will be located in `Bin\Windows\Debug\mlperf-windows.exe`.
 1. Generate the build configuration with CMake
     ```bash
     mkdir -p "build"
-    cmake -G "Visual Studio 17 2022" -A x64 -S . -B "build" -DMLPERF_BUILD_GUI=ON -DCMAKE_PREFIX_PATH="C:/Qt/6.8.0/msvc2019_64" -DCMAKE_BUILD_TYPE=Release
+    cmake -G "Visual Studio 17 2022" -A x64 -S . -B "build" -DMLPERF_BUILD_GUI=ON -DCMAKE_PREFIX_PATH="C:/Qt/6.10.2/msvc2019_64" -DCMAKE_BUILD_TYPE=Release
     cd build
     msbuild mlperf.sln -p:Configuration=Release -ds:True -v:diag
     ```

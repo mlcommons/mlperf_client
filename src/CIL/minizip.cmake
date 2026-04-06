@@ -4,6 +4,36 @@ set(MINIZIP_INSTALL_DIR ${CMAKE_BINARY_DIR}/minizip-ng-install)
 set(MINIZIP_INCLUDE_DIR ${MINIZIP_INSTALL_DIR}/include)
 set(MINIZIP_LIB_DIR ${MINIZIP_INSTALL_DIR}/lib)
 
+set(MINIZIP_PATCH_FILE ${CMAKE_CURRENT_LIST_DIR}/minizip-patch.diff)
+set(MINIZIP_SOURCE_DIR ${CMAKE_SOURCE_DIR}/deps/minizip-ng)
+
+
+find_package(Git QUIET REQUIRED)
+    
+execute_process(
+     COMMAND ${GIT_EXECUTABLE} apply --check ${MINIZIP_PATCH_FILE}
+     WORKING_DIRECTORY ${MINIZIP_SOURCE_DIR}
+     RESULT_VARIABLE PATCH_CHECK_RESULT
+     ERROR_QUIET
+)
+    
+if(PATCH_CHECK_RESULT EQUAL 0)
+     execute_process(
+       COMMAND ${GIT_EXECUTABLE} apply ${MINIZIP_PATCH_FILE}
+        WORKING_DIRECTORY ${MINIZIP_SOURCE_DIR}
+        RESULT_VARIABLE PATCH_RESULT
+    )
+    if(PATCH_RESULT EQUAL 0)
+        message(STATUS "Minizip-ng patch applied successfully")
+    else()
+        message(FATAL_ERROR "Failed to apply minizip-ng patch")
+    endif()
+else()
+    message(STATUS "Minizip-ng patch already applied (skipping)")
+endif()
+
+# =============================================================================
+
 if (NOT APPLE AND NOT UNIX)
     set(CMAKE_C_FLAGS_RELEASE "/MT")
     set(CMAKE_CXX_FLAGS_RELEASE "/MT")

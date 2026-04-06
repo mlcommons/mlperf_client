@@ -231,7 +231,8 @@ void StartPageController::OnEPsFilterChanged() {
 void StartPageController::OnSelectAllToggled(bool select) {
   auto start_page = dynamic_cast<gui::views::StartPage*>(view_);
   for (int i = 0; i < eps_configs_.size(); ++i)
-    start_page->SetEPCardSelected(i, select && start_page->IsEPCardVisible(i));
+    start_page->SetEPCardSelected(i, select && start_page->IsEPCardVisible(i) &&
+                                         start_page->IsEPCardEnabled(i));
 }
 }  // namespace controllers
 }  // namespace gui

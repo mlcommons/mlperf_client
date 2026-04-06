@@ -3,8 +3,7 @@
 ## Requirements for Running
 
 <!-- markdown-link-check-disable-next-line -->
-* [Qualcomm Package Manager 3](https://qpm.qualcomm.com/#/main/tools/details/QPM3)
-* [QAIRT SDK](https://qpm.qualcomm.com/#/main/tools/details/qualcomm_neural_processing_sdk) (Version 2.35.3.250617)
+* [QAIRT SDK](https://softwarecenter.qualcomm.com/api/download/software/sdks/Qualcomm_AI_Runtime_Community/All/2.43.1.260218/v2.43.1.260218.zip) (Version 2.43.1.260218)
 * Python Version Requirement 3.10
 * Windows machine capable of running powershell with latest python installed
 * QAIRT SDK Location:\
@@ -15,6 +14,6 @@
 ```shell
 .\run_conversion.ps1 -qairt "C:\path\to\qairt_sdk" -model model_name
 ```
-model_name can be any of them "llama2", "llama3" or "phi3.5" based on what you want to generate.
+model_name can be any of them "llama3", "phi3.5" or "phi4" based on what you want to generate.
 Replace "C:\path\to\qairt_sdk" with the actual path to your QAIRT SDK installation. If not provided, the script assumes QAIRT is located in the same directory as the script.
-* Output Binary of CPU will be generated in current folder with name **"llama2_cpu.bin"**, **"llama3_cpu.bin"** or **"phi3_5_cpu.bin"**
+* Output Binary of CPU will be generated in current folder with name **"phi4_cpu.bin"**, **"llama3_cpu.bin"** or **"phi3_5_cpu.bin"**

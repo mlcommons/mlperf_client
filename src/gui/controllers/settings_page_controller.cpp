@@ -39,9 +39,10 @@ void SettingsPageController::SetView(views::SettingsPage* view) {
   view->SetDataPaths(data_paths);
   view->SetLogPaths(log_paths);
 #endif
-  view->SetKeepLogs(SettingsManager::getInstance().GetKeepLogs());
-
   const auto& settings = SettingsManager::getInstance();
+  view->SetKeepLogs(settings.GetKeepLogs());
+  view->SetAskBeforeDownload(settings.AskBeforeDownload());
+
   SetDataCurrentPath(settings.GetDataPath());
   SetLogsCurrentPath(settings.GetLogsPath());
 
@@ -51,6 +52,8 @@ void SettingsPageController::SetView(views::SettingsPage* view) {
           &SettingsPageController::OnLogsPathChanged);
   connect(view, &views::SettingsPage::KeepLogsChanged, this,
           &SettingsPageController::OnKeepLogsChanged);
+  connect(view, &views::SettingsPage::AskBeforeDownloadChanged, this,
+          &SettingsPageController::OnAskBeforeDownloadChanged);
   connect(view, &views::SettingsPage::ClearCacheRequested, this,
           &SettingsPageController::ClearCacheRequested);
   connect(view, &views::SettingsPage::ResetToDefaultsRequested, this,
@@ -81,6 +84,21 @@ bool SettingsPageController::GetKeepLogs() const {
   return true;
 }
 
+bool SettingsPageController::AskBeforeDownload() const {
+  if (view_) {
+    auto settings_page = dynamic_cast<views::SettingsPage*>(view_);
+    return settings_page->AskBeforeDownload();
+  }
+  return true;
+}
+
+void SettingsPageController::SetDoNotAskBeforeDownload() {
+  if (view_) {
+    auto settings_page = dynamic_cast<views::SettingsPage*>(view_);
+    settings_page->SetAskBeforeDownload(false);
+  }
+}
+
 void SettingsPageController::OnDataPathChanged(const QString& path) {
   SettingsManager::getInstance().SetDataPath(path);
   emit DataPathChanged(path);
@@ -96,13 +114,19 @@ void SettingsPageController::OnKeepLogsChanged(bool checked) {
   emit KeepLogsChanged(checked);
 }
 
+void SettingsPageController::OnAskBeforeDownloadChanged(bool ask) {
+  SettingsManager::getInstance().SetAskBeforeDownload(ask);
+}
+
 void SettingsPageController::OnResetToDefaultsRequested() {
   if (view_) {
     auto settings_page = dynamic_cast<views::SettingsPage*>(view_);
     settings_page->SetDataCurrentPath(data_default_path_);
     OnDataPathChanged(data_default_path_);
 
-    OnKeepLogsChanged(true);
+    settings_page->SetKeepLogs(SettingsManager::kKeepLogsDefault);
+    settings_page->SetAskBeforeDownload(SettingsManager::kKeepLogsDefault);
+
     settings_page->SetLogsCurrentPath(logs_default_path_);
     OnLogsPathChanged(logs_default_path_);
   }

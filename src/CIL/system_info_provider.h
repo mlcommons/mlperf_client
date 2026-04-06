@@ -88,7 +88,12 @@ class SystemInfoProvider {
   const CPUInfo& GetCpuInfo() const { return cpu_info_; }
   const std::vector<GPUInfo>& GetGpuInfo() const { return gpu_info_; }
   const NPUInfo& GetNpuInfo() const { return npu_info_; }
-  const MemoryInfo& GetMemoryInfo() const { return memory_info_; }
+  const MemoryInfo& GetMemoryInfo(bool refresh = false) {
+    if (refresh) {
+      this->FetchSystemMemoryInfo();
+    }
+    return memory_info_;
+  }
   const OSInfo& GetOsInfo() const { return os_info_; }
 
   const PerformanceInfo& GetPerformanceInfo();

@@ -25,6 +25,7 @@ void SettingsPage::SetupUi() {
   ui_.data_path_label_->setProperty("class", "large_strong_label");
   ui_.logs_path_label_->setProperty("class", "large_strong_label");
   ui_.keep_logs_label_->setProperty("class", "medium_normal_label");
+  ui_.ask_download_label_->setProperty("class", "medium_normal_label");
   ui_.cooldown_label_->setProperty("class", "large_strong_label");
   ui_.cooldown_description_label_->setProperty("class", "medium_normal_label");
 
@@ -57,6 +58,8 @@ void SettingsPage::InstallSignalHandlers() {
           &SettingsPage::LogsPathChanged);
   connect(ui_.log_switch_, &ToggleButton::toggled, this,
           &SettingsPage::KeepLogsChanged);
+  connect(ui_.ask_download_switch_, &ToggleButton::toggled, this,
+          &SettingsPage::AskBeforeDownloadChanged);
   connect(ui_.clear_cache_btn_, &QPushButton::clicked, this,
           &SettingsPage::ClearCacheRequested);
   connect(ui_.reset_to_defaults_btn_, &QPushButton::clicked, this,
@@ -80,6 +83,14 @@ void SettingsPage::SetLogsCurrentPath(const QString &path) {
 }
 
 void SettingsPage::SetKeepLogs(bool keep) { ui_.log_switch_->setChecked(keep); }
+
+void SettingsPage::SetAskBeforeDownload(bool ask) {
+  ui_.ask_download_switch_->setChecked(ask);
+}
+
+bool SettingsPage::AskBeforeDownload() const {
+  return ui_.ask_download_switch_->isChecked();
+}
 
 QString SettingsPage::GetDataCurrentPath() const {
   return ui_.data_path_box_->GetSelectedPath();

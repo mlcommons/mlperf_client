@@ -22,6 +22,8 @@ public:
     );
     ~LLMInference() = default;
 
+    const API_IHV_DeviceList_t* const EnumerateDevices() override;
+
     void Init(const nlohmann::json& model_config);
     void Prepare() override;
     std::span<uint32_t const> Run(const std::span<uint32_t const> input_data,

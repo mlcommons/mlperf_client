@@ -60,7 +60,7 @@ add_subdirectory(../../../../../deps/JSONSchema JSONSchema)
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../../common" common_cil)
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../../common/directml" common_directml_cil)
 
-set(MML_OGA_URL   "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntimeGenAI.WinML/0.10.0")
+set(MML_OGA_URL   "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntimeGenAI.WinML/0.11.2")
 # set(MML_WAML_URL  "https://www.nuget.org/api/v2/package/Microsoft.Windows.AI.MachineLearning/0.3.131-beta")
 
 # Ensure ML package is available during configure
@@ -68,7 +68,7 @@ set(WASDKML_PACKAGE_ROOT   "${CMAKE_CURRENT_BINARY_DIR}/.nuget/packages/Microsof
 if(NOT EXISTS "${WASDKML_PACKAGE_ROOT}")
   message(STATUS "Microsoft.WindowsAppSDK.ML not found at ${WASDKML_PACKAGE_ROOT}; installing into build tree...")
   execute_process(
-    COMMAND powershell -NoProfile -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_SOURCE_DIR}/scripts/install-winappsdk-ml.ps1" -Version 1.8.2095 -OutputDir "${CMAKE_CURRENT_BINARY_DIR}/.nuget/packages"
+    COMMAND powershell -NoProfile -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_SOURCE_DIR}/scripts/install-winappsdk-ml.ps1" -Version 1.8.2119 -OutputDir "${CMAKE_CURRENT_BINARY_DIR}/.nuget/packages"
     WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
     RESULT_VARIABLE WINAPPSDK_ML_INSTALL_RES
     OUTPUT_VARIABLE WINAPPSDK_ML_INSTALL_OUT
@@ -175,8 +175,15 @@ target_include_directories(${PROJECT_NAME}
     "${WASDKML_METADATA_DIR}"
 )
 
-# Avoid WindowsAppSDK ML auto-initializer (MSBuild-only header dependencies)
-target_compile_definitions(${PROJECT_NAME} PRIVATE MICROSOFT_WINDOWSAPPSDK_ML_DISABLE_AUTOINITIALIZE)
+# Include the WindowsML auto-initializer for self-contained deployment
+# This provides the OrtGetApiBase symbol and handles onnxruntime.dll loading at runtime
+set(WINML_AUTOINIT_SRC "${WASDKML_INCLUDE_DIR}/WindowsMLAutoInitializer.SelfContained.cpp")
+if(EXISTS "${WINML_AUTOINIT_SRC}")
+  target_sources(${PROJECT_NAME} PRIVATE "${WINML_AUTOINIT_SRC}")
+  message(STATUS "Using WindowsML Self-Contained auto-initializer")
+else()
+  message(WARNING "WindowsMLAutoInitializer.SelfContained.cpp not found at ${WINML_AUTOINIT_SRC}")
+endif()
 
 set_target_properties(${PROJECT_NAME} PROPERTIES CXX_CLANG_TIDY "${CLANG_TIDY_COMMAND}")
 

@@ -1,21 +1,24 @@
 ## Usage
 
 ```bash
-mlperf-windows.exe -c Intel_OpenVINO_NPU_llama2.json
-mlperf-windows.exe -c Intel_OpenVINO_GPU_llama2.json
+mlperf-windows.exe -c Llama3.1/Intel_NativeOpenVINO_GPU_Default.json
+mlperf-windows.exe -c Llama3.1/Intel_NativeOpenVINO_NPU_Default.json
 
-mlperf-windows.exe -c Intel_OpenVINO_NPU_llama3.json
-mlperf-windows.exe -c Intel_OpenVINO_GPU_llama3.json
+mlperf-windows.exe -c phi3.5/Intel_NativeOpenVINO_GPU_Default.json
+mlperf-windows.exe -c phi3.5/Intel_NativeOpenVINO_NPU_Default.json
 
-mlperf-windows.exe -c Intel_OpenVINO_NPU_phi3.json
-mlperf-windows.exe -c Intel_OpenVINO_GPU_phi3.json
+mlperf-windows.exe -c extended/Llama2/Intel_NativeOpenVINO_GPU_Default.json
+mlperf-windows.exe -c extended/Llama2/Intel_NativeOpenVINO_NPU_Default.json
+
+mlperf-windows.exe -c extended/phi4/Intel_NativeOpenVINO_GPU_Default.json
+mlperf-windows.exe -c extended/phi4/Intel_NativeOpenVINO_NPU_Default.json
 ```
 
-An example config with files downloaded from web is available at `data/configs/vendors_default/Intel_OpenVINO_GPU_llama2.json`. If `LibraryPath` is not set within the config file, it allows the app to automatically download dependencies and unpack the builtin `IHV_NativeOpenVINO.dll`.
+An example config with files downloaded from web is available at `data/configs/Llama3.1/Intel_NativeOpenVINO_GPU_Default.json`. If `LibraryPath` is not set within the config file, it allows the app to automatically download dependencies and unpack the builtin `IHV_NativeOpenVINO.dll`.
 
 ## Model Building
 
-There are three steps to create the model
+There are three steps to create the models
 
 ### 1. Create the model using optimum-cli
 
@@ -25,22 +28,21 @@ Optimum Intel provides a simple interface to optimize Transformer and Diffuser m
 
 To install latest Optimum Intel release with required dependencies one can use `pip` as follows:
 
-Download OpenVINO 2025.3:
- - Windows - https://storage.openvinotoolkit.org/repositories/openvino_genai/packages/2025.3/windows/openvino_genai_windows_2025.3.0.0_x86_64.zip
- - Linux - https://storage.openvinotoolkit.org/repositories/openvino_genai/packages/2025.3/linux/openvino_genai_ubuntu24_2025.3.0.0_x86_64.tar.gz
+Download OpenVINO 2026.0 RC3:
+ - Windows - https://storage.openvinotoolkit.org/repositories/openvino_genai/packages/pre-release/2026.0.0.0rc3/openvino_genai_windows_2026.0.0.0rc3_x86_64.zip
+ - Linux - https://storage.openvinotoolkit.org/repositories/openvino_genai/packages/pre-release/2026.0.0.0rc3/openvino_genai_ubuntu24_2026.0.0.0rc3_x86_64.tar.gz
 
 ```bash
 python --version
 # Python 3.12.4
-cd openvino_genai_2025.3*/python
+cd openvino_genai_2026.0*/python
 pip install -r requirements.txt
 pip install --upgrade --upgrade-strategy eager "optimum[openvino]"
 
-pip freeze | grep nncf
-# nncf==2.16.0
-# upgrade nncf module using: pip install --upgrade nncf
-pip freeze | grep optimum-intel
-# optimum-intel-1.23.0
+# Install following pip packages. Use --force-reinstall if needed
+pip install nncf==2.19.0
+pip install transformers==4.55.4
+pip install optimum-intel==1.27.0
 ```
 
 #### 1.2. Convert model to OpenVINO IR format
@@ -50,7 +52,7 @@ Create the model from Hugging Face using following commands:
 ##### NPU models:
 ```bash
 optimum-cli export openvino -m meta-llama/Llama-2-7b-chat-hf --weight-format int4 --sym --group-size -1 --ratio 1.0 --all-layers --awq --scale-estimation --dataset=wikitext2  Llama-2-7b-chat-hf_ov-int4-CHw
-optimum-cli export openvino -m meta-llama/Llama-3.1-8B-Instruct --weight-format int4 --sym --group-size -1 --ratio 1.0 --all-layers --awq --scale-estimation --dataset=wikitext2 Llama-3.1-8B-Instruct_ov-int4-CHw
+optimum-cli export openvino -m meta-llama/Llama-3.1-8B-Instruct --weight-format int4 --sym --group-size -1 --ratio 1.0 --all-layers --awq --scale-estimation --dataset=c4 Llama-3.1-8B-Instruct_ov-int4-CHw
 optimum-cli export openvino -m microsoft/Phi-3.5-mini-instruct --weight-format int4 --sym --group-size -1 --ratio 1.0 --all-layers --awq --scale-estimation --dataset=wikitext2 Phi-3.5-mini-instruct_ov-int4-CHw
 ```
 
@@ -78,7 +80,7 @@ MLPerf Client require the tokenizer files inside a zip file.
 
 ## Additional Information
 
-- Make sure you update your system with the latest NPU and GPU drivers available. (posteriori to: NPU 32.0.100.4023, GPU 32.0.101.6881)
+- Make sure you update your system with the latest NPU and GPU drivers available. (posteriori to: NPU  32.0.100.4404, GPU 32.0.101.8509)
 - Ensure you have sufficient disk space and computational resources, as model conversion can be resource-intensive.
 - For a comprehensive guide, refer to https://github.com/huggingface/optimum-intel
 - "Export an LLM model via Hugging Face Optimum-Intel", https://docs.openvino.ai/2025/openvino-workflow-generative/inference-with-optimum-intel.html

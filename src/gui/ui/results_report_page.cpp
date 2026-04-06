@@ -18,10 +18,6 @@ void ResultsReportPage::SetupUi() {
   ui_.title_label_->setProperty("class", "title");
   ui_.export_button_->setProperty("class", "secondary_button_with_icon");
   ui_.export_button_->setProperty("has_border", true);
-#ifdef Q_OS_IOS
-  ui_.bottom_layout_->addStretch();
-  ui_.export_button_->hide();
-#endif
   ui_.run_new_benchmark_button_->setProperty("class", "primary_button");
   ui_.TTFT_label_->setProperty("class", "medium_normal_label");
   ui_.TPS_label1_->setProperty("class", "medium_normal_label");

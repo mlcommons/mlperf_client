@@ -1,0 +1,28 @@
+{
+    "input_model": {
+        "type": "OnnxModel",
+        "model_path": "/path/to/model/onnx"
+    },
+    "systems": {
+        "qnn_system": {
+            "type": "LocalSystem",
+            "accelerators": [
+                {
+                    "device": "gpu",
+                    "execution_providers": [
+                        "QNNExecutionProvider"
+                    ]
+                }
+            ]
+        }
+    },
+    "passes": {
+        "cb": {
+            "type": "EPContextBinaryGenerator"
+        }
+    },
+    "target": "qnn_system",
+    "output_dir": "/path/to/model",
+    "cache_dir": "cache",
+    "no_artifacts": false
+}

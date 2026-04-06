@@ -30,6 +30,8 @@ class SystemInfoProviderMacOS : public SystemInfoProvider {
   void FetchCpuGpuTemperatures();
 
  private:
+  size_t getMemoryUsage() const;
+
   host_cpu_load_info_data_t cpu_prev_load_info_;
 #if !MLPERF_PUBLISHING
   std::shared_ptr<SMCReader> smc_reader_;

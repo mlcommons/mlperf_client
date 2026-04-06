@@ -11,7 +11,10 @@
  */
 class SettingsManager {
  public:
-    /**
+  // Default values
+  static constexpr bool kKeepLogsDefault = true;
+  static constexpr bool kAskBeforeDownloadDefault = true;
+  /**
    * @brief Get singleton instance.
    * @return Reference to the singleton SettingsManager instance.
    */
@@ -29,7 +32,7 @@ class SettingsManager {
     m_settings.setValue(key, value);
     m_settings.sync();
   }
- 
+
   /**
    * @brief Get value for a given key, with optional default.
    * @param key The settings key to retrieve.
@@ -51,7 +54,14 @@ class SettingsManager {
   QString GetLogsPath() const { return value("logs_path", "").toString(); }
 
   void SetKeepLogs(bool keep) { SetValue("keep_logs", keep); }
-  bool GetKeepLogs() const { return value("keep_logs", true).toBool(); }
+  bool GetKeepLogs() const {
+    return value("keep_logs", kKeepLogsDefault).toBool();
+  }
+
+  void SetAskBeforeDownload(bool ask) { SetValue("ask_before_download", ask); }
+  bool AskBeforeDownload() const {
+    return value("ask_before_download", kAskBeforeDownloadDefault).toBool();
+  }
 
  private:
   SettingsManager() : m_settings("MLPerf", "MLPerf GUI") {}

@@ -208,9 +208,7 @@ static bool EnsureAndRegisterEPs(Ort::Env& env, cil::Logger& logger) {
         env.RegisterExecutionProviderLibrary(utf8_name.c_str(), path);
       } catch (const std::exception& e) {
         logger(cil::LogLevel::kWarning,
-               std::string(
-                   "EP registration failed (might be already registered): ") +
-                   e.what());
+               std::string("EP registration failed: ") + e.what());
       }
     }
 

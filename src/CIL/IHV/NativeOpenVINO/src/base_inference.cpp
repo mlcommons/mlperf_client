@@ -55,6 +55,18 @@ std::string getPluginsLocation(std::string_view deps_dir) {
   return "";
 }
 
+static bool starts_with(const std::string_view& s, const std::string_view& prefix) {
+  return s.compare(0, prefix.size(), prefix) == 0;
+}
+
+static std::string to_upper(std::string s) {
+  std::transform(s.begin(), s.end(), s.begin(),
+                 [](unsigned char ch) {
+                     return static_cast<char>(std::toupper(ch));
+                 });
+  return s;
+}
+
 }  // namespace
 
 namespace cil {
@@ -81,7 +93,13 @@ BaseInference::BaseInference(
     // List available devices by device type
     const auto devices = core->get_available_devices();
     for (const auto& d : devices) {
-      if (d.substr(0, device_type_.size()) == device_type_) {
+      if (!starts_with(d, device_type_)) {
+        continue;
+      }
+      const std::string full_name = core->get_property(d, ov::device::full_name);
+      const std::string name_upper = to_upper(full_name);
+      // allow only INTEL
+      if (name_upper.find("INTEL") != std::string::npos) {
         devices_.emplace_back(d);
       }
     }

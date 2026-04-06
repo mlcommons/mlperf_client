@@ -34,6 +34,13 @@ using Result = cil::infer::LLMInference::Result;
 using ResultSpan = std::span<Result const>;
 using ResultIter = ResultSpan::iterator;
 
+template <typename T = double>
+struct Statistics {
+  T average;
+  T min;
+  T max;
+};
+
 template <typename Acc = double, typename Iter>
 Acc arithmean(Iter begin, Iter end, auto Op) {
   if (begin == end) {
@@ -74,6 +81,7 @@ bool span_values_all(std::span<T const> lhs, std::span<T const> rhs) {
 struct PromptPerformanceResult {
   using MillisecDuration = cil::infer::LLMInference::MillisecDuration;
   using SecondsDuration = std::chrono::duration<double>;
+  using HardwareMetricStat = Statistics<double>;
 
   PromptPerformanceResult(std::span<Result const> prompt_results,
                           size_t warmup_count = 1) {
@@ -113,12 +121,21 @@ struct PromptPerformanceResult {
         });
     avg_token_latency =
         sum_avg_token_lat / (prompt_results.size() - warmup_count);
+
+    // Calculate hardware metrics
+    used_physical_memory = GetUsedMemoryStats(
+        prompt_results.begin() + warmup_count, prompt_results.end());
+    total_physical_memory =
+        static_cast<double>(cil::SystemInfoProvider::Instance()
+                                ->GetMemoryInfo()
+                                .physical_total) /
+        (1024.0 * 1024.0);  // in MB
   }
 
   PromptPerformanceResult(const PromptPerformanceResult& o) = default;
   PromptPerformanceResult(PromptPerformanceResult&& o) = default;
 
-  std::string ToString() {
+  std::string ToString() const {
     std::stringstream ss;
     ss << "[ Runs: " << total_runs_count
        << ", Average input: " << average_input_tokens
@@ -128,7 +145,10 @@ struct PromptPerformanceResult {
        << std::setprecision(3) << avg_ttft.count() << ", AVG latency (ms) "
        << std::fixed << std::setprecision(3) << avg_token_latency.count()
        << ", AVG 2nd latency (ms) " << std::fixed << std::setprecision(3)
-       << avg_2nd_latency.count() << " ]";
+       << avg_2nd_latency.count() << " ]" << std::endl;
+
+    ss << "[ Used Physical Memory (MB): " << used_physical_memory.average
+       << ", Total Physical Memory (MB): " << total_physical_memory << " ]";
 
     return ss.str();
   }
@@ -152,7 +172,7 @@ struct PromptPerformanceResult {
   //  0 - 2nd+ token latency
   //  1 - 3rd+ token latency, etc.
   MillisecDuration GetAvgNthTokenLatency(ResultIter begin, ResultIter end,
-                                         size_t offset = 0) {
+                                         size_t offset = 0) const {
     MillisecDuration s{0.0};
     size_t cnt = 0;
     for (auto it = begin; it != end; ++it) {
@@ -166,6 +186,27 @@ struct PromptPerformanceResult {
     return cnt != 0 ? MillisecDuration{s / cnt} : MillisecDuration{0.0};
   }
 
+  HardwareMetricStat GetUsedMemoryStats(ResultIter begin,
+                                        ResultIter end) const {
+    HardwareMetricStat stat{0.0, std::numeric_limits<double>::max(), 0.0};
+    size_t count = 0;
+    for (auto it = begin; it != end; ++it) {
+      for (const auto& [mem_info, _] : it->hw_info_records) {
+        double used_mem = static_cast<double>(mem_info.physical_total -
+                                              mem_info.physical_available) /
+                          (1024.0 * 1024.0);  // in MB
+        stat.average += used_mem;
+        stat.min = std::min(stat.min, used_mem);
+        stat.max = std::max(stat.max, used_mem);
+        count++;
+      }
+    }
+    if (count > 0) {
+      stat.average /= static_cast<double>(count);
+    }
+    return stat;
+  }
+
   bool has_empty_output = true;
   std::string category;
   size_t total_runs_count = 0;  // Including warmup
@@ -175,6 +216,9 @@ struct PromptPerformanceResult {
   MillisecDuration avg_ttft{0.0};
   MillisecDuration avg_token_latency{0.0};
   MillisecDuration avg_2nd_latency{0.0};
+
+  double total_physical_memory = 0.0;
+  HardwareMetricStat used_physical_memory{0.0, 0.0, 0.0};
 };
 
 }  // namespace

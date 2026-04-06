@@ -23,6 +23,17 @@ The `run_mmlu_benchmark.py` script is designed to run the MLPerf program on the 
 
 This script has been tested with **Python 3.12**. It is recommended to use Python 3.12 or higher to ensure compatibility.
 
+## Command-Line Arguments
+
+| Argument | Description |
+|----------|-------------|
+| `-c, --config` | Path to the JSON configuration file (required) |
+| `-t, --type` | Benchmark type: `mmlu` (default) or `tinymmlu` |
+| `-v, --verbose` | Enable debug-level logging |
+| `-s, --skip-failed-prompts` | Skip prompts that fail during execution |
+| `--postprocess-only` | Only run postprocessing on existing results (requires `--run-id`) |
+| `--run-id` | Specify run ID for postprocessing existing results |
+
 ## Configuration File
 
 The script takes a JSON configuration file as input. Below is an example configuration:
@@ -106,20 +117,84 @@ To run the script, execute the following command, passing the configuration JSON
 python run_mmlu_benchmark.py --config <path_to_config.json>
 ```
 
-## Output
+### TinyMMLU
 
-- **Generated Files**: Input prompts and config files saved in `OutputDir`.
-- **Inference Results**: MLPerf results stored in `OutputDir`.
-- **Accuracy Report**: A final report based on calculated accuracy.
-
-## Skipping failed prompts
-
-also you can skip the failed prompts during benchmarking, in the generated `results.json` files you will be able to see `Skipped Prompts` indexes. To enable this feature you need to run the program with `-s` or `--skip-failed-prompts` option
-
-# TinyMMLU
-
-to run script on `TinyMMLU` data you need to add your huggingface token in config file and when running script choose benchmark type `tinymmlu`, like this
+Requires `HfToken` in config:
 
 ```bash
 python run_mmlu_benchmark.py --config <path_to_config.json> -t tinymmlu
 ```
+
+### Skip Failed Prompts
+
+You can skip the failed prompts during benchmarking. In the generated `results.json` files you will be able to see `Skipped Prompts` indexes. To enable this feature, run the program with `-s` or `--skip-failed-prompts` option:
+
+```bash
+python run_mmlu_benchmark.py --config <path_to_config.json> -s
+```
+
+## Output
+
+- **Generated Files**: Input prompts and config files saved in `OutputDir`.
+- **Inference Results**: MLPerf results stored in `OutputDir`.
+- **Accuracy Report**: Final report based on calculated accuracy saved as `report.json`.
+
+## Distributed Execution
+
+The script supports running subsets of subjects on different machines and combining results for final scoring.
+
+### Directory Structure
+
+```
+<OutputDir>/<benchmark_type>/<run_id>/
+├── <subject_name>/
+│   ├── input_file.json        # Generated prompts
+│   ├── answers.json           # Ground truth: {"answers": ["A", "B", ...], "subject": "..."}
+│   ├── mlperf_config.json     # MLPerf configuration
+│   └── results.json           # MLPerf output with "Output" array
+└── ...
+```
+
+### Workflow
+
+**1. Generate input files on a coordinator machine:**
+
+Create configs with disjoint subject sets for each machine:
+
+```json
+// machine1-config.json
+{
+    "Subjects": ["abstract algebra", "anatomy", "astronomy"],
+    "RunID": 1,
+    ...
+}
+
+// machine2-config.json  
+{
+    "Subjects": ["business ethics", "clinical knowledge", "college biology"],
+    "RunID": 1,
+    ...
+}
+```
+
+**2. Run on each machine:**
+
+```bash
+# Machine 1
+python run_mmlu_benchmark.py --config machine1-config.json
+
+# Machine 2
+python run_mmlu_benchmark.py --config machine2-config.json
+```
+
+**3. Collect results:**
+
+Copy all subject directories from each machine into a single `<OutputDir>/<benchmark_type>/<run_id>/` folder.
+
+**4. Generate combined report:**
+
+```bash
+python run_mmlu_benchmark.py --config config.json --postprocess-only --run-id 1
+```
+
+The script scans all `results.json` files under the run directory and computes the aggregate MMLU score.

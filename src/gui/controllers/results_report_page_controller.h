@@ -1,8 +1,8 @@
 #ifndef RESULTS_REPORT_PAGE_CONTROLLER_H_
 #define RESULTS_REPORT_PAGE_CONTROLLER_H_
 
+#include "../CIL/benchmark_result.h"
 #include "controllers/abstract_controller.h"
-
 namespace gui {
 struct HistoryEntry;
 
@@ -24,9 +24,8 @@ class ResultsReportPageController : public AbstractController {
 
   void SetView(views::ResultsReportPage* view);
 
-  QList<QString> GetOrderedIndexes(const QList<HistoryEntry>& entries) const;
-
-  void LoadResultsTable(const QList<HistoryEntry>& entries);
+  void LoadResultsTable(
+      const QList<QPair<HistoryEntry, cil::BenchmarkResult>>& entries);
 
  signals:
   void ReturnBackRequested();
@@ -36,8 +35,8 @@ class ResultsReportPageController : public AbstractController {
   void HandleExportReport();
 
  private:
-  std::vector<QStringList> report_;
   QList<HistoryEntry> table_entries_;
+  std::vector<cil::BenchmarkResult> results_;
 
   void DoLoadResultsTable();
 

@@ -8,7 +8,7 @@
 #ifndef GUI_IOS_UTILS_H_
 #define GUI_IOS_UTILS_H_
 
-#include <string>
+#include <QUrl>
 
 namespace gui {
 namespace ios_utils {
@@ -23,6 +23,14 @@ std::string GetDocumentsDirectoryPath();
  * @param disabled Boolean indicating whether to disable the idle timer (true) or enable it (false).
  */
 void SetIdleTimerDisabled(bool disabled);
+
+/**
+ * @brief Opens the native iOS share sheet to share a file.
+ * @param url The URL of the file to be shared. Must point to a valid,
+ * accessible file.
+ * @return True if the share sheet was successfully presented
+ */
+bool ShareFile(const QUrl& url);
 
 }  // namespace ios_utils
 }  // namespace gui

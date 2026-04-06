@@ -10,9 +10,9 @@
       "Models": [
         {
           "ModelName": "llama-3.1-8B-Instruct_ov-int4-CHw",
-          "FilePath": "https://client.mlcommons-storage.org/deps/1.5/scenario_files/llm/llama3/models/WindowsML/NPU/OpenVINO/openvino_model_dy.onnx",
-          "DataFilePath": "https://client.mlcommons-storage.org/deps/1.5/scenario_files/llm/llama3/models/WindowsML/NPU/OpenVINO/openvino_model_dy.zip",
-          "TokenizerPath": "https://client.mlcommons-storage.org/deps/1.5/scenario_files/llm/llama3/models/WindowsML/NPU/OpenVINO/tokenizer.zip"
+          "FilePath": "https://client.mlcommons-storage.org/deps/1.6/scenario_files/llm/llama3/models/WindowsML/NPU/OpenVINO/openvino_model_dy.onnx",
+          "DataFilePath": "https://client.mlcommons-storage.org/deps/1.6/scenario_files/llm/llama3/models/WindowsML/NPU/OpenVINO/openvino_model_dy.zip",
+          "TokenizerPath": "https://client.mlcommons-storage.org/deps/1.6/scenario_files/llm/llama3/models/WindowsML/NPU/OpenVINO/tokenizer.zip"
         }
       ],
       "InputFilePath": {

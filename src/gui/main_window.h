@@ -42,7 +42,8 @@ class MainWindow : public QMainWindow {
 
  public slots:
   void SwitchToPage(gui::PageType page_type);
-  void ShowGlobalPopup(const QString &message);
+  void ShowGlobalPopup(const QString &message, bool is_progress);
+  void UpdateProgressPopup(int progress);
   void HidePopup();
 
  protected:
@@ -52,7 +53,6 @@ class MainWindow : public QMainWindow {
   void mousePressEvent(QMouseEvent *event) override;
   void mouseMoveEvent(QMouseEvent *event) override;
   void mouseReleaseEvent(QMouseEvent *event) override;
-
  private:
   Ui::MainWindow ui_;
   views::EULAWidget *eula_page_widget_;

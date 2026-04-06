@@ -201,6 +201,10 @@ bool StartPage::IsEPCardVisible(int index) const {
   return eps_widgets_.at(index)->isVisible();
 }
 
+bool StartPage::IsEPCardEnabled(int index) const {
+  return eps_widgets_.at(index)->isEnabled();
+}
+
 void StartPage::SetEPCardVisible(int index, bool visible) {
   eps_widgets_.at(index)->setVisible(visible);
 }

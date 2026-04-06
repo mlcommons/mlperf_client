@@ -34,17 +34,9 @@ QVariant ResultsHistoryModel::data(const QModelIndex &index, int role) const {
     case Qt::UserRole + 4:
       return entry.success_;
     case Qt::UserRole + 5:
-      if (entry.perf_results_map_.empty()) return 0.0;
-      if (auto it = entry.perf_results_map_.find("Overall");
-          it != entry.perf_results_map_.end())
-        return it.value().time_to_first_token_;
-      return 0.0;
+      return entry.overall_time_to_first_token_;
     case Qt::UserRole + 6:
-      if (entry.perf_results_map_.empty()) return 0.0;
-      if (auto it = entry.perf_results_map_.find("Overall");
-          it != entry.perf_results_map_.end())
-        return it.value().token_generation_rate_;
-      return 0.0;
+      return entry.overall_token_generation_rate_;
     case Qt::UserRole + 7:
       return entry.error_message_;
     case Qt::UserRole + 8:

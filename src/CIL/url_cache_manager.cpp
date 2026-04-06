@@ -5,6 +5,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <unordered_map>
 
 #include "utils.h"
 #include "version.h"
@@ -50,7 +51,28 @@ bool URLCacheManager::IsUrlInCache(const std::string& url) const {
 
 bool URLCacheManager::ValidateFile(const std::string& url,
                                    const std::string& filePath,
-                                   bool check_version) const {
+                                   bool check_version, bool forced) const {
+  // Static session-level cache to avoid redundant SHA256 computations
+  // when the same IHV dependency appears in multiple configs
+  static std::unordered_map<std::string, bool> validation_cache;
+
+  std::string validation_key = url + "|" + filePath + "|" + (check_version ? "v" : "");
+  try {
+    if (std::filesystem::exists(filePath)) {
+      auto mod_time = std::filesystem::last_write_time(filePath);
+      validation_key += "|" + std::to_string(static_cast<long long>(mod_time.time_since_epoch().count()));
+    }
+  } catch (...) {
+    // Ignore any errors in accessing file modification time
+  }
+
+  if (!forced) {
+    auto it = validation_cache.find(validation_key);
+    if (it != validation_cache.end()) {
+      return it->second;
+    }
+  }
+
   bool is_valid = false;
   if (IsUrlInCache(url)) {
     std::string sha256 = utils::ComputeFileSHA256(filePath, url_cache_logger);
@@ -68,6 +90,9 @@ bool URLCacheManager::ValidateFile(const std::string& url,
       }
     }
   }
+
+  validation_cache[validation_key] = is_valid;
+
   return is_valid;
 }
 

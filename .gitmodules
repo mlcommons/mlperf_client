@@ -1,15 +1,12 @@
 [submodule "deps/cpp-httplib"]
-	path = deps/cpp-httplib
-	url = https://github.com/yhirose/cpp-httplib.git
+    path = deps/cpp-httplib
+    url = https://github.com/yhirose/cpp-httplib.git
 [submodule "deps/JSON"]
 	path = deps/JSON
 	url = https://github.com/nlohmann/json.git
 [submodule "deps/JSONSchema"]
 	path = deps/JSONSchema
 	url = https://github.com/pboettch/json-schema-validator.git
-[submodule "deps/infoware"]
-	path = deps/infoware
-	url = https://github.com/ThePhD/infoware.git
 [submodule "deps/minizip-ng"]
 	path = deps/minizip-ng
 	url = https://github.com/zlib-ng/minizip-ng.git
@@ -18,4 +15,7 @@
 	url = https://github.com/ggerganov/llama.cpp.git
 [submodule "deps/mlx-swift"]
 	path = deps/mlx-swift
+	url = https://github.com/ml-explore/mlx-swift.git
+[submodule "dpes/mlx-swift"]
+	path = dpes/mlx-swift
 	url = https://github.com/ml-explore/mlx-swift.git

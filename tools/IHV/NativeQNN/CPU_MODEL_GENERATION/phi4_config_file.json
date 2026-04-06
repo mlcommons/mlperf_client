@@ -1,0 +1,56 @@
+{
+  "general.name": "phi-4",
+  "general.architecture": "generic",
+  "general.quantization_version": 1,
+  "general.alignment": 128,
+  "general.hf_hub_model_id": "microsoft/phi-4",
+  "size.vocabulary": 100352,
+  "size.context": 32768,
+  "size.embedding": 5120,
+  "size.feedforward": 17920,
+  "architecture.num_decoders": 40,
+  "architecture.num_heads": 40,
+  "architecture.num_kv_heads": 10,
+  "architecture.connector": "sequential_pre_layer_normalization",
+  "architecture.gating": "gated",
+  "operation.normalization": "RMS-norm",
+  "operation.normalization_epsilon": 1e-05,
+  "operation.activation": "SiLU",
+  "operation.sliding_window": null,
+  "operation.positional_embedding": "RoPE",
+  "tensor.kq_complex_organization": "SoA",
+  "operation.rope_scaling": 500000.0,
+  "tensor.layer_name": "model.layers.(\\d+).",
+  "tensor.embedding_token_weight": {
+    "name": "model.embed_tokens.weight"
+  },
+  "tensor.attention_output_weight": {
+    "name": "self_attn.o_proj.weight",
+    "transposed": true
+  },
+  "tensor.attention_qkv_weight": {
+    "name": "self_attn.qkv_proj.weight",
+    "transposed": true
+  },
+  "tensor.feedforward_up_gate_weight": {
+    "name": "mlp.gate_up_proj.weight",
+    "transposed": true
+  },
+  "tensor.feedforward_output_weight": {
+    "name": "mlp.down_proj.weight",
+    "transposed": true
+  },
+  "tensor.attention_normalization_weight": {
+    "name": "input_layernorm.weight"
+  },
+  "tensor.feedforward_normalization_weight": {
+    "name": "post_attention_layernorm.weight"
+  },
+  "tensor.output_normalization_weight": {
+    "name": "model.norm.weight"
+  },
+  "tensor.output_weight": {
+    "name": "lm_head.weight",
+    "transposed": true
+  }
+}

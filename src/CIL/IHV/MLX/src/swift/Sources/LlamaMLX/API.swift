@@ -1,6 +1,7 @@
 import Cmlx
 import Foundation
 import MLX
+import Metal
 
 
 @_cdecl("llm_clear_cache")
@@ -205,4 +206,19 @@ public func llm_free_logits(_ ptr: UnsafePointer<Float>?) {
     ptr.withMemoryRebound(to: Float.self, capacity: 1) {
         UnsafeMutablePointer(mutating: $0).deallocate()
     }
+}
+
+@_cdecl("llm_get_gpu_name")
+public func llm_get_gpu_name() -> UnsafeMutablePointer<CChar>? {
+    guard let device = MTLCreateSystemDefaultDevice() else {
+        return nil
+    }
+
+    return strdup(device.name)
+}
+
+@_cdecl("llm_free_string")
+public func llm_free_string(_ ptr: UnsafeMutablePointer<CChar>?) {
+    guard let ptr = ptr else { return }
+    free(ptr)
 }

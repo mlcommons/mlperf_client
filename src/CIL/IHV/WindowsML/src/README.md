@@ -4,21 +4,35 @@
 This document describes how to build, quantize, and compile models for WindowsML—targeting DirectML, NvTensorRtRtx, Vitis AI, and OpenVINO—with Olive and ONNXRuntime GenAI,
 including recipes that reproduce quantized and compiled variants of **Llama 2 7B Chat**, **Llama 3.1 8B Instruct**, **Phi-3.5 Mini Instruct**, and **Phi 4 Reasoning 14B**.
 
-> **Tip**  
-> Each recipe fully describes the required passes and target device; you usually only need to edit the `model_path` field if you prefer a different Hugging Face repository or a local checkpoint.
+**How to use this README**
+
+| Goal | Section |
+|------|---------|
+| Olive (VitisAI / OpenVINO / QNN) | **§1**–**§2** |
+| DirectML via ONNX Runtime GenAI | **§3**; MLPerf JSON example **§4** |
+| NVIDIA TensorRT RTX EP (NvTensorRtRtx) | **§5** (per model); MLPerf JSON **§6** |
+
+**NvTensorRtRtx (§5)** — **Windows**, **CUDA-capable NVIDIA GPU**. Use one virtual environment for **§5.1** and **§5.2** (Llama 3.1 and Phi‑4) and a different one for **§5.3** (Phi‑3.5); do not mix those package sets.
+
+| Track | Sections | Python | `onnxruntime-gpu` | `onnxruntime-genai` |
+|-------|----------|--------|-------------------|---------------------|
+| Llama 3.1, Phi‑4 | §5.1, §5.2 | 3.11, 3.12, or 3.13 | 1.24.1 | 0.12.2 |
+| Phi‑3.5 | §5.3 | 3.10 | 1.23.0 | 0.9.2 |
 
 ---
 
 ## 1. Common Prerequisites
 
 Follow the README provided in the examples folder of the Olive repository to install Olive and its dependencies.
-[`Llama 2 7B Chat`](https://github.com/microsoft/Olive/tree/main/examples/llama2)
-[`Llama 3 8B Instruct`](https://github.com/microsoft/Olive/tree/main/examples/llama3)
-[`Phi 3.5 Mini Instruct`](https://github.com/microsoft/Olive/tree/main/examples/phi3_5)
-[`Phi 4 Reasoning`](https://github.com/microsoft/Olive/tree/main/examples/phi4)
+[`Llama 2 7B Chat`](https://github.com/microsoft/olive-recipes/tree/main/meta-llama-Llama-2-7b-chat-hf)
+[`Llama 3 8B Instruct`](https://github.com/microsoft/olive-recipes/tree/main/meta-llama-Llama-3.1-8B-Instruct)
+[`Phi 3.5 Mini Instruct`](https://github.com/microsoft/olive-recipes/tree/main/microsoft-Phi-3.5-mini-instruct)
+[`Phi 4 Reasoning`](https://github.com/microsoft/olive-recipes/tree/main/microsoft-Phi-4-mini-reasoning)
 
 
-## 2. Running an Olive Recipe (VitisAI / OpenVINO)
+## 2. Running an Olive Recipe (VitisAI / OpenVINO / QNN)
+
+The `olive run --config …` paths below use **`../recipes/`** relative to the working directory your Olive layout expects (typically next to a [olive-recipes](https://github.com/microsoft/olive-recipes) clone). Adjust the path so it points at the matching JSON under your **`recipes`** tree.
 
 ### VitisAI models (NPU):
 
@@ -54,113 +68,32 @@ olive run --config ../recipes/OpenVINO/Phi-3.5-mini-instruct_ov-int4-GRw.json
 olive run --config ../recipes/OpenVINO/Phi-4-reasoning_ov-int4-GRw.json
 ```
 
-#### GPU model config example json file for Llama-2-7b-chat-hf_ov-int4-GRw
-Change input_model and output_dir accordingly
-```bash
-$ more Llama-2-7b-chat-hf-ov-gw.json
-{
-    "input_model": { "type": "HfModel", "model_path": "meta-llama/Llama-2-7b-chat-hf" },
-    "systems": {
-        "local_system": {
-            "type": "LocalSystem",
-            "accelerators": [ { "execution_providers": [ "OpenVINOExecutionProvider" ] } ]
-        }
-    },
-    "passes": {
-        "optimum_convert": {
-            "type": "OpenVINOOptimumConversion",
-            "extra_args": { "device": "gpu" },
-            "ov_quant_config": {
-                "weight_format": "int4",
-                "group_size": 128,
-                "dataset": "wikitext2",
-                "ratio": 1,
-                "all_layers": true,
-                "awq": true,
-                "scale_estimation": true,
-                "sym": true,
-                "trust_remote_code": true,
-                "backup_precision": "int8_asym",
-                "sensitivity_metric": "weight_quantization_error"
-            }
-        },
-        "io_update": { "type": "OpenVINOIoUpdate", "static": false, "reuse_cache": true },
-        "encapsulation": {
-            "type": "OpenVINOEncapsulation",
-            "target_device": "gpu",
-            "keep_ov_dynamic_dims": true,
-            "ov_version": "2025.2",
-            "reuse_cache": true
-        }
-    },
-    "search_strategy": false,
-    "host": "local_system",
-    "cache_dir": "cache",
-    "clean_cache": true,
-    "evaluate_input_model": false,
-    "output_dir": "models/windowsml/Llama-2-7b-chat-hf_ov-int4-GRw"
-}
-```
+### QNN models
 
-#### NPU model config example json file for Llama-2-7b-chat-hf_ov-int4-CHw
-Change input_model and output_dir accordingly
-```bash
-$ more Llama-2-7b-chat-hf-ov_chw.json
-{
-    "input_model": { "type": "HfModel", "model_path": "meta-llama/Llama-2-7b-chat-hf" },
-    "systems": {
-        "local_system": {
-            "type": "LocalSystem",
-            "accelerators": [ { "execution_providers": [ "OpenVINOExecutionProvider" ] } ]
-        }
-    },
-    "passes": {
-        "optimum_convert": {
-            "type": "OpenVINOOptimumConversion",
-            "extra_args": { "device": "npu" },
-            "ov_quant_config": {
-                "weight_format": "int4",
-                "group_size": -1,
-                "dataset": "wikitext2",
-                "ratio": 1,
-                "all_layers": true,
-                "awq": true,
-                "scale_estimation": true,
-                "sym": true,
-                "trust_remote_code": true,
-                "backup_precision": "int8_asym",
-                "sensitivity_metric": "weight_quantization_error"
-            }
-        },
-        "io_update": { "type": "OpenVINOIoUpdate", "static": false, "reuse_cache": true },
-        "encapsulation": {
-            "type": "OpenVINOEncapsulation",
-            "target_device": "npu",
-            "keep_ov_dynamic_dims": true,
-            "ov_version": "2025.2",
-            "reuse_cache": true
-        }
-    },
-    "search_strategy": false,
-    "host": "local_system",
-    "cache_dir": "cache",
-    "clean_cache": true,
-    "evaluate_input_model": false,
-    "output_dir": "models/windowsml/Llama-2-7b-chat-hf_ov-int4-CHw"
-}
-```
+#### Preparing the environment
 
+Clone the Olive recipe repository from <https://github.com/microsoft/olive-recipes> and checkout commit id cf46f765cdaf2b782e6184ebe681f9b5c508d32a.
+This will provide the recipe and binary versions needed for this benchmark version.
 
+#### Creating the Phi3.5 and LLama3.1 models
+
+For recipe select the x_elite_config.json as it will work for all Snapdragon X generations. 
+NOTE: For X2 there is another recipe but that is not used in this benchmark.
+
+- Phi3.5: Follow the README.md in olive-recipes\microsoft-Phi-3.5-mini-instruct\QNN. 
+- LLama3.1: Follow the README.md in olive-recipes\meta-llama-Llama-3.1-8B-Instruct\QNN. 
 
 ## 3. Building DirectML‑Optimised Models with ONNXRuntime GenAI
 
-Use ONNXRuntime GenAI’s **Model Builder**.
+Use ONNXRuntime GenAI’s **Model Builder** (`python -m onnxruntime_genai.models.builder`) on **Windows** with a DirectML-capable GPU/driver. Install a **`onnxruntime-genai-directml`** release and the **`onnxruntime-directml`** build its release notes specify ([GenAI install](https://onnxruntime.ai/docs/genai/howto/install.html)).
 
 ### 3.1 Prerequisites
 
+Use a **Python** version supported by the **`onnxruntime-genai-directml`** wheel you install.
+
 ```bash
-pip install numpy transformers torch onnx onnxruntime
-pip install onnxruntime-genai-directml --pre
+pip install numpy transformers torch onnx onnxruntime-directml
+pip install onnxruntime-genai-directml
 ```
 
 ### 3.2 Builder commands
@@ -232,48 +165,141 @@ Each command:
 }
 ```
 
-The example config file should work on DirectML compatible devices from WindowsML enumeration.
+The example config targets hosted assets. For outputs from **§3**, set **`FilePath`**, **`DataFilePath`**, and **`TokenizerPath`** to your built **`model.onnx`**, **`model.onnx.data`** (or packaged data zip), and **`tokenizer.zip`** paths.
 
 ---
-## 5. Building WinML + NvTensorRtRtx optimized Model
-WinML models for the Nvidia IHV path are build similar to the ONNXRuntime GenAI DirectML path, with a slightly different build command and updated Python packages.
-## Prerequisites
-1. Install Python (3.8 or later recommended)
-2. Install ONNXRuntime GenAI (Pre-release) and its dependencies:
+
+## 5. WinML + NvTensorRtRtx
+
+Each subsection is a full recipe: environment, model build, then **`tokenizer.zip`**. The environment split at the top of this document applies.
+
+### 5.1 Llama 3.1 8B Instruct
+
+**1. Python** — **3.13**.
+
+**2. Packages**
+
+| Package | Version |
+|---------|---------|
+| onnxruntime-gpu | 1.24.1 |
+| onnxruntime-genai | 0.12.2 |
+| transformers | 5.4.0 |
+
+```powershell
+pip install numpy torch onnx onnx_ir
+pip install onnxruntime-gpu==1.24.1
+pip install onnxruntime-genai==0.12.2 --no-deps
+pip install transformers==5.4.0
 ```
-pip install numpy transformers torch onnx onnx_ir onnxruntime-gpu
-pip install onnxruntime-genai --pre
-```
-## Building a INT4 Quantized ONNX Model for NvTensorRtRtx
-Use the following command to build a ONNX model to use with NvTensorRtRtx in WinML:
-```
-# Build llama-3.1-8B Model
-python -m onnxruntime_genai.models.builder -m meta-llama/Llama-3.1-8B -e NvTensorRtRtx -p int4 -o ./Llama-3.1-8B-trt-rtx/ -c ./cache --extra_options use_qdq=1
 
-# Build phi-3.5-mini-instruct Model
-python -m onnxruntime_genai.models.builder -m microsoft/Phi-3.5-mini-instruct -e NvTensorRtRtx -p int4 -o ./Phi-3.5-mini-instruct-trt-rtx/ -c ./cache --extra_options use_qdq=1
+**3. Hugging Face** — Run **`huggingface-cli login`** so **`meta-llama/Llama-3.1-8B-Instruct`** is authorized before step **4**.
 
-# Build phi-4-reasoning Model
-python -m onnxruntime_genai.models.builder -m microsoft/Phi-4-reasoning -e NvTensorRtRtx -p int4 -o ./Phi-4-reasoning-trt-rtx/ -c ./cache --extra_options use_qdq=1
+**4. Build**
+
+```bash
+python -m onnxruntime_genai.models.builder -m meta-llama/Llama-3.1-8B-Instruct -e NvTensorRtRtx -p int4 -o ./llama-3.1-8b-instruct-trt-rtx/ -c ./cache-llama31-trt-rtx --extra_options use_qdq=1
 ```
 
-This command:
+**5. MLPerf weights** — **`./llama-3.1-8b-instruct-trt-rtx/model.onnx`**, **`./llama-3.1-8b-instruct-trt-rtx/model.onnx.data`**.
 
-- Uses the Llama-3.1-8B / phi-3.5-mini-instruct / phi-4-reasoning model from huggingface
-- Targets the NvTensorRtRtx execution provider (`-e NvTensorRtRtx`)
-- Applies int4 quantization (`-p int4`)
-- Outputs to the specified directory (`-o ./<model_name>-trt/`)
-- Uses a cache for faster processing (`-c cache`)
-- Specifies the use of Q/DQ nodes (`--extra_options use_qdq=1`)
+**6. `tokenizer.zip`**
 
-The result is a folder containing all necessary components for ONNXRuntime GenAI:
+1. Create an empty **staging** folder.
+2. Copy **`genai_config.json`** from **`./llama-3.1-8b-instruct-trt-rtx/`** into staging.
+3. Copy every **`*.jinja`** file from **`./llama-3.1-8b-instruct-trt-rtx/`** into staging.
+4. Open **`./cache-llama31-trt-rtx/models--meta-llama--Llama-3.1-8B-Instruct/snapshots/`**, enter the sole revision subdirectory, and copy **`tokenizer.json`**, **`tokenizer_config.json`**, **`special_tokens_map.json`**, **`tokenizer.model`**, and **`added_tokens.json`** into staging.
+5. In staging **`tokenizer_config.json`**: set **`"tokenizer_class"`** to **`"PreTrainedTokenizerFast"`**. Remove the **`backend`** field.
+6. In staging **`genai_config.json`**: set **`search.max_length`** to **`384`**.
+7. Zip the **contents** of staging at the root of **`tokenizer.zip`**. Place **`tokenizer.zip`** in **`./llama-3.1-8b-instruct-trt-rtx/`** next to **`model.onnx`**.
+8. In **`./llama-3.1-8b-instruct-trt-rtx/`**, delete **`genai_config.json`**, tokenizer JSON files, **`*.jinja`**, and any other loose tokenizer files the builder wrote. The folder must end with only **`model.onnx`**, **`model.onnx.data`**, and **`tokenizer.zip`**.
 
-- Model (`model.onnx`)
-- Weights(`model.onnx.data`)
-- Tokenizer(`tokenizer.json, special_tokens_map.json`, )
-- Configuration files (`genai_config.json, tokenizer_config.json`)
+---
 
-**Note**: The created model is specific to the chosen execution provider (EP). In this case, the model can only be executed with NvTensorRtRtx.
+### 5.2 Phi‑4 reasoning
+
+**1. Python** — **3.13**.
+
+**2. Packages**
+
+| Package | Version |
+|---------|---------|
+| onnxruntime-gpu | 1.24.1 |
+| onnxruntime-genai | 0.12.2 |
+| transformers | 5.4.0 |
+
+```powershell
+pip install numpy torch onnx onnx_ir
+pip install onnxruntime-gpu==1.24.1
+pip install onnxruntime-genai==0.12.2 --no-deps
+pip install transformers==5.4.0
+```
+
+**3. Hugging Face** — Repo **`microsoft/Phi-4-reasoning`**.
+
+**4. Build**
+
+```bash
+python -m onnxruntime_genai.models.builder -m microsoft/Phi-4-reasoning -e NvTensorRtRtx -p int4 -o ./Phi-4-reasoning-trt-rtx/ -c ./cache-phi4-trt-rtx --extra_options use_qdq=1
+```
+
+**5. MLPerf weights** — **`./Phi-4-reasoning-trt-rtx/model.onnx`**, **`./Phi-4-reasoning-trt-rtx/model.onnx.data`**.
+
+**6. `tokenizer.zip`**
+
+1. Create an empty **staging** folder.
+2. Copy **`genai_config.json`** from **`./Phi-4-reasoning-trt-rtx/`** into staging.
+3. Copy every **`*.jinja`** file from **`./Phi-4-reasoning-trt-rtx/`** into staging.
+4. Open **`./cache-phi4-trt-rtx/models--microsoft--Phi-4-reasoning/snapshots/`**, enter the sole revision subdirectory, and copy **`tokenizer.json`**, **`tokenizer_config.json`**, **`special_tokens_map.json`**, **`vocab.json`**, and **`added_tokens.json`** into staging.
+5. In staging **`tokenizer_config.json`**: set **`"tokenizer_class"`** to **`"PreTrainedTokenizerFast"`**. Remove the **`backend`** field.
+6. In staging **`genai_config.json`**: set **`search.max_length`** to **`384`**.
+7. Zip the **contents** of staging at the root of **`tokenizer.zip`**. Place **`tokenizer.zip`** in **`./Phi-4-reasoning-trt-rtx/`** next to **`model.onnx`**.
+8. In **`./Phi-4-reasoning-trt-rtx/`**, delete **`genai_config.json`**, tokenizer JSON files, **`*.jinja`**, **`vocab.json`**, and any other loose tokenizer files the builder wrote. The folder must end with only **`model.onnx`**, **`model.onnx.data`**, and **`tokenizer.zip`**.
+
+---
+
+### 5.3 Phi‑3.5 Mini Instruct
+
+**1. Python** — **3.10**.
+
+**2. Packages** — Install in this order:
+
+| Package | Version |
+|---------|---------|
+| onnxruntime-gpu | 1.23.0 |
+| onnxruntime-genai | 0.9.2 |
+| transformers | 4.46.3 |
+| huggingface-hub | 0.36.2 |
+
+```powershell
+pip install numpy torch onnx onnx_ir
+pip install onnxruntime-gpu==1.23.0
+pip install onnxruntime-genai==0.9.2 --no-deps
+pip install transformers==4.46.3 huggingface-hub==0.36.2
+```
+
+**3. Hugging Face** — Repo **`microsoft/Phi-3.5-mini-instruct`**.
+
+**4. Build**
+
+```bash
+python -m onnxruntime_genai.models.builder -m microsoft/Phi-3.5-mini-instruct -e NvTensorRtRtx -p int4 -o ./Phi-3.5-mini-instruct-trt-rtx/ -c ./cache-phi35-trt-rtx --extra_options use_qdq=1
+```
+
+**5. MLPerf weights** — **`./Phi-3.5-mini-instruct-trt-rtx/model.onnx`**, **`./Phi-3.5-mini-instruct-trt-rtx/model.onnx.data`**.
+
+**6. `tokenizer.zip`**
+
+1. Create an empty **staging** folder.
+2. Copy **`genai_config.json`** from **`./Phi-3.5-mini-instruct-trt-rtx/`** into staging.
+3. Copy every **`*.jinja`** file from **`./Phi-3.5-mini-instruct-trt-rtx/`** into staging.
+4. Open **`./cache-phi35-trt-rtx/models--microsoft--Phi-3.5-mini-instruct/snapshots/`**, enter the sole revision subdirectory, and copy **`tokenizer.json`**, **`tokenizer_config.json`**, **`special_tokens_map.json`**, **`tokenizer.model`**, and **`added_tokens.json`** into staging.
+5. In staging **`tokenizer_config.json`**: set **`"tokenizer_class"`** to **`"LlamaTokenizer"`**. Remove the **`backend`** field.
+6. In staging **`genai_config.json`**: set **`search.max_length`** to **`2304`**.
+7. In staging **`genai_config.json`**, under **`model.decoder.sliding_window`**, set **`"layers"`** to **`[]`**.
+8. Zip the **contents** of staging at the root of **`tokenizer.zip`**. Place **`tokenizer.zip`** in **`./Phi-3.5-mini-instruct-trt-rtx/`** next to **`model.onnx`**.
+9. In **`./Phi-3.5-mini-instruct-trt-rtx/`**, delete **`genai_config.json`**, tokenizer JSON files, **`*.jinja`**, and any other loose tokenizer files the builder wrote. The folder must end with only **`model.onnx`**, **`model.onnx.data`**, and **`tokenizer.zip`**.
+
+---
 
 ## 6. Example MLPerf Entry for a WinML + NvTensorRtRtx Model
 
@@ -289,7 +315,7 @@ The result is a folder containing all necessary components for ONNXRuntime GenAI
       "Name": "Llama3.1-8B",
       "Models": [
         {
-          "ModelName": "Llama-3.1-8B-trt-rtx",
+          "ModelName": "Llama-3.1-8B-Instruct-trt-rtx",
           "FilePath": "https://client.mlcommons-storage.org/deps/1.5/scenario_files/llm/llama3/models/WindowsML/GPU/NvTensorRtRtx/model.onnx",
           "DataFilePath": "https://client.mlcommons-storage.org/deps/1.5/scenario_files/llm/llama3/models/WindowsML/GPU/NvTensorRtRtx/model.onnx.data",
           "TokenizerPath": "https://client.mlcommons-storage.org/deps/1.5/scenario_files/llm/llama3/models/WindowsML/GPU/NvTensorRtRtx/tokenizer.zip"
@@ -335,30 +361,41 @@ The result is a folder containing all necessary components for ONNXRuntime GenAI
 }
 ```
 
-This config will run on NVIDIA compatible hardware using WinML with NvTensorRtRtx. 
+This JSON matches **Llama 3.1** NvTensorRtRtx hosted assets. Build weights and **`tokenizer.zip`** per **§5.1**, then point **`FilePath`**, **`DataFilePath`**, and **`TokenizerPath`** at your outputs if you do not use the URLs below.
+
+**Phi‑3.5 Mini, NvTensorRtRtx** — Use the same **`ExecutionProviders`** block as in the JSON above (`device_ep` **`NvTensorRtRtx`**, `device_vendor` **`NVIDIA`**). Use **`InputFilePath`** as a **flat array** of prompt URLs—the same entries as **§4** (`phi3.5/prompts/…`). Set **`Models`** to your **`model.onnx`**, **`model.onnx.data`**, and **`tokenizer.zip`** from **§5.3**, or to the hosted paths under **`llm/phi3.5/models/WindowsML/GPU/NvTensorRtRtx/`** (same URL pattern as **§4** but replace **`DirectML`** with **`NvTensorRtRtx`** in each model path).
+
+**Phi‑4 reasoning, NvTensorRtRtx** — Keep the same **`ExecutionProviders`** shape as below. Copy **`Models`**, **`InputFilePath`** (and any scenario-specific fields) from the MLPerf Inference client’s **Phi‑4** + **WindowsML** + **NvTensorRtRtx** scenario file under **`scenario_files/llm/phi4/`** (exact name varies by client version). Build artifacts per **§5.2**.
 
 ## 7. Troubleshooting & Tips
 
 - Ensure you have the correct version of Olive installed.
-- Check the ONNX version installed, ONNX==1.17, for IR_Version_ = 10
-- For DirectML, ensure you have the latest ONNXRuntime GenAI package installed with DirectML support.
-- WindowsML path tries to run the model on all devices. You can use `device_ep` and/or `device_vendor` config options to specify the target EP and Vendor if the model provided is not compatible with all devices on this path.
-```
- "ExecutionProviders": [
-        {
-          "Name": "WindowsML",
-          "Config": {
-            "device_type": "GPU",
-            "device_ep": "OpenVINO",
-            "device_vendor": "Intel"
-          },
-        }
-      ]
+- Check the ONNX / opset requirements for your installed **`onnxruntime`** (release notes supersede a fixed **`ONNX==1.17`** pin unless your pipeline still requires it).
+- **NvTensorRtRtx:** If **`import onnxruntime`** fails or loads CPU-only, reinstall: **`onnxruntime-gpu`** first, then **`onnxruntime-genai --no-deps`**, then **`pip check`**.
+- **Tokenizer zip:** **§5.1** / **§5.2**: **`PreTrainedTokenizerFast`**, no **`backend`**. **§5.3** (Phi‑3.5): **`LlamaTokenizer`**, no **`backend`**. Do not zip only the tokenizer files from the NvTensorRtRtx build output folder—include Hub tokenizer files per those steps.
+- For DirectML, pin **`onnxruntime-genai-directml`** to a version compatible with your **`onnxruntime-directml`** install.
+- WindowsML may enumerate multiple devices. Use **`device_ep`** and **`device_vendor`** when the model targets a specific EP (NvTensorRtRtx example in §6; Intel OpenVINO example below).
+
+Example **`ExecutionProviders`** snippet for **OpenVINO** on GPU:
+
+```jsonc
+"ExecutionProviders": [
+  {
+    "Name": "WindowsML",
+    "Config": {
+      "device_type": "GPU",
+      "device_ep": "OpenVINO",
+      "device_vendor": "Intel"
+    }
+  }
+]
 ```
 
 ---
 
 ### References
 
+* Olive recipe repo – <https://github.com/microsoft/olive-recipes>  
 * Olive repo – <https://github.com/microsoft/Olive>  
-* ONNXRuntime GenAI docs – <https://onnxruntime.ai/docs/genai/>  
+* ONNX Runtime GenAI docs – <https://onnxruntime.ai/docs/genai/>  
+* ONNX Runtime GenAI releases (ORT compatibility) – <https://github.com/microsoft/onnxruntime-genai/releases>  

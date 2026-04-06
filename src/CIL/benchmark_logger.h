@@ -78,9 +78,24 @@ class BenchmarkLogger {
   static std::vector<BenchmarkResult> ReadResultsFromFile(
       const std::string& filename);
 
+  /**
+   * @brief Remove selected benchmark results from file
+   */
   static void RemoveResultsFromFile(
       const std::string& filename,
       const std::unordered_set<int>& rows_to_remove);
+
+  /**
+   * @brief Get ordered benchmark performance categories
+   */
+  static std::vector<std::string> GetOrderedCategories(
+      const std::vector<BenchmarkResult>& results);
+
+  /**
+   * @brief Export benchmark results to a CSV file
+   */
+  static bool ExportResultsToCSV(const std::vector<BenchmarkResult>& results,
+                                 const std::string& filename);
 
  private:
   nlohmann::ordered_json BenchmarkResultToJson(const BenchmarkResult& result);

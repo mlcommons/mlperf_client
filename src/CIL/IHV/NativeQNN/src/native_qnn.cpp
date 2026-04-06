@@ -49,7 +49,8 @@ cil::IHV::NativeQNN::NativeQNN(const API_IHV_Setup_t& api) {
     return;
   }
 
-  if (model_name == "llama2" || model_name == "llama3" || model_name == "phi3.5") {
+  if (model_name == "llama3" ||
+      model_name == "phi3.5" || model_name == "phi4") {
     inference_ = std::make_shared<infer::LlmInference>(model_path, model_name,
                                                           ep_settings, logger);
 

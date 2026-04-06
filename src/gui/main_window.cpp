@@ -36,6 +36,7 @@ MainWindow::MainWindow(controllers::AppController *app_controller,
       history_page_widget_(nullptr),
       report_page_widget_(nullptr),
       settings_page_widget_(nullptr),
+      popup_widget_(nullptr),
       app_controller_(app_controller),
       is_mouse_pressed_(false) {
   SetupUi();
@@ -43,6 +44,8 @@ MainWindow::MainWindow(controllers::AppController *app_controller,
   InitializeControllers();
 
   InstallSignalHandlers();
+
+  this->installEventFilter(this);
 }
 
 void MainWindow::SetupUi() {
@@ -84,12 +87,10 @@ void MainWindow::SetupUi() {
   ui_.m_stacked_widget->addWidget(report_page_widget_);
   ui_.m_stacked_widget->addWidget(settings_page_widget_);
 
-  popup_widget_ = new PopupWidget(this);
-  popup_widget_->hide();
   blur_effect_ = new QGraphicsBlurEffect(this);
   blur_effect_->setBlurRadius(8);
   blur_effect_->setEnabled(false);
-  this->setGraphicsEffect(blur_effect_);
+  centralWidget()->setGraphicsEffect(blur_effect_);
 }
 
 void MainWindow::CreateActions() {
@@ -125,6 +126,8 @@ void MainWindow::InstallSignalHandlers() {
           &MainWindow::SwitchToPage);
   connect(app_controller_, &controllers::AppController::ShowGlobalPopup, this,
           &MainWindow::ShowGlobalPopup, Qt::QueuedConnection);
+  connect(app_controller_, &controllers::AppController::UpdateProgressPopup,
+          this, &MainWindow::UpdateProgressPopup, Qt::QueuedConnection);
   connect(app_controller_, &controllers::AppController::HidePopup, this,
           &MainWindow::HidePopup);
 
@@ -158,8 +161,6 @@ void MainWindow::InstallSignalHandlers() {
               SwitchToPage(PageType::kSettingsPage);
             }
           });
-
-  connect(popup_widget_, &PopupWidget::rejected, this, &MainWindow::HidePopup);
 }
 
 void MainWindow::mousePressEvent(QMouseEvent *event) {
@@ -246,19 +247,32 @@ bool MainWindow::CanLeaveCurrentPage() {
   return true;
 }
 
-void MainWindow::ShowGlobalPopup(const QString &message) {
+void MainWindow::ShowGlobalPopup(const QString &message, bool is_progress) {
   blur_effect_->setEnabled(true);
 
+  if (popup_widget_) HidePopup();
+
+  popup_widget_ =
+      is_progress ? new ProgressPopupWidget(this) : new PopupWidget(this);
+  connect(popup_widget_, &PopupWidget::rejected, this, &MainWindow::HidePopup);
   popup_widget_->SetMessage(message);
-  popup_widget_->move(
-      geometry().center() -
-      QPoint(popup_widget_->width() / 2, popup_widget_->height() / 2));
   popup_widget_->show();
 }
 
+void MainWindow::UpdateProgressPopup(int progress) {
+  ProgressPopupWidget *progress_popup =
+      qobject_cast<ProgressPopupWidget *>(popup_widget_);
+  if (progress_popup) {
+    progress_popup->SetProgressPercent(progress);
+  }
+}
+
 void MainWindow::HidePopup() {
-  popup_widget_->hide();
   blur_effect_->setEnabled(false);
+  if (popup_widget_) {
+    popup_widget_->deleteLater();
+    popup_widget_ = nullptr;
+  }
 }
 
 }  // namespace gui

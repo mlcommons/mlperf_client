@@ -4,7 +4,9 @@
 #include <log4cxx/logger.h>
 
 #include <fstream>
+#include <set>
 
+#include "benchmark/runner.h"
 #include "benchmark_result.h"
 #include "system_info_provider.h"
 #include "utils.h"
@@ -98,22 +100,100 @@ bool ValidateUTF8inJSONObj(const nlohmann::json& json_obj) {
   return true;
 }
 
+static std::string EscapeCsvField(const std::string& field) {
+  bool needs_quotes = false;
+  for (char c : field) {
+    if (c == ',' || c == '"' || c == '\n' || c == '\r') {
+      needs_quotes = true;
+      break;
+    }
+  }
+
+  if (!needs_quotes) return field;
+
+  std::string out;
+  out.reserve(field.size() + 2);
+  out.push_back('"');
+  for (char c : field) {
+    if (c == '"') out.push_back('"');
+    out.push_back(c);
+  }
+  out.push_back('"');
+  return out;
+}
+
+static inline void WriteCsvRow(std::ofstream& out,
+                               const std::vector<std::string>& row) {
+  for (std::size_t i = 0; i < row.size(); ++i) {
+    if (i) out << ',';
+    out << EscapeCsvField(row[i]);
+  }
+  out << "\n";
+}
+
+static std::string FormatSystemInfo(const SystemInfo& si) {
+  std::vector<std::string> parts;
+  auto AddInfoFn = [&](const std::string& label, const std::string& value) {
+    if (!value.empty()) parts.push_back(label + ": " + value);
+  };
+
+  AddInfoFn("CPU", cil::utils::FormatCPU(si.cpu_model, si.cpu_architecture));
+  AddInfoFn("RAM", cil::utils::FormatMemory(si.ram));
+  AddInfoFn("GPU", si.gpu_name);
+  AddInfoFn("VRAM", cil::utils::FormatMemory(si.gpu_ram));
+  AddInfoFn("OS", si.os_name);
+
+  std::string out;
+  for (size_t i = 0; i < parts.size(); ++i) {
+    if (i != 0) out += ";";
+    out += parts[i];
+  }
+  return out;
+}
+
 BenchmarkLogger::~BenchmarkLogger() = default;
 
 bool BenchmarkLogger::AppendBenchmarkResult(const BenchmarkResult& result) {
-  nlohmann::ordered_json json_obj = BenchmarkResultToJson(result);
+  BenchmarkResult res = result;
+
+  const auto& cpu_info = system_info_provider_->GetCpuInfo();
+  res.system_info.cpu_architecture = cpu_info.architecture;
+  res.system_info.cpu_model = utils::CleanAndTrimString(cpu_info.model_name);
+
+  const auto& gpu_info = system_info_provider_->GetGpuInfo();
+#ifdef __APPLE__
+  if (!gpu_info.empty()) {
+    const auto& gpu = gpu_info.front();
+    res.system_info.gpu_name = gpu.name;
+    res.system_info.gpu_ram = gpu.dedicated_memory_size;
+  }
+#else
+  std::string gpu_name = result.ep_configuration.value("device_name", "");
+  if (auto it = std::ranges::find_if(
+          gpu_info, [&](const auto& info) { return info.name == gpu_name; });
+      it != gpu_info.end()) {
+    res.system_info.gpu_name = it->name;
+    res.system_info.gpu_ram = it->dedicated_memory_size;
+  }
+#endif
+
+  res.system_info.ram = system_info_provider_->GetMemoryInfo().physical_total;
+  res.system_info.os_name =
+      utils::CleanAndTrimString(system_info_provider_->GetOsInfo().full_name);
+
+  res.config_verified = config_verified_;
+
+  nlohmann::ordered_json json_obj = BenchmarkResultToJson(res);
   bool validated = ValidateUTF8inJSONObj(json_obj);
   if (validated) {
     WriteResults(json_obj);
-    results_.push_back(result);
   } else {
-    auto failed_results = result;
-    failed_results.benchmark_success = false;
-    failed_results.error_message = "Invalid UTF-8 string found in output";
+    res.benchmark_success = false;
+    res.error_message = "Invalid UTF-8 string found in output";
     LOG4CXX_ERROR(loggerBenchmarkLogger,
                   "Invalid UTF-8 string found in BenchmarkResult");
-    results_.push_back(failed_results);
   }
+  results_.push_back(res);
   return validated;
 }
 
@@ -437,8 +517,8 @@ nlohmann::ordered_json BenchmarkLogger::BenchmarkResultToJson(
   if (!system_info_provider_) return json_obj;
 
   const auto& cpu_info = system_info_provider_->GetCpuInfo();
-  json_obj["SysInfo_CPUArchitecture"] = cpu_info.architecture;
-  json_obj["SysInfo_CPUModel"] = utils::CleanAndTrimString(cpu_info.model_name);
+  json_obj["SysInfo_CPUArchitecture"] = result.system_info.cpu_architecture;
+  json_obj["SysInfo_CPUModel"] = result.system_info.cpu_model;
   json_obj["SysInfo_CPUCores"] = cpu_info.physical_cpus;
   json_obj["SysInfo_CPULogicalCores"] = cpu_info.logical_cpus;
   json_obj["SysInfo_CPUClockSpeed"] = cpu_info.frequency;
@@ -461,11 +541,11 @@ nlohmann::ordered_json BenchmarkLogger::BenchmarkResultToJson(
   json_obj["SysInfo_GPUMemorySizes"] = gpu_memory_sizes;
 
   const auto& memory_info = system_info_provider_->GetMemoryInfo();
-  json_obj["SysInfo_RAMTotal"] = memory_info.physical_total;
+  json_obj["SysInfo_RAMTotal"] = result.system_info.ram;
   json_obj["SysInfo_RAMAvailable"] = memory_info.physical_available;
 
   const auto& os_info = system_info_provider_->GetOsInfo();
-  json_obj["SysInfo_OSName"] = utils::CleanAndTrimString(os_info.full_name);
+  json_obj["SysInfo_OSName"] = result.system_info.os_name;
   json_obj["SysInfo_OSVersion"] = os_info.version;
 
   return json_obj;
@@ -616,4 +696,101 @@ void BenchmarkLogger::RemoveResultsFromFile(
     }
   }
 }
+
+std::vector<std::string> BenchmarkLogger::GetOrderedCategories(
+    const std::vector<BenchmarkResult>& results) {
+  const auto& required = BenchmarkResult::kLLMRequiredCategories;
+  const auto& extended = BenchmarkResult::kLLMExtendedCategories;
+
+  std::map<std::string, int> order;
+  order["Overall"] = -1;
+  for (int i = 0; i < required.size(); ++i) order[required[i]] = i;
+  for (int i = 0; i < extended.size(); ++i)
+    order[extended[i]] = static_cast<int>(required.size()) + i;
+
+  std::set<std::string> key_set;
+  for (const auto& r : results)
+    for (const auto& [key, _] : r.performance_results) key_set.insert(key);
+
+  std::vector<std::string> keys(key_set.begin(), key_set.end());
+  std::ranges::sort(keys, [&](const std::string& a, const std::string& b) {
+    auto it_a = order.find(a);
+    auto it_b = order.find(b);
+
+    const bool a_in = it_a != order.end();
+    const bool b_in = it_b != order.end();
+
+    if (a_in && b_in) return it_a->second < it_b->second;
+    if (a_in) return true;
+    if (b_in) return false;
+    return a < b;
+  });
+
+  return keys;
+}
+
+bool BenchmarkLogger::ExportResultsToCSV(
+    const std::vector<BenchmarkResult>& results, const std::string& filename) {
+  std::ofstream out(filename, std::ios::binary);
+  if (!out.is_open()) return false;
+
+  using CsvRow = std::vector<std::string>;
+  CsvRow ep_headers = {"EP", "", ""};
+  CsvRow device_headers = {"Device", "", ""};
+  CsvRow scenario_headers = {"Scenario", "", ""};
+  CsvRow time_headers = {"Date", "", ""};
+  CsvRow is_tested_headers = {"Tested By MLCommons", "", ""};
+  CsvRow config_category_headers = {"Config Category", "", ""};
+  CsvRow system_info_headers = {"System Info", "", ""};
+
+  for (const auto& r : results) {
+    ep_headers.push_back(r.execution_provider_name);
+    device_headers.push_back(r.device_type);
+
+    auto model_full_name = cil::BenchmarkRunner::GetModelFullName(
+        cil::utils::StringToLowerCase(r.scenario_name));
+    scenario_headers.push_back(model_full_name.value_or(r.scenario_name));
+
+    time_headers.push_back(r.benchmark_start_time);
+    is_tested_headers.emplace_back(r.config_verified ? "Yes" : "No");
+    config_category_headers.push_back(
+        r.config_category.empty() ? "base" : r.config_category);
+    system_info_headers.push_back(FormatSystemInfo(r.system_info));
+  }
+
+  WriteCsvRow(out, ep_headers);
+  WriteCsvRow(out, device_headers);
+  WriteCsvRow(out, scenario_headers);
+  WriteCsvRow(out, time_headers);
+  WriteCsvRow(out, is_tested_headers);
+  WriteCsvRow(out, config_category_headers);
+  WriteCsvRow(out, system_info_headers);
+
+  const auto ordered_categories = GetOrderedCategories(results);
+
+  for (const auto& category : ordered_categories) {
+    WriteCsvRow(out, CsvRow{category});
+
+    CsvRow TTFT_row = {"", "", "TTFT (seconds)"};
+    CsvRow TPS_row = {"", "", "TPS"};
+
+    for (const auto& r : results) {
+      auto it = r.performance_results.find(category);
+      if (it != r.performance_results.end()) {
+        TTFT_row.push_back(utils::DoubleToFixedString(
+            it->second.time_to_first_token_duration, 2));
+        TPS_row.push_back(
+            utils::DoubleToFixedString(it->second.token_generation_rate, 1));
+      } else {
+        TTFT_row.emplace_back("");
+        TPS_row.emplace_back("");
+      }
+    }
+
+    WriteCsvRow(out, TTFT_row);
+    WriteCsvRow(out, TPS_row);
+  }
+  return true;
+}
+
 }  // namespace cil

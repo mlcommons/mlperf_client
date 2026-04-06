@@ -45,30 +45,11 @@ void ResultsHistoryPageController::LoadHistory(
   GetView()->SetModel(sort_filter_model_);
 
   results_file_path_ = results_path + "/results.json";
-  auto results = cil::BenchmarkLogger::ReadResultsFromFile(results_file_path_);
+  results_ = cil::BenchmarkLogger::ReadResultsFromFile(results_file_path_);
 
   QList<HistoryEntry> entries;
-  for (const auto& result : results) {
-    QMap<QString, HistoryEntryPerfResult> perf_results;
-    HistoryEntryPerfResult overall_entry;
-    bool overall_entry_found = false;
-    for (const auto& perf_result : result.performance_results) {
-      HistoryEntryPerfResult entry_perf_result{
-          perf_result.first.c_str(),
-          perf_result.second.time_to_first_token_duration,
-          perf_result.second.token_generation_rate};
-
-      if (perf_result.first == "Overall") {
-        overall_entry = entry_perf_result;
-        overall_entry_found = true;
-      } else {
-        perf_results.insert(QString::fromStdString(perf_result.first),
-                            entry_perf_result);
-      }
-    }
-
+  for (const auto& result : results_) {
     QString datetime_str = QString::fromStdString(result.benchmark_start_time);
-    if (overall_entry_found) perf_results.insert("Overall", overall_entry);
     QDateTime datetime =
         QDateTime::fromString(datetime_str, "yyyy-MM-dd hh:mm:ss ttt");
     if (!datetime.isValid()) {
@@ -86,6 +67,14 @@ void ResultsHistoryPageController::LoadHistory(
     auto model_display_name =
         gui::utils::ModelDisplayName(result.scenario_name);
 
+    auto overall_it = result.performance_results.find("Overall");
+    double overall_TTFT = 0.0;
+    double overall_TPS = 0.0;
+    if (overall_it != result.performance_results.end()) {
+      overall_TTFT = overall_it->second.time_to_first_token_duration;
+      overall_TPS = overall_it->second.token_generation_rate;
+    }
+
     HistoryEntry entry{model_display_name,
                        ep_name,
                        ep_display_name,
@@ -94,25 +83,28 @@ void ResultsHistoryPageController::LoadHistory(
                        result.benchmark_success,
                        result.config_verified,
                        result.config_category.c_str(),
-                       perf_results,
+                       overall_TTFT,
+                       overall_TPS,
                        QString::fromStdString(result.error_message).trimmed(),
                        result.config_file_comment.c_str()};
     if (!result.system_info.cpu_model.empty() &&
         !result.system_info.cpu_architecture.empty()) {
-      entry.system_info_.cpu_name =
-          QString("%1(%2)")
-              .arg(QString::fromStdString(result.system_info.cpu_model))
-              .arg(QString::fromStdString(result.system_info.cpu_architecture));
+      entry.system_info_.cpu_name = QString::fromStdString(
+          cil::utils::FormatCPU(result.system_info.cpu_model,
+                                result.system_info.cpu_architecture));
     }
     entry.system_info_.os_name =
         QString::fromStdString(result.system_info.os_name);
-    auto ram_gb = gui::utils::BytesToNearestGB(result.system_info.ram);
-    entry.system_info_.ram = ram_gb > 0.5 ? gui::utils::GBToString(ram_gb) : "";
+
+    entry.system_info_.ram = QString::fromStdString(
+        cil::utils::FormatMemory(result.system_info.ram));
+
     entry.system_info_.gpu_name =
         QString::fromStdString(result.system_info.gpu_name);
-    auto gpu_ram_gb = gui::utils::BytesToNearestGB(result.system_info.gpu_ram);
-    entry.system_info_.gpu_ram =
-        gpu_ram_gb > 0.5 ? gui::utils::GBToString(gpu_ram_gb) : "";
+
+    entry.system_info_.gpu_ram = QString::fromStdString(
+        cil::utils::FormatMemory(result.system_info.gpu_ram));
+
     entries.append(entry);
   }
 
@@ -120,18 +112,20 @@ void ResultsHistoryPageController::LoadHistory(
   GetView()->SetSortingMode("Newest first");
 }
 
-QList<HistoryEntry> ResultsHistoryPageController::GetCurrentEntries() const {
-  QList<HistoryEntry> entries;
+QList<QPair<HistoryEntry, cil::BenchmarkResult> >
+ResultsHistoryPageController::GetCurrentEntries() const {
+  QList<QPair<HistoryEntry, cil::BenchmarkResult> > entries;
   // we consider all selected entries as current entries if there is no special
   // current entry assigned
   if (current_entry_ == -1) {
     auto selected_indexes = GetView()->GetSelectionModel()->selectedIndexes();
     for (auto& index : selected_indexes) {
       int row = sort_filter_model_->mapToSource(index).row();
-      entries << model_->GetEntry(row);
+      entries << qMakePair(model_->GetEntry(row), results_.at(row));
     }
   } else {
-    entries << model_->GetEntry(current_entry_);
+    entries << qMakePair(model_->GetEntry(current_entry_),
+                         results_.at(current_entry_));
   }
   return entries;
 }
@@ -142,7 +136,10 @@ void ResultsHistoryPageController::OnDeleteHistoryRequested() {
   for (auto& index : selected_indexes)
     selected_rows.append(sort_filter_model_->mapToSource(index).row());
   std::sort(selected_rows.begin(), selected_rows.end(), std::greater<int>());
-  for (auto row : selected_rows) model_->RemoveEntry(row);
+  for (auto row : selected_rows) {
+    model_->RemoveEntry(row);
+    results_.erase(results_.begin() + row);
+  }
   cil::BenchmarkLogger::RemoveResultsFromFile(
       results_file_path_,
       std::unordered_set<int>(selected_rows.begin(), selected_rows.end()));

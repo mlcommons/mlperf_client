@@ -85,10 +85,9 @@ void LLMInference::Init(const nlohmann::json& model_config,
     if (config_.search.max_total_length > kMaxNpuAllocSize) {
       pipeline_config["PREFILL_HINT"] = "DYNAMIC";
     }
-    if ((config_.search.max_total_length <= kMaxNpuAllocSize) ||
-        (model_name_ != "llama2")) {
-      pipeline_config["GENERATE_HINT"] = "BEST_PERF";
-    }
+    pipeline_config["NPU_TURBO"] = "YES";
+    pipeline_config["NPUW_LLM_PREFILL_ATTENTION_HINT"] = "PYRAMID";
+    pipeline_config["GENERATE_HINT"] = "BEST_PERF";
   } else {
     ov::genai::SchedulerConfig scheduler_config;
     scheduler_config.max_num_batched_tokens =

@@ -37,14 +37,15 @@
 #include <thread>
 #include <vector>
 
+#include "../CIL/version.h"  // NOLINT
+#include "api_handler.h"
+#include "benchmark/runner.h"
 #include "command_option.h"
 #include "command_parser.h"
-#include "benchmark/runner.h"
 #include "execution_config.h"
 #include "system_controller.h"
 #include "unpacker.h"
 #include "utils.h"
-#include "../CIL/version.h"  // NOLINT
 
 using namespace log4cxx;
 using namespace log4cxx::xml;
@@ -191,6 +192,24 @@ void generate_command_options(CommandParser& command_parser) {
     false);
   command_parser.AddFlag(skip_failed_prompts_option);
 
+  // Add export-csv option
+  CommandOption export_csv_option("export-csv", 'x',
+                                  "Export benchmark results to a CSV file. "
+                                  "Specify the output CSV file path.",
+                                  false);
+  export_csv_option.SetOptionTypeHint("file");
+  command_parser.AddOption(export_csv_option);
+
+#if IHV_SUBPROCESS
+  CommandOption subprocess_isolate_option(
+      "subprocess-isolate", '\0',
+      "Run IHV code in isolated subprocess to prevent DLL conflicts (Windows "
+      "only).",
+      false);
+  subprocess_isolate_option.SetDefaultValue("false");
+  command_parser.AddBooleanOption(subprocess_isolate_option);
+#endif
+
   // set the display order
   command_parser.SetDisplayOptionOrder({
       "help",
@@ -208,10 +227,23 @@ void generate_command_options(CommandParser& command_parser) {
       "prompts",
       "cache-local-files",
       "skip-failed-prompts",
+      "export-csv",
+#if IHV_SUBPROCESS
+      "subprocess-isolate",
+#endif
   });
 }
 
 int main(int argc, char* argv[]) {
+#if IHV_SUBPROCESS
+  for (int i = 1; i < argc; ++i) {
+    if (std::string(argv[i]) == "--ihv-client" && i + 1 < argc) {
+      return cil::API_Handler::RunSubprocessClient(argv[i + 1]);
+    }
+  }
+  cil::API_Handler::SetDefaultSubprocessMode(false);
+#endif
+
 #if defined(_WIN32) || defined(_WIN64)
   CommandParser command_parser("mlperf-windows.exe", app_description);
 #elif defined(__APPLE__)
@@ -251,6 +283,12 @@ int main(int argc, char* argv[]) {
     }
     return 0;
   }
+
+#if IHV_SUBPROCESS
+  if (command_parser.GetOptionValue("subprocess-isolate") == "true") {
+    cil::API_Handler::SetDefaultSubprocessMode(true);
+  }
+#endif
 
   utils::SetCurrentDirectory(utils::GetCurrentDirectory());
 
@@ -412,7 +450,14 @@ int main(int argc, char* argv[]) {
 
   auto skip_failed_prompts = command_parser.OptionPassed("skip-failed-prompts");
 
-  cli::SystemController controller(config_path, unpacker, output_dir, data_dir, skip_failed_prompts);
+  std::string csv_export_path;
+  if (auto option = command_parser["export-csv"]; option.has_value()) {
+    csv_export_path = option.value();
+    LOG4CXX_INFO(loggerMain, "CSV export enabled: " << csv_export_path);
+  }
+  cli::SystemController controller(config_path, unpacker, output_dir, data_dir,
+                                   skip_failed_prompts);
+  controller.SetCSVExportPath(csv_export_path);
   LOG4CXX_INFO(loggerMain, "Configuring scenarios...\n");
   if (!controller.Config(temp_dir_overriden)) {
     LOG4CXX_ERROR(loggerMain, "Failed to configure scenarios, aborting...");

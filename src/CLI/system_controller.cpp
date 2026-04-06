@@ -218,6 +218,9 @@ bool SystemController::Config(bool temp_dir_overriden) {
 void SystemController::DisplayResultsStage(
     cil::BenchmarkLogger& results_logger) const {
   results_logger.DisplayAllResults();
+  if (!csv_export_path_.empty())
+    cil::BenchmarkLogger::ExportResultsToCSV(results_logger.GetResults(),
+                                             csv_export_path_);
   results_logger.Clear();
 }
 
@@ -249,6 +252,10 @@ bool SystemController::GetSystemCacheLocalFiles() const {
 
 void SystemController::SetSystemCacheLocalFiles(bool cache_local_files) {
   config_->GetSystemConfig().SetCacheLocalFiles(cache_local_files);
+}
+
+void SystemController::SetCSVExportPath(const std::string& csv_path) {
+  csv_export_path_ = csv_path;
 }
 
 bool SystemController::Run(const Logger& logger, bool enumerate_devices,

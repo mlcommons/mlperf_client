@@ -3,6 +3,7 @@
 #include <log4cxx/logger.h>
 #include <openssl/evp.h>
 
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -807,6 +808,45 @@ bool IsEpConfigSupportedOnThisPlatform(
 #else
   return !config_file_name.empty();
 #endif
+}
+
+#ifdef _WIN32
+std::string GetExecutablePath() {
+  char path[MAX_PATH];
+  GetModuleFileNameA(nullptr, path, MAX_PATH);
+  return std::string(path);
+}
+#endif
+
+double BytesToGb(size_t bytes) {
+  return static_cast<double>(bytes) / (1024.0 * 1024.0 * 1024.0);
+}
+
+double BytesToNearestGB(size_t bytes) { return std::round(BytesToGb(bytes)); }
+
+std::string GBToString(double gb) {
+  return std::to_string(static_cast<size_t>(std::round(gb))) + " GB";
+}
+
+std::string FormatCPU(std::string_view cpu_model,
+                      std::string_view cpu_architecture) {
+  if (cpu_model.empty()) return std::string();
+  if (cpu_architecture.empty()) return std::string(cpu_model);
+
+  return std::string(cpu_model) + "(" + std::string(cpu_architecture) + ")";
+}
+
+std::string FormatMemory(size_t bytes) {
+  const double gb = BytesToNearestGB(bytes);
+  return gb > 0.5 ? GBToString(gb) : std::string();
+}
+
+std::string DoubleToFixedString(double value, int digits) {
+  std::ostringstream ss;
+  ss.setf(std::ios::fixed);
+  ss.precision(digits);
+  ss << value;
+  return ss.str();
 }
 
 }  // namespace utils

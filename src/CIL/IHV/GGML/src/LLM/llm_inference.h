@@ -7,6 +7,7 @@
 
 class llama_model;
 class llama_context;
+struct ggml_backend_device;
 
 namespace cil {
 namespace IHV {
@@ -15,11 +16,12 @@ namespace infer {
 
 class LLMInference : public cil::infer::BaseInferenceCommon {
  public:
-  LLMInference(const std::string& model_path,
-                  const std::string& model_name,
-                  const GGMLBasedExecutionProviderSettings& ep_settings,
-                  Logger logger);
+  LLMInference(const std::string& model_path, const std::string& model_name,
+               const GGMLBasedExecutionProviderSettings& ep_settings,
+               Logger logger);
   ~LLMInference() = default;
+
+  const API_IHV_DeviceList_t* const EnumerateDevices() override;
 
   bool GPULayersDeductionIsInProgress() const;
 
@@ -30,10 +32,14 @@ class LLMInference : public cil::infer::BaseInferenceCommon {
   void Deinit() override;
 
  private:
-  bool LoadModelAndContext(int gpu_layers);
+  void InitGGMLDevicesList(const std::string& vendor, bool type_cpu);
+  bool LoadModelAndContext(int gpu_layers, int device_id);
 
   const GGMLBasedExecutionProviderSettings ep_settings_;
   cil::infer::LlamaConfig config_;
+
+  DeviceListPtr device_list_;
+  std::vector<std::pair<ggml_backend_device*, std::string> > devices_;
 
   llama_model* model_;
   llama_context* context_;

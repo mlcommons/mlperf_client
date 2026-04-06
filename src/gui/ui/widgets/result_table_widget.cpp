@@ -350,7 +350,7 @@ SystemRecordWidget::SystemRecordWidget(const QString& title,
   left_v_layout->addLayout(left_h_layout);
   left_v_layout->addStretch();
   main_layout->addLayout(left_v_layout);
-  main_layout->addWidget(value_label_, 1);
+  main_layout->addWidget(value_label_, 1, Qt::AlignTop);
   setToolTip(value);
 }
 

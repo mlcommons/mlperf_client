@@ -102,9 +102,12 @@ std::vector<AdapterInfo> EnumerateDirectMLAdapters(
     const std::string& directml_directory) {
   LibraryPathHandle path_handle;
 
-  if (!directml_directory.empty()) {
+  // Only add to DLL search path if directory is not empty and contains actual DLL files
+  // Skip for current directory "." as it may interfere with system DLL loading
+  if (!directml_directory.empty() && 
+      fs::exists(fs::path(directml_directory) / "DirectML.dll")) {
     path_handle = AddLibraryPath(directml_directory);
-    if (!path_handle.IsValid()) return {};
+    // Don't fail if AddLibraryPath returns invalid handle, just proceed without it
   };
 
   ScopeExit library_path_cleanup([path_handle]() {
@@ -239,9 +242,12 @@ std::vector<AdapterInfo> EnumerateDXCoreAdapters(
     const std::string& dxcore_directory) {
   LibraryPathHandle path_handle;
 
-  if (!dxcore_directory.empty()) {
+  // Only add to DLL search path if directory is not empty and contains actual DLL files
+  // Skip for current directory "." as it may interfere with system DLL loading
+  if (!dxcore_directory.empty() && 
+      fs::exists(fs::path(dxcore_directory) / "DXCore.dll")) {
     path_handle = AddLibraryPath(dxcore_directory);
-    if (!path_handle.IsValid()) return {};
+    // Don't fail if AddLibraryPath returns invalid handle, just proceed without it
   };
 
   ScopeExit library_path_cleanup([path_handle]() {

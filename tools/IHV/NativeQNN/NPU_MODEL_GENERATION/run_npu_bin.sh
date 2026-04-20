@@ -615,6 +615,100 @@ elif [ "$model_name" == "phi4" ]; then
         touch "$zipped_command_success"
     fi
 
+    step2_sdx_elite_success="step2_sdx_elite_success.stamp"
+
+    if [ ! -f "$step2_sdx_elite_success" ]; then
+        Run Python Script
+
+        cp "run_example_2_sdx_elite.py" "Step-2/host_linux/"
+
+        cd "Step-2/host_linux/"
+        python run_example_2_sdx_elite.py "$model_name"
+        
+        # Check if example-2 script is executed successfully
+        if [ $? -eq 0 ]; then
+            echo "step2 notebook python script executed successfully"
+            cd "../../"
+            touch "$step2_sdx_elite_success"
+        else
+            echo "Error running step2 notebook python script."
+            cd "../../"
+            exit 1
+        fi
+    else
+        echo "Step 2 Notebook already executed"
+    fi
+    
+    copy_of_bins_sdx_elite_success="copy_of_bins_sdx_elite_success.stamp"
+    if [ ! -f "$copy_of_bins_sdx_elite_success" ]; then
+        cp -r "Step-2/host_linux/assets/ar128_ar32_cl512_cl1024_cl2048_cl3072_cl4096/." "./ar128_ar32_cl512_cl1024_cl2048_cl3072_cl4096_sdx_elite/"
+        if [ $? -eq 0 ]; then
+            echo "Bins file copied successfully to current folder"
+            touch "$copy_of_bins_sdx_elite_success"
+        else
+            echo "Error copying bins."
+            exit 1
+        fi
+    else
+        echo "Bins are already copied to current folder successfully"
+    fi
+
+    renaming_file_sdx_elite_success="renaming_sdx_elite_success.stamp"
+    if [ ! -f "$renaming_file_sdx_elite_success" ]; then
+        parent_dir="ar128_ar32_cl512_cl1024_cl2048_cl3072_cl4096_sdx_elite"
+        cd "$parent_dir" || exit
+        pwd
+        
+
+        for file in `ls .`; do
+            echo "$file"    
+        num=$(echo "$file" | cut -c 67)
+            new_name="phi4_npu_${num}_of_9.bin"
+            mv "$file" "$new_name"
+            echo "Renamed $file to $new_name"
+        done
+        if [ $? -eq 0 ]; then
+            echo "Bins file renamed successfully"
+        else
+            echo "Error in renaming the bins"
+            cd ../
+            exit 1
+        fi
+        cd ../
+        touch "$renaming_file_sdx_elite_success"
+    else 
+        echo "Bins are already renamed"
+    fi
+
+    copy_htp_backend_extension_sdx_elite_success="copy_htp_BE_sdx_elite_success.stamp"
+    if [ ! -f "$copy_htp_backend_extension_sdx_elite_success" ]; then
+       echo '{ "devices": [ { "soc_id": 60, "dsp_arch": "v73", "cores": [ { "core_id": 0, "perf_profile": "burst", "rpc_control_latency": 100 } ], "pd_session": "unsigned" } ], "context": { "weight_sharing_enabled": true}, "memory": { "mem_type": "shared_buffer" }, "groupContext": { "share_resources": false } }' > htpBackendExtconfig.json
+       
+       cp "htpBackendExtConfig.json" "ar128_ar32_cl512_cl1024_cl2048_cl3072_cl4096_sdx_elite"
+       if [ $? -eq 0 ]; then
+           echo "Backend Extension is copied"
+           touch "$copy_htp_backend_extension_sdx_elite_success"
+       else
+           echo "Error in copying backend extension"
+           exit 1
+       fi
+    fi
+
+    zipped_command_sdx_elite_success="zip_sdx_elite_success.stamp"
+    if [ ! -f "$zipped_command_sdx_elite_success" ]; then
+        cd "ar128_ar32_cl512_cl1024_cl2048_cl3072_cl4096_sdx_elite"
+        apt install zip
+        zip "phi4_npu_hybrid.zip" *
+        if [ $? -eq 0 ]; then
+            echo "copy phi4_npu_hybrid.zip present in ar128_ar32_cl512_cl1024_cl2048_cl3072_cl4096_sdx_elite"
+        else
+            echo "Error in zipping the folder content of ar128_ar32_cl512_cl1024_cl2048_cl3072_cl4096_sdx_elite"
+            cd ../
+            exit 1
+        fi
+        cd ../
+        touch "$zipped_command_sdx_elite_success"
+    fi
 else
     echo "Model is not supported"
 fi

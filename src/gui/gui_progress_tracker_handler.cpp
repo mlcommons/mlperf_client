@@ -29,6 +29,11 @@ void GuiProgressTrackerHandler::StartTracking(cil::ProgressTracker &tracker) {
 }
 
 void GuiProgressTrackerHandler::Update(cil::ProgressTracker &tracker) {
+  if (tracker.IsQuiet()) {
+    cil::ProgressTrackerHandler::Update(tracker);
+    return;
+  }
+
   const auto &task_description = tracker.GetTaskDescription();
   const auto expected_task_count = tracker.GetExpectedTaskCount();
   auto current_task_index = GetCurrentTaskIndex(tracker);

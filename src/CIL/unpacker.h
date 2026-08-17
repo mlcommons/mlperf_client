@@ -52,8 +52,8 @@ class Unpacker {
                                           // the config is experimental or not
     kConfigExtendedVerificationFile,      // This file is used to detect whether
                                           // the config is extended or not
-    kLLMInputFileSchema,  // This file is used to validate the Llama2 input
-    // file.
+    kLLMInputFileSchema,    // This file is used to validate LLM input files.
+    kImageInputFileSchema,  // This file is used to validate image input files.
     kEPDependenciesConfig,  // This file is used to define the dependencies of
     // the execution providers.
     kEPDependenciesConfigSchema,  // This file is used to validate the execution
@@ -63,15 +63,24 @@ class Unpacker {
     kNativeOpenVINO,  // This file is used to run benchmarks with Native
                       // OpenVINO DLLs.
     kOrtGenAI,  // This file is used to run benchmarks with ORT Gen-AI DLLs.
-    kOrtGenAIRyzenAI,   // This file is used to run benchmarks with ORT Gen-AI RyzenAI DLLs.
-    kWindowsML,  // This file is used to run benchmarks with WindowsML DLLs.
-    kGGML_EPs,       // This file is used to run benchmarks with GGML
-    kGGML_Vulkan,    // This file is used to run benchmarks with GGML Vulkan
-    kGGML_CUDA,      // This file is used to run benchmarks with GGML CUDA
-    kGGML_Metal,     // This file is used to run benchmarks with GGML Metal
-    kGGML_ROCm,      // This file is used to run benchmarks with GGML ROCm
-    kNativeQNN,  // This file is used to run benchmarks with Native QNN
-    kMLX,            // This file is used to run benchmarks with MLX
+    kOrtGenAIRyzenAI,  // This file is used to run benchmarks with ORT Gen-AI
+                       // RyzenAI DLLs.
+    kWindowsML,    // This file is used to run benchmarks with WindowsML DLLs.
+    kGGML_EPs,           // Shared GGML dispatcher (llama.cpp)
+    kLlama_cpp_Vulkan,  // llama.cpp Vulkan backend
+    kLlama_cpp_CUDA,    // llama.cpp CUDA backend
+    kLlama_cpp_Metal,   // llama.cpp Metal backend
+    kLlama_cpp_ROCm,    // llama.cpp ROCm backend
+    kNativeQNN,    // This file is used to run benchmarks with Native QNN
+    kMLX,          // This file is used to run benchmarks with MLX
+    kDiffusers,    // In single-vendor builds this is the sub-EP renamed
+                   // to IHV_Diffusers.dll; in multi-vendor (dispatcher)
+                   // builds it's the pure-C++ dispatcher DLL.
+    kDiffusers_NVIDIA,  // Per-vendor sub-EP, multi-vendor builds only.
+    kDiffusers_APPLE,   // Per-vendor sub-EP, multi-vendor builds only.
+    kDiffusers_AMD,     // Per-vendor sub-EP, multi-vendor builds only.
+    kTokenizer,         // tokenizer shared library
+    kImageIO,           // imageio shared library
   };
 
   Unpacker();
@@ -122,6 +131,9 @@ class Unpacker {
   static std::vector<std::string> UnpackFilesFromZIP(
       const std::string& zip_file, const std::string& dest_dir,
       bool return_relative_paths = false, int64_t timeout_ms = -1);
+
+  static bool ZipFiles(const std::string& zip_file,
+                       const std::vector<std::string>& files_to_add);
 
  private:
   bool ExtractFileFromMemory(const unsigned char* data[], size_t data_size,

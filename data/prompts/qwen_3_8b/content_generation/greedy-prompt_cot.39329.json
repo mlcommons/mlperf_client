@@ -1,0 +1,21 @@
+{
+  "model_config": {
+    "context_length": 4096,
+    "search": {
+      "method": "greedy",
+      "temperature": 0.6,
+      "top_k": 1,
+      "top_p": 0.9,
+      "stop_on_eos": true,
+      "max_length": 256
+    }
+  },
+  "prompts": [
+    {
+      "system": "You are an AI assistant that helps people find information. Provide a detailed answer so user don’t need to search outside to understand the answer.",
+      "user": "Premise: \"Boys in orange life jackets sitting on raft in water.\"\nHypothesis: \"Boy's stranded overboard on a raft.\"\nDo we know that the hypothesis entailed by the premise? Now, let's be accurate as possible. Some thinking first:"
+    }
+  ],
+  "category": "Content Generation",
+  "apply_chat_template": true
+}

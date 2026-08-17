@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.15)
 cmake_policy(SET CMP0135 NEW)
 
 project(${PROJECT_NAME} VERSION 1.0)
+set(CMAKE_POSIITON_INDEPENDENT_CODE ON)
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
@@ -78,7 +79,7 @@ endif()
 # Add common code from CIL
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../../../common" common_cil)
 
-add_subdirectory(../../../../../../deps/llama.cpp GGML)
+add_subdirectory(${LLAMA_CPP_SOURCE_DIR} GGML)
 set_target_properties(llama PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED YES)
 
 target_include_directories(${PROJECT_NAME}
@@ -94,6 +95,12 @@ if(APPLE)
     INSTALL_RPATH_USE_LINK_PATH TRUE
     INSTALL_RPATH "@loader_path"
     MACOSX_RPATH TRUE)
+endif()
+if(UNIX AND NOT APPLE)
+  set_target_properties(${PROJECT_NAME} PROPERTIES
+    BUILD_WITH_INSTALL_RPATH TRUE
+    INSTALL_RPATH_USE_LINK_PATH TRUE
+    INSTALL_RPATH "\$ORIGIN")
 endif()
 
 target_link_libraries(${PROJECT_NAME}

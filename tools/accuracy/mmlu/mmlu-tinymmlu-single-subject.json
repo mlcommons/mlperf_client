@@ -1,0 +1,24 @@
+{
+    "MMLUDataPath": "mmlu_data",
+    "MLPerfProgramPath": "../../../mlperf-windows.exe",
+    "OutputDir": "output",
+    "DataSplitStep": null,
+    "Subjects": [
+        "anatomy"
+    ],
+    "HfToken": null,
+    "RunID": 9999,
+    "FewShotPromptsNumber": 5,
+    "PromptFormat": "raw",
+    "InputConfigPath": null,
+    "RunConfigPath": null,
+    "InputConfigTemplate": {
+        "model_config": {
+            "model": {
+                "context_length": 4096
+            },
+            "search": {}
+        }
+    },
+    "RunConfigTemplate": null
+}

@@ -87,10 +87,10 @@ static int addFile(const int maxCppSize, const fs::path& filePath,
     if (!etaPrinted) {
       std::cout << "ETA: " << minutesLeft << " minutes " << secondsLeft
                 << " seconds" << std::endl;
-	}
+    }
 
     if (etaPrinted && (percentage % 10) == 0)
-        std::cout << "Progress: " << percentage << "%, ETA: " << minutesLeft
+      std::cout << "Progress: " << percentage << "%, ETA: " << minutesLeft
                 << " minutes " << secondsLeft << " seconds" << std::endl;
 
     etaPrinted = true;
@@ -189,9 +189,8 @@ int main(int argc, char* argv[]) {
     std::string file_path = argv[i];
     // Trim trailing spaces
     file_path.erase(file_path.find_last_not_of(' ') + 1);
-    fs::path file = file_path;
-
-    if (fs::exists(file) && fs::is_regular_file(file)) {
+    if (fs::path file = file_path;
+        fs::exists(file) && fs::is_regular_file(file)) {
       files.push_back(file);
       // Accumulate the size of each file
       totalSize += fs::file_size(file);

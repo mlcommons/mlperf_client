@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.26)
 
 project(IHVs VERSION 1.0)
 
@@ -72,7 +72,7 @@ add_custom_command(
 	TARGET ${PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${CMAKE_BINARY_DIR}/IHV/GGML/bin/$<CONFIG> ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/IHV/GGML/
-COMMENT "Copying shared libraries from GGML..."
+    COMMENT "Copying shared libraries from GGML..."
 )
 endif()
 
@@ -99,5 +99,14 @@ if(MLPERF_IHV_WINDOWSML)
         BYPRODUCTS ${CMAKE_BINARY_DIR}/IHV/WindowsML/bin/$<CONFIG>/IHV_WindowsML.dll
         COMMENT "Copying shared libraries from ihv_windowsml..."
     )
+
+endif()
+
+if(MLPERF_IHV_DIFFUSERS)
+    add_subdirectory(Diffusers)
+    add_dependencies(${PROJECT_NAME} ihv_diffusers)
+    # No POST_BUILD copy: the Diffusers sub-build installs the DLL +
+    # python/ + standalone/ directly into
+    # ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/IHV/Diffusers/ via cmake --install.
 endif()
 

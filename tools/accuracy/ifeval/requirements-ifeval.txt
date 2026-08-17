@@ -1,0 +1,11 @@
+# Matches the vendored instruction_following_eval requirements (absl -> absl-py on PyPI)
+absl-py
+pycld2
+immutabledict
+pystemmer
+torch
+transformers
+jinja2
+loguru
+tqdm
+requests

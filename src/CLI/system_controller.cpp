@@ -5,6 +5,7 @@
 #include <csignal>
 #include <fstream>
 #include <iostream>
+#include <nlohmann/json.hpp>
 
 #include "benchmark/runner.h"
 #include "benchmark_logger.h"
@@ -115,25 +116,45 @@ bool SystemController::Config(bool temp_dir_overriden) {
   }
 
   std::unordered_map<std::string, std::string> eps_dependencies_dest;
+  // Per-EP collection of scenario configs, used by EPDependenciesManager to
+  // evaluate per-file `Condition` clauses in the deps JSON (e.g. NV-only DLLs
+  // gated on `"device_ep": "NvTensorRtRtx"`).
+  std::unordered_map<std::string, std::vector<nlohmann::json>>
+      eps_dependencies_configs;
   bool has_llm_scenario = false;
-  for (const auto& model : config_->GetScenarios()) {
-    const auto& model_name = model.GetName();
-    has_llm_scenario = cil::BenchmarkRunner::IsLLMModel(model_name);
+  bool has_image_scenario = false;
+  for (const auto& scenario : config_->GetScenarios()) {
+    const auto& scenario_name = scenario.GetName();
+    has_llm_scenario =
+        has_llm_scenario || cil::BenchmarkRunner::IsLLMScenario(scenario_name);
+    has_image_scenario = has_image_scenario ||
+                         cil::BenchmarkRunner::IsImageScenario(scenario_name);
 
-    if (!cil::BenchmarkRunner::IsSupportedModel(model_name)) {
+    if (!cil::BenchmarkRunner::IsLLMScenario(scenario_name) &&
+        !cil::BenchmarkRunner::IsImageScenario(scenario_name)) {
       LOG4CXX_ERROR(loggerSystemController,
-                    "Model "
-                        << model_name
-                        << " is not supported in this build, aborting...\nUse "
+                    "Scenario name \""
+                        << scenario_name
+                        << "\" is not supported, aborting...\nUse "
                            "-h or --help for more information.");
       return false;
     }
 
-    for (const auto& ep : model.GetExecutionProviders()) {
+    for (const auto& model : scenario.GetModels()) {
+      const auto& base_name = model.GetModelBaseName();
+      if (!base_name.empty() &&
+          !cil::BenchmarkRunner::IsSupportedModel(base_name)) {
+        LOG4CXX_ERROR(loggerSystemController,
+                      "Model \"" << base_name << "\" is not supported.");
+        return false;
+      }
+    }
+
+    for (const auto& ep : scenario.GetExecutionProviders()) {
       const auto& ep_name = ep.GetName();
 
-      auto is_supported_ep =
-          cil::utils::IsEpSupportedOnThisPlatform("", ep_name);
+      auto is_supported_ep = cil::BenchmarkRunner::IsEpSupportedOnThisPlatform(
+          "", ep.GetFullName());
 
       if (!is_supported_ep) {
         LOG4CXX_INFO(loggerSystemController,
@@ -149,11 +170,13 @@ bool SystemController::Config(bool temp_dir_overriden) {
       // We use internal dependencies from JSON if it's a known IHV and
       // the library path was not provided.
 
-      if (empty_library_path && is_valid_ep)
-        eps_dependencies_dest.insert(
-            {ep.GetName(), cil::GetExecutionProviderParentLocation(
-                               ep, unpacker_->GetDepsDir())
-                               .string()});
+      if (empty_library_path && is_valid_ep) {
+        const auto ep_dest =
+            cil::GetExecutionProviderParentLocation(ep, unpacker_->GetDepsDir())
+                .string();
+        eps_dependencies_dest.try_emplace(ep.GetName(), ep_dest);
+        eps_dependencies_configs[ep.GetName()].push_back(ep.GetConfig());
+      }
     }
   }
 
@@ -179,6 +202,14 @@ bool SystemController::Config(bool temp_dir_overriden) {
     return false;
   }
 
+  if (has_image_scenario &&
+      !unpacker_->UnpackAsset(kImageInputFileSchema,
+                              image_input_file_schema_path_)) {
+    LOG4CXX_ERROR(loggerSystemController,
+                  "Failed to unpack image input file schema, aborting...");
+    return false;
+  }
+
   auto ep_dependencies_config_path =
       config_->GetSystemConfig().GetEPDependenciesConfigPath();
   if (ep_dependencies_config_path.empty() &&
@@ -201,7 +232,8 @@ bool SystemController::Config(bool temp_dir_overriden) {
 
   ep_dependencies_manager_ = std::make_unique<cil::EPDependenciesManager>(
       eps_dependencies_dest, ep_dependencies_config_path,
-      ep_dependencies_config_schema_path, unpacker_->GetDepsDir());
+      ep_dependencies_config_schema_path, unpacker_->GetDepsDir(),
+      eps_dependencies_configs);
 
   if (!ep_dependencies_manager_->Initialize()) return false;
 
@@ -258,6 +290,10 @@ void SystemController::SetCSVExportPath(const std::string& csv_path) {
   csv_export_path_ = csv_path;
 }
 
+void SystemController::SetSystemPythonPath(const std::string& python_path) {
+  config_->GetSystemConfig().SetPythonPath(python_path);
+}
+
 bool SystemController::Run(const Logger& logger, bool enumerate_devices,
                            std::optional<int> device_id) const {
   // Custom progress handler for console output using percentages when
@@ -281,6 +317,7 @@ bool SystemController::Run(const Logger& logger, bool enumerate_devices,
   params.data_verification_file_schema_path =
       data_verification_file_schema_path_;
   params.input_file_schema_path = input_file_schema_path_;
+  params.image_input_file_schema_path = image_input_file_schema_path_;
   params.skip_failed_prompts = skip_failed_prompts_;
 
   try {
@@ -301,7 +338,16 @@ bool SystemController::Run(const Logger& logger, bool enumerate_devices,
 
     using enum LogLevel;
 
-    auto on_enter_stage_callback = [&logger, &scenarios,
+    auto scenario_display = [&scenarios](int i) {
+      const auto& sc = scenarios[i];
+      if (const auto& models = sc.GetModels(); !models.empty()) {
+        return "scenario " + sc.GetDisplayName() + ", model " +
+               models[0].GetDisplayName();
+      }
+      return "scenario " + sc.GetDisplayName();
+    };
+
+    auto on_enter_stage_callback = [&logger, &scenario_display,
                                     &download_behaviour_option_value, device_id,
                                     &enumerate_devices, &benchmark_start](
                                        const std::string_view& stage_name,
@@ -310,7 +356,7 @@ bool SystemController::Run(const Logger& logger, bool enumerate_devices,
         if (enumerate_devices) {
           logger(kInfo, "");
         } else {
-          logger(kInfo, "Starting to run scenario " + scenarios[i].GetName());
+          logger(kInfo, "Starting to run " + scenario_display(i));
         }
 
         return true;
@@ -346,8 +392,7 @@ bool SystemController::Run(const Logger& logger, bool enumerate_devices,
         std::chrono::duration<double> duration =
             benchmark_end - benchmark_start;
 
-        logger(kInfo, "\n\nFinished running of scenario " +
-                          scenarios[i].GetName() + " in " +
+        logger(kInfo, "\n\nFinished running " + scenario_display(i) + " in " +
                           std::to_string(duration.count()) + " seconds");
       }
       return true;
@@ -374,7 +419,14 @@ bool SystemController::Run(const Logger& logger, bool enumerate_devices,
 
     benchmark_runner->SetOnFailedStageCallback(on_failed_stage_callback);
 
-    return benchmark_runner->Run();
+    const bool ok = benchmark_runner->Run();
+    if (!ok) {
+      // Surface a stage-specific reason (e.g. disk-space shortfall) at the
+      // console so the user doesn't have to open the log file.
+      if (auto msg = benchmark_runner->GetLastErrorMessage(); !msg.empty())
+        logger(LogLevel::kError, msg);
+    }
+    return ok;
   } catch (const std::exception& e) {
     std::string error_message = "Exception while running the benchmark: ";
     error_message += e.what();

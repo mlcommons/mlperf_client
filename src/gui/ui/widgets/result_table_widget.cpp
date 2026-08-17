@@ -184,6 +184,48 @@ void ResultTableWidget::SetText(int row, int col, const QString& text) {
   }
 }
 
+void ResultTableWidget::AppendCustomRow(const QList<QWidget*>& widgets) {
+  QVector<QWidget*> row_widgets;
+  row_widgets.reserve(col_number_);
+  for (int i = 0; i < col_number_; ++i) {
+    QWidget* w = (i < widgets.size() && widgets[i] != nullptr)
+                     ? widgets[i]
+                     : new CellWidget();
+    row_widgets.push_back(w);
+  }
+  row_widget_list_.push_back(row_widgets);
+  for (int i = 0; i < row_widgets.size(); ++i) {
+    main_layout_->addWidget(row_widgets[i], row_widget_list_.size(), i,
+                            Qt::AlignTop);
+  }
+}
+
+void ResultTableWidget::AppendSpanningCustomRow(QWidget* widget) {
+  if (!widget) return;
+  // Only two bookkeeping cells: column 0 and the widget that spans columns
+  // 1..N. The paint helpers tolerate this short row.
+  QVector<QWidget*> row_widgets;
+  row_widgets.push_back(new CellWidget());  // col 0
+  row_widgets.push_back(widget);
+  row_widget_list_.push_back(row_widgets);
+  const int grid_row = row_widget_list_.size();
+  main_layout_->addWidget(row_widgets[0], grid_row, 0);
+  main_layout_->addWidget(widget, grid_row, 1, 1, col_number_ - 1);
+}
+
+void ResultTableWidget::AppendCustomTitleRow(QWidget* title_widget) {
+  QVector<QWidget*> row_widgets;
+  row_widgets.reserve(col_number_);
+  row_widgets.push_back(title_widget ? title_widget : new CellWidget());
+  for (int i = 1; i < col_number_; ++i) row_widgets.push_back(new CellWidget());
+
+  row_widget_list_.push_back(row_widgets);
+  title_rows_.push_back(row_widget_list_.size() - 1);
+  for (int i = 0; i < row_widgets.size(); ++i) {
+    main_layout_->addWidget(row_widgets[i], row_widget_list_.size(), i);
+  }
+}
+
 void ResultTableWidget::AddRow(const QStringList& text_list, bool is_title,
                                bool is_section, bool is_bold) {
   QVector<QWidget*> row_widgets;
@@ -249,7 +291,7 @@ QVector<QRect> ResultTableWidget::GetColumnRects() const {
   for (int col = 0; col < col_number_; ++col) {
     QRect rect;
     for (const auto& row : row_widget_list_)
-      rect = rect.united(row.at(col)->geometry());
+      if (col < row.size()) rect = rect.united(row.at(col)->geometry());
     if (!header_widget_list_.isEmpty())
       rect = rect.united(header_widget_list_.at(col)->geometry());
     rect.setHeight(height());

@@ -1,0 +1,31 @@
+# Diffusers EP -- NVIDIA / CUDA (Windows x64).
+#
+# torch and torchvision are installed separately by CMake with the CUDA
+# index URL (see src/CMakeLists.txt). Do NOT add them here or pip may
+# replace the CUDA build with a CPU build.
+#
+# bitsandbytes is installed by CMake before this file is processed so the
+# CUDA build can be pinned via its own index resolution.
+diffusers
+transformers
+accelerate
+safetensors
+optimum-quanto
+torchao
+sentencepiece
+protobuf
+huggingface_hub
+Pillow
+numpy
+pyinstaller
+# ModelOpt powers the FP8/NVFP4 load paths (FLUX.2 Klein via modelopt).
+nvidia-modelopt
+# TensorRT compile backend (torch-tensorrt-rtx + tensorrt-rtx + dllist) is
+# installed by install_python_deps.py BEFORE this file is processed — with
+# --no-deps to prevent pip from replacing the nightly torch build. Do NOT
+# add them here or pip may pull in a stable torch as a transitive dep.
+# torch-tensorrt-rtx imports as torch_tensorrt. The extra index URLs below
+# are kept for NVIDIA-hosted wheels.
+
+--extra-index-url https://pypi.nvidia.com
+--extra-index-url https://pypi.ngc.nvidia.com

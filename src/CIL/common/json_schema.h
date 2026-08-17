@@ -9,4 +9,9 @@ namespace cil {
 std::string ValidateJSONSchema(const std::string& schema_path,
                                const nlohmann::json& json_data);
 
+// In-memory schema validation (no file I/O).
+// Returns empty string on success, error description on failure.
+std::string ValidateJSONSchema(const nlohmann::json& schema,
+                               const nlohmann::json& json_data);
+
 }  // namespace cil

@@ -7,7 +7,7 @@
 #include <openvino/genai/llm_pipeline.hpp>
 
 #include "../native_openvino_config.h"
-#include "llm/llama_config.h"
+#include "llm/llm_config.h"
 #include "math_utils.h"
 
 namespace {
@@ -56,6 +56,7 @@ LLMInference::LLMInference(
     cil::Logger logger, const std::string& deps_dir)
     : BaseInference(model_path, model_name, ep_settings, logger, deps_dir),
       config_(logger),
+      is_agentic_(ep_settings.GetIsAgentic().value_or(false)),
       streamer_{std::move(std::make_shared<CallbackStreamer>())},
       generated_tokens_{0},
       generation_duration_ms_{0},
@@ -88,17 +89,29 @@ void LLMInference::Init(const nlohmann::json& model_config,
     pipeline_config["NPU_TURBO"] = "YES";
     pipeline_config["NPUW_LLM_PREFILL_ATTENTION_HINT"] = "PYRAMID";
     pipeline_config["GENERATE_HINT"] = "BEST_PERF";
-  } else {
+    pipeline_config["NPU_COMPILER_TYPE"] = "DRIVER";
+    if (is_agentic_) {
+      pipeline_config["NPUW_LLM_ENABLE_PREFIX_CACHING"] = "YES";
+    }
+  } else if (device.find("GPU") != std::string::npos) {
     ov::genai::SchedulerConfig scheduler_config;
     scheduler_config.max_num_batched_tokens =
         std::numeric_limits<size_t>::max();
-    scheduler_config.enable_prefix_caching = false;
+    scheduler_config.enable_prefix_caching = is_agentic_;
     pipeline_config[ov::genai::scheduler_config.name()] = scheduler_config;
+    if (is_agentic_) {
+      pipeline_config["GPU_ENABLE_LARGE_ALLOCATIONS"] = "YES";
+    }
+  } else {
+    error_message_ = "Unsupported device: " + device;
+    logger_(LogLevel::kError, error_message_);
+    return;
   }
 
   try {
     logger_(LogLevel::kInfo,
-            std::format("Creating pipeline on {} device", device));
+            std::format("Creating {} pipeline on {} device",
+                        is_agentic_ ? "agentic" : "non-agentic", device));
     pipeline_.reset();  // Destroy old pipeline and free memory
     pipeline_.reset(new ov::genai::LLMPipeline(directory_path.string(), device,
                                                pipeline_config));
@@ -106,6 +119,7 @@ void LLMInference::Init(const nlohmann::json& model_config,
     logger_(LogLevel::kError,
             std::format("Can't init GenAI pipeline: {}", e.what()));
     error_message_ = e.what();
+    return;
   }
 
   logger_(LogLevel::kInfo,

@@ -1,0 +1,102 @@
+{
+  "EPDependencies": [
+    {
+      "Name": "NativeOpenVINO",
+      "Files": [
+        { "Name": "openvino.dll",                         "Path": "@MLPERF_NATIVE_OPENVINO_PREFIX@/openvino.dll" },
+        { "Name": "openvino_auto_batch_plugin.dll",       "Path": "@MLPERF_NATIVE_OPENVINO_PREFIX@/openvino_auto_batch_plugin.dll" },
+        { "Name": "openvino_auto_plugin.dll",             "Path": "@MLPERF_NATIVE_OPENVINO_PREFIX@/openvino_auto_plugin.dll" },
+        { "Name": "openvino_c.dll",                       "Path": "@MLPERF_NATIVE_OPENVINO_PREFIX@/openvino_c.dll" },
+        { "Name": "openvino_genai.dll",                   "Path": "@MLPERF_NATIVE_OPENVINO_PREFIX@/openvino_genai.dll" },
+        { "Name": "openvino_hetero_plugin.dll",           "Path": "@MLPERF_NATIVE_OPENVINO_PREFIX@/openvino_hetero_plugin.dll" },
+        { "Name": "openvino_intel_cpu_plugin.dll",        "Path": "@MLPERF_NATIVE_OPENVINO_PREFIX@/openvino_intel_cpu_plugin.dll" },
+        { "Name": "openvino_intel_gpu_plugin.dll",        "Path": "@MLPERF_NATIVE_OPENVINO_PREFIX@/openvino_intel_gpu_plugin.dll" },
+        { "Name": "openvino_intel_npu_plugin.dll",        "Path": "@MLPERF_NATIVE_OPENVINO_PREFIX@/openvino_intel_npu_plugin.dll" },
+        { "Name": "openvino_ir_frontend.dll",             "Path": "@MLPERF_NATIVE_OPENVINO_PREFIX@/openvino_ir_frontend.dll" },
+        { "Name": "openvino_onnx_frontend.dll",           "Path": "@MLPERF_NATIVE_OPENVINO_PREFIX@/openvino_onnx_frontend.dll" },
+        { "Name": "openvino_paddle_frontend.dll",         "Path": "@MLPERF_NATIVE_OPENVINO_PREFIX@/openvino_paddle_frontend.dll" },
+        { "Name": "openvino_pytorch_frontend.dll",        "Path": "@MLPERF_NATIVE_OPENVINO_PREFIX@/openvino_pytorch_frontend.dll" },
+        { "Name": "openvino_tensorflow_frontend.dll",     "Path": "@MLPERF_NATIVE_OPENVINO_PREFIX@/openvino_tensorflow_frontend.dll" },
+        { "Name": "openvino_tensorflow_lite_frontend.dll","Path": "@MLPERF_NATIVE_OPENVINO_PREFIX@/openvino_tensorflow_lite_frontend.dll" },
+        { "Name": "openvino_tokenizers.dll",              "Path": "@MLPERF_NATIVE_OPENVINO_PREFIX@/openvino_tokenizers.dll" },
+        { "Name": "plugins.xml",                          "Path": "@MLPERF_NATIVE_OPENVINO_PREFIX@/plugins.xml" },
+        { "Name": "tbb12.dll",                            "Path": "@MLPERF_NATIVE_OPENVINO_PREFIX@/tbb12.dll" },
+        { "Name": "tbbmalloc.dll",                        "Path": "@MLPERF_NATIVE_OPENVINO_PREFIX@/tbbmalloc.dll" }
+      ]
+    },
+    {
+      "Name": "RyzenAI-Runtime",
+      "Files": [
+        { "Name": "aiecompiler_client.dll",            "Path": "@MLPERF_ORTGENAI_RYZENAI_PREFIX@/aiecompiler_client.dll" },
+        { "Name": "D3D12Core.dll",                      "Path": "@MLPERF_ORTGENAI_RYZENAI_PREFIX@/D3D12Core.dll" },
+        { "Name": "DirectML.dll",                       "Path": "@MLPERF_ORTGENAI_RYZENAI_PREFIX@/DirectML.dll" },
+        { "Name": "dyn_bins.dll",                       "Path": "@MLPERF_ORTGENAI_RYZENAI_PREFIX@/dyn_bins.dll" },
+        { "Name": "dyn_dispatch_core.dll",              "Path": "@MLPERF_ORTGENAI_RYZENAI_PREFIX@/dyn_dispatch_core.dll" },
+        { "Name": "flexmlrt.dll",                       "Path": "@MLPERF_ORTGENAI_RYZENAI_PREFIX@/flexmlrt.dll" },
+        { "Name": "onnxruntime-genai.dll",              "Path": "@MLPERF_ORTGENAI_RYZENAI_PREFIX@/onnxruntime-genai.dll" },
+        { "Name": "onnxruntime.dll",                    "Path": "@MLPERF_ORTGENAI_RYZENAI_PREFIX@/onnxruntime.dll" },
+        { "Name": "onnxruntime_providers_ryzenai.dll",  "Path": "@MLPERF_ORTGENAI_RYZENAI_PREFIX@/onnxruntime_providers_ryzenai.dll" },
+        { "Name": "onnxruntime_providers_shared.dll",   "Path": "@MLPERF_ORTGENAI_RYZENAI_PREFIX@/onnxruntime_providers_shared.dll" },
+        { "Name": "onnxruntime_providers_vitisai.dll",  "Path": "@MLPERF_ORTGENAI_RYZENAI_PREFIX@/onnxruntime_providers_vitisai.dll" },
+        { "Name": "onnxruntime_vitisai_ep.dll",         "Path": "@MLPERF_ORTGENAI_RYZENAI_PREFIX@/onnxruntime_vitisai_ep.dll" },
+        { "Name": "onnxruntime_vitis_ai_custom_ops.dll","Path": "@MLPERF_ORTGENAI_RYZENAI_PREFIX@/onnxruntime_vitis_ai_custom_ops.dll" },
+        { "Name": "ryzen_mm.dll",                       "Path": "@MLPERF_ORTGENAI_RYZENAI_PREFIX@/ryzen_mm.dll" },
+        { "Name": "vaiml.dll",                          "Path": "@MLPERF_ORTGENAI_RYZENAI_PREFIX@/vaiml.dll" },
+        { "Name": "z.dll",                              "Path": "@MLPERF_ORTGENAI_RYZENAI_PREFIX@/z.dll" },
+        { "Name": "zlib.dll",                           "Path": "@MLPERF_ORTGENAI_RYZENAI_PREFIX@/zlib.dll" },
+        { "Name": "zstd.dll",                           "Path": "@MLPERF_ORTGENAI_RYZENAI_PREFIX@/zstd.dll" }
+      ]
+    },
+    {
+      "Name": "OrtGenAI-RyzenAI",
+      "Dependencies": ["RyzenAI-Runtime"],
+      "Files": [
+        { "Name": "onnxruntime-genai.dll",              "Path": "@MLPERF_ORTGENAI_RYZENAI_PREFIX@/onnxruntime-genai.dll" }
+      ]
+    },
+    {
+      "Name": "llama-cpp",
+      "Files": [
+        { "Name": "cudart64_13.dll",   "Path": "@MLPERF_CUDA_PREFIX@/cudart64_13.dll",  "Condition": { "backend": "CUDA" } },
+        { "Name": "cublas64_13.dll",   "Path": "@MLPERF_CUDA_PREFIX@/cublas64_13.dll",  "Condition": { "backend": "CUDA" } },
+        { "Name": "cublasLt64_13.dll", "Path": "@MLPERF_CUDA_PREFIX@/cublasLt64_13.dll","Condition": { "backend": "CUDA" } }
+      ]
+    },
+    {
+      "Name": "NativeQNN",
+      "Files": [
+        { "Name": "Genie.dll",                       "Path": "@MLPERF_NATIVE_QNN_PREFIX@/Genie.dll" },
+        { "Name": "QnnGenAiTransformerModel.dll",    "Path": "@MLPERF_NATIVE_QNN_PREFIX@/QnnGenAiTransformerModel.dll" },
+        { "Name": "QnnGenAiTransformer.dll",         "Path": "@MLPERF_NATIVE_QNN_PREFIX@/QnnGenAiTransformer.dll" }
+      ]
+    },
+    {
+      "Name": "WindowsML",
+      "Files": [
+        { "Name": "DirectML.dll",                              "Path": "@MLPERF_WINML_PREFIX@/DirectML.dll" },
+        { "Name": "Microsoft.Windows.AI.MachineLearning.dll",  "Path": "@MLPERF_WINML_PREFIX@/Microsoft.Windows.AI.MachineLearning.dll" },
+        { "Name": "onnxruntime.dll",                           "Path": "@MLPERF_WINML_PREFIX@/onnxruntime.dll" },
+        { "Name": "onnxruntime-genai.dll",                     "Path": "@MLPERF_WINML_PREFIX@/onnxruntime-genai.dll" },
+        {
+          "Name": "tensorrtrtx/onnxruntime-genai-cuda.dll",
+          "Path": "@MLPERF_WINML_PREFIX@/tensorrtrtx/onnxruntime-genai-cuda.dll",
+          "Condition": { "device_ep": "NvTensorRtRtx" }
+        },
+        {
+          "Name": "tensorrtrtx/cudart64_12.dll",
+          "Path": "@MLPERF_WINML_PREFIX@/tensorrtrtx/cudart64_12.dll",
+          "Condition": { "device_ep": "NvTensorRtRtx" }
+        }
+      ]
+    },
+    {
+      "Name": "Diffusers",
+      "Dependencies": [
+        { "Name": "RyzenAI-Runtime", "Condition": [ { "backend": "RYZENAI" }, { "device_vendor": "AMD" } ] }
+      ],
+      "Files": [
+        @MLPERF_DIFFUSERS_FILES_JSON@
+      ]
+    }
+  ]
+}

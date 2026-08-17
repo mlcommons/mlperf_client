@@ -2,12 +2,13 @@
 
 #include <set>
 
-#include "version.h"
 #include "api_handler.h"
 #include "executor_base.h"
 #include "executor_factory.h"
+#include "runner.h"
 #include "scenario_data_provider.h"
 #include "utils.h"
+#include "version.h"
 
 using namespace log4cxx;
 namespace fs = std::filesystem;
@@ -25,10 +26,14 @@ bool BenchmargStage::Run(const ScenarioConfig& scenario_config,
         "Results Verification File is not set, verification is disabled");
   }
 
+  const std::string& schema_path =
+      BenchmarkRunner::IsImageScenario(scenario_config.GetName())
+          ? image_input_file_schema_path_
+          : input_file_schema_path_;
+
   auto scenario_data_providers = std::make_shared<ScenarioDataProvider>(
       scenario_data.asset_file_paths, scenario_data.input_file_paths,
-      input_file_schema_path_,
-      scenario_data.output_results_file_paths.value_or(""),
+      schema_path, scenario_data.output_results_file_paths.value_or(""),
       output_results_schema_path_);
 
   const auto& execution_providers = scenario_data.prepared_eps;
@@ -51,7 +56,12 @@ bool BenchmargStage::Run(const ScenarioConfig& scenario_config,
 
     const auto& model_name = model_config.GetName();
 
-    std::string model_hash = utils::ComputeFileSHA256(model_file_path, logger_);
+    std::string model_hash;
+    if (fs::is_directory(model_file_path))
+      model_hash = fs::canonical(model_file_path).string();
+    else
+      model_hash = utils::ComputeFileSHA256(model_file_path, logger_);
+
     if (!executed_models_hashes.empty() &&
         executed_models_hashes.contains(model_hash)) {
       LOG4CXX_INFO(logger_, "Model: " << model_source_path
@@ -84,7 +94,8 @@ bool BenchmargStage::Run(const ScenarioConfig& scenario_config,
       if (!last_model_name.has_value() ||
           last_model_name != display_model_name) {
         benchmarks.emplace_back(
-            TaskScheduler("Benchmark Scheduler - " + scenario_config.GetName()),
+            TaskScheduler("Benchmark Scheduler - " +
+                          scenario_config.GetDisplayName()),
             ProgressTracker(0, "benchmark", kProgressInterval),
             std::vector<std::shared_ptr<infer::ExecutorBase>>{});
 
@@ -95,6 +106,7 @@ bool BenchmargStage::Run(const ScenarioConfig& scenario_config,
 
       nlohmann::json ep_config = ep.GetConfig();
       const auto& ep_name = ep.GetName();
+      const std::string ep_display = ep.GetFullName();
 
       std::string tokenizer_path =
           ep.GetModelByFilePath(model_source_path).GetTokenizerPath();
@@ -105,25 +117,30 @@ bool BenchmargStage::Run(const ScenarioConfig& scenario_config,
       scenario_data_providers->SetLLMTokenizerPath(
           scenario_data.source_to_path_map[tokenizer_path]);
 
+      std::string model_base_name = model_config.GetModelBaseName();
+      std::string pretty_name = model_config.GetDisplayName();
+
       auto executor = infer::ExecutorFactory::Create(
-          scenario_config.GetName(), model_file_path, scenario_data_providers,
-          library_path, ep_name, ep_config, scenario_config.GetIterations(),
+          scenario_config.GetName(), model_base_name, pretty_name,
+          model_file_path, scenario_data_providers, library_path, ep_name,
+          ep_config, scenario_config.GetIterations(),
           scenario_config.GetIterationsWarmUp(),
-          scenario_config.GetInferenceDelay(), skip_failed_prompts_);
+          scenario_config.GetInferenceDelay(), skip_failed_prompts_,
+          scenario_config.IsAgentic(), scenario_config.GetToolsExecution());
 
       if (!executor) {
         LOG4CXX_ERROR(logger_, "Failed to run benchmark for "
-                                   << scenario_config.GetName() << " model \""
-                                   << display_model_name
+                                   << scenario_config.GetDisplayName()
+                                   << " model \"" << display_model_name
                                    << "\", model file: " << model_file_path
-                                   << ", EP: " << ep_name << ep_config);
+                                   << ", EP: " << ep_display << ep_config);
         continue;
       }
       eps_description_stream
-          << (eps_description_stream.str().empty() ? "" : ", ") << ep_name
+          << (eps_description_stream.str().empty() ? "" : ", ") << ep_display
           << ep_config;
 
-      std::string task_name = "Benchmark " + ep_name;
+      std::string task_name = "Benchmark " + ep_display;
 
       scheduler.ScheduleTask(task_name, [=, &task_executed]() {
         BenchmarkTask(ep_name, ep_config, model_source_path, display_model_name,
@@ -134,9 +151,8 @@ bool BenchmargStage::Run(const ScenarioConfig& scenario_config,
       new_executors_count++;
     }
 
-    auto original_name = scenario_data.path_to_source_map[model_file_path];
-
-    if (new_executors_count)
+    if (auto original_name = scenario_data.path_to_source_map[model_file_path];
+        new_executors_count) {
       LOG4CXX_INFO(
           logger_,
           "Running benchmarks for EPs "
@@ -144,19 +160,20 @@ bool BenchmargStage::Run(const ScenarioConfig& scenario_config,
               << (display_model_name.empty() ? model_name : display_model_name)
               << "\" (" << original_name << " -> " << model_file_path
               << "), added " << new_executors_count << " task(s)\n");
-    else
+    } else {
       LOG4CXX_ERROR(logger_,
                     "No valid EPs found for model "
                         << (model_name.empty() ? "" : "\"" + model_name + "\" ")
                         << "(" << original_name << " -> " << model_file_path
                         << ")\n");
+    }
   }
 
   for (auto& [scheduler, progress_tracker, executors] : benchmarks) {
     if (!raport_progress_cb(progress_tracker, scheduler)) {
       for (auto executor : executors) executor->Cancel();
       LOG4CXX_INFO(logger_,
-                   "\nModel " << scenario_config.GetName()
+                   "\nModel " << scenario_config.GetDisplayName()
                               << ", Benchmark Stage interrupted, stopping...");
 
       return false;
@@ -171,13 +188,18 @@ void BenchmargStage::BenchmarkTask(
     const std::string& model_source_path, const std::string& display_model_name,
     const ScenarioConfig& scenario_config,
     std::shared_ptr<infer::ExecutorBase> executor, bool& task_executed) {
+  const ModelConfig model_config =
+      scenario_config.GetModelByFilePath(model_source_path);
+  std::string model_name = model_config.GetModelBaseName();
+  if (model_name.empty()) model_name = display_model_name;
+
   LOG4CXX_INFO(logger_, "\nPreparing to run the benchmark for the EP "
                             << ep_name << ep_config);
 
   // MLPerf Power - "power_begin", "value": "02-25-2025 17:38:15.269"
   LOG4CXX_INFO(logger_, "power_begin - start " << scenario_config.GetName()
-                                               << " " << ep_name << " "
-                                               << ep_config);
+                                               << " " << model_name << " "
+                                               << ep_name << " " << ep_config);
 
   auto start_time = std::chrono::high_resolution_clock::now();
 
@@ -194,7 +216,9 @@ void BenchmargStage::BenchmarkTask(
   res.config_file_hash = config_.GetConfigFileHash();
   res.config_file_comment = config_.GetSystemConfig().GetComment();
   res.model_path = model_source_path;
-  LOG4CXX_INFO(logger_, "Model " << scenario_config.GetName()
+  LOG4CXX_INFO(logger_, "Model " << model_config.GetDisplayName() << " ("
+                                 << model_name << "), scenario "
+                                 << scenario_config.GetDisplayName()
                                  << ", model path Result: " << res.model_path);
   res.asset_paths = scenario_config.GetAssets();
   res.data_paths = scenario_config.GetInputs();
@@ -205,7 +229,8 @@ void BenchmargStage::BenchmarkTask(
 
   // MLPerf Power - "power_end", "value": "02-25-2025 17:39:15.269"
   LOG4CXX_INFO(logger_, "power_end - end " << scenario_config.GetName() << " "
-                                           << ep_name << " " << ep_config);
+                                           << model_name << " " << ep_name
+                                           << " " << ep_config);
 
   try {
     bool passed = results_logger_.AppendBenchmarkResult(res);

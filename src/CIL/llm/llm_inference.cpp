@@ -2,23 +2,88 @@
 
 #include <log4cxx/logger.h>
 
+#include <cassert>
+#include <chrono>
+#include <cstdint>
+#include <memory>
 #include <sstream>
 
 #include "../api_handler.h"
+#include "../utils.h"
 
 using namespace log4cxx;
 
 namespace cil::infer {
 
-LLMInference::LLMInference(const std::string& model_type,
+#if IHV_SUBPROCESS
+namespace {
+
+// Runs inside the IHV subprocess. Records a timestamp for every generated
+// token when the IHV callback fires, so token timing is captured before
+// crossing the IPC boundary. Offsets are nanoseconds from inference start;
+// the parent rebases them onto its own clock.
+class LlmCallbackAdapter : public cil::API_Handler::CallbackAdapter {
+ public:
+  API_IHV_Callback_t GetCallback() override {
+    return {API_IHV_Callback_Type::API_IHV_CB_Token, this,
+            reinterpret_cast<void*>(&TokenCallbackStatic)};
+  }
+
+  void Start() override { start_ = Clock::now(); }
+
+  void Finish() override { total_ns_ = ElapsedNs(); }
+
+  nlohmann::json Serialize() const override {
+    return {{"tokens", tokens_},
+            {"offsets_ns", offsets_ns_},
+            {"total_ns", total_ns_}};
+  }
+
+ private:
+  using Clock = LLMInference::Clock;
+  using Token = LLMInference::Token;
+
+  static void TokenCallbackStatic(void* object, Token token) {
+    assert(object != nullptr);
+    auto* self = static_cast<LlmCallbackAdapter*>(object);
+    self->tokens_.emplace_back(token);
+    self->offsets_ns_.emplace_back(self->ElapsedNs());
+  }
+
+  int64_t ElapsedNs() const {
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now() -
+                                                                start_)
+        .count();
+  }
+
+  Clock::time_point start_{};
+  std::vector<Token> tokens_;
+  std::vector<int64_t> offsets_ns_;
+  int64_t total_ns_ = 0;
+};
+
+[[maybe_unused]] const bool kLlmCallbackAdapterRegistered = [] {
+  cil::API_Handler::CallbackAdapter::Register(
+      API_IHV_CB_Token, [] { return std::make_unique<LlmCallbackAdapter>(); });
+  return true;
+}();
+
+}  // namespace
+#endif  // IHV_SUBPROCESS
+
+LLMInference::LLMInference(const std::string& scenario_name,
+                           const std::string& model_base_name,
                            const std::string& model_path,
                            const std::string& deps_dir, EP ep,
                            const nlohmann::json& ep_settings,
-                           const std::string& library_path)
-    : BaseInference(model_path, deps_dir, ep, ep_settings,
-                    utils::StringToLowerCase(model_type),
-                    utils::StringReplaceChar(model_type, '.', '_') + "Executor",
-                    library_path) {}
+                           const std::string& library_path,
+                           const std::string& logger_name)
+    : BaseInference(
+          model_path, deps_dir, ep, ep_settings, scenario_name, model_base_name,
+          logger_name.empty()
+              ? utils::StringReplaceChar(model_base_name, '.', '_') + "_executor"
+              : logger_name,
+          library_path) {}
 
 LLMInference::~LLMInference() {
 #ifdef HW_MONITORING
@@ -82,6 +147,7 @@ void LLMInference::Init(const std::string& config) {
 }
 
 void LLMInference::TokenCallback(void* object, Token token) {
+  assert(object != nullptr);
   auto* obj = static_cast<LLMInference*>(object);
   obj->tokens_.emplace_back(token);
   obj->timestamps_.emplace_back(Clock::now());
@@ -95,7 +161,7 @@ void LLMInference::LogHardwareInfo() {
   hw_info_records_.emplace_back(system_info->GetMemoryInfo(true), Clock::now());
 }
 
-LLMInference::Result LLMInference::Run(const std::vector<Token>& input_data) {
+LLMInference::Result LLMInference::Run(std::span<const uint32_t> input_data) {
   if (!api_handler_->IsLoaded()) {
     SetErrorMessage("IHV not loaded!: " + library_path_);
     return {};
@@ -131,7 +197,28 @@ LLMInference::Result LLMInference::Run(const std::vector<Token>& input_data) {
     SetErrorMessage("Failed to run inference for IHV");
     return {};
   }
-  const auto end_time = Clock::now();
+  auto end_time = Clock::now();
+
+#if IHV_SUBPROCESS
+  // In subprocess mode, token timestamps are recorded inside the subprocess
+  // (free of IPC latency) and returned as offsets from inference start.
+  if (const auto& adapter_data = api_handler_->GetCallbackAdapterData();
+      adapter_data.is_object() && adapter_data.contains("tokens")) {
+    tokens_ = adapter_data["tokens"].get<std::vector<Token>>();
+    timestamps_.clear();
+    for (int64_t offset_ns :
+         adapter_data["offsets_ns"].get<std::vector<int64_t>>()) {
+      timestamps_.emplace_back(start_time +
+                               std::chrono::duration_cast<Clock::duration>(
+                                   std::chrono::nanoseconds(offset_ns)));
+    }
+    if (adapter_data.contains("total_ns")) {
+      end_time = start_time + std::chrono::duration_cast<Clock::duration>(
+                                  std::chrono::nanoseconds(
+                                      adapter_data["total_ns"].get<int64_t>()));
+    }
+  }
+#endif
 
   // MLPerf Power - "power_end", "value": "02-25-2025 17:39:15.269"
   LOG4CXX_INFO(GetLogger(), "power_end");
@@ -180,8 +267,14 @@ LLMInference::Result LLMInference::Run(const std::vector<Token>& input_data) {
     tokens_.assign(tokens_ptr, tokens_ptr + io_data.output_size);
   }
 
-  return {input_data.size(), tokens_,    timestamps_,
-          hw_info_records_,  start_time, end_time};
+  return Result{
+      .input_tokens_count = input_data.size(),
+      .tokens = tokens_,
+      .timestamps = timestamps_,
+      .hw_info_records = hw_info_records_,
+      .start_time = start_time,
+      .end_time = end_time,
+  };
 }
 
 void LLMInference::Deinit() {

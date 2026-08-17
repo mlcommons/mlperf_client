@@ -2,9 +2,11 @@
 
 #include <log4cxx/logger.h>
 
+#include <algorithm>
 #include <fstream>
 #include <iostream>
 
+#include "benchmark/runner.h"
 #include "execution_provider.h"
 #include "execution_provider_config.h"
 #include "json_schema.h"
@@ -32,9 +34,9 @@ bool ExecutionConfig::ValidateAndParse(
   try {
     json_file >> json_data;
     // Validate the JSON data against the schema
-    std::string error_string =
-        cil::ValidateJSONSchema(schema_file_path, json_data);
-    if (!error_string.empty()) {
+    if (std::string error_string =
+            cil::ValidateJSONSchema(schema_file_path, json_data);
+        !error_string.empty()) {
       LOG4CXX_ERROR(loggerExecutionConfig, "Failed to validate config file "
                                                << json_file_path << ", "
                                                << error_string);
@@ -159,14 +161,19 @@ void SystemConfig::from_json(const nlohmann::json& j, SystemConfig& obj) {
   if (j.contains("EPDependenciesConfigPath")) {
     j.at("EPDependenciesConfigPath").get_to(obj.ep_dependencies_config_path_);
   }
+  std::string python_path = j.value("PythonPath", "");
+  if (python_path.find("file://") == 0) {
+    python_path = python_path.substr(7);
+  }
+  obj.python_path_ = python_path;
   // Validate the base directory
   if (j.contains("BaseDir")) {
     std::string base_dir = j.value("BaseDir", "");
     if (base_dir.find("file://") == 0) {
       base_dir = base_dir.substr(7);
       // Base directory should be a existing directory
-      auto base_dir_path = fs::path(base_dir);
-      if (!fs::exists(base_dir_path) || !fs::is_directory(base_dir_path)) {
+      if (auto base_dir_path = fs::path(base_dir);
+          !fs::exists(base_dir_path) || !fs::is_directory(base_dir_path)) {
         LOG4CXX_ERROR(loggerExecutionConfig,
                       "BaseDir is not a valid directory: " << base_dir);
       } else {
@@ -192,6 +199,15 @@ std::vector<std::string> ScenarioConfig::GetInputs() const {
   return result;
 }
 
+std::vector<std::string> ScenarioConfig::GetInputTypes() const {
+  std::vector<std::string> result;
+  for (const auto& [type, path] : inputs_)
+    if (std::ranges::find(result, type) == result.end())
+      result.emplace_back(type);
+
+  return result;
+}
+
 ScenarioConfig::ModelsMap ScenarioConfig::GetModelFiles() const {
   ModelsMap paths;
   auto retrievePathsFromModel = [&paths](const ModelConfig& model) {
@@ -212,7 +228,8 @@ ScenarioConfig::ModelsMap ScenarioConfig::GetModelFiles() const {
       [&retrievePathsFromModel](const ExecutionProviderConfig& ep) {
 #if IGNORE_FILES_FROM_DISABLED_EPS && 1
         if (ep.GetLibraryPath().empty() &&
-            !cil::utils::IsEpSupportedOnThisPlatform("", ep.GetName()))
+            !cil::BenchmarkRunner::IsEpSupportedOnThisPlatform(
+                "", ep.GetFullName()))
           return;
 #endif
         for (const auto& model : ep.GetModels()) retrievePathsFromModel(model);
@@ -244,7 +261,8 @@ ScenarioConfig::GetModelExtraFiles() const {
       [&retrievePathsFromModel](const ExecutionProviderConfig& ep) {
 #if IGNORE_FILES_FROM_DISABLED_EPS && 1
         if (ep.GetLibraryPath().empty() &&
-            !cil::utils::IsEpSupportedOnThisPlatform("", ep.GetName()))
+            !cil::BenchmarkRunner::IsEpSupportedOnThisPlatform(
+                "", ep.GetFullName()))
           return;
 #endif
         for (const auto& model : ep.GetModels()) retrievePathsFromModel(model);
@@ -280,24 +298,38 @@ ScenarioConfig::GetExecutionProvidersDependencies() const {
 void ScenarioConfig::from_json(const nlohmann::json& j, ScenarioConfig& obj,
                                const std::string& base_dir) {
   j.at("Name").get_to(obj.name_);
+  obj.display_name_ = obj.name_;
   obj.name_ = utils::StringToLowerCase(obj.name_);
+
+  const bool is_llm = BenchmarkRunner::IsLLMScenario(obj.name_);
+  const bool is_image = BenchmarkRunner::IsImageScenario(obj.name_);
+  const std::string aliased_base_name =
+      BenchmarkRunner::LookupScenarioNameAlias(obj.name_);
 
   const auto& models_json = j.at("Models");
   for (const auto& model_json : models_json) {
     ModelConfig model;
     model.FromJson(model_json, base_dir);
-    auto lower_case_model_name = utils::StringToLowerCase(obj.name_);
-    if (lower_case_model_name == "llama2" ||
-        lower_case_model_name == "llama3" ||
-        lower_case_model_name == "phi3.5" ||
-        lower_case_model_name == "phi4") {
-      // tokenizer path is required for the LLMs
+    if (is_llm) {
       if (model.GetTokenizerPath().empty())
         LOG4CXX_ERROR(
             loggerExecutionConfig,
-            "Configuration for the " + lower_case_model_name + " model "
+            "Configuration for the " + obj.name_ + " model "
                 << model.GetName()
                 << " is not valid, make sure to provide TokenizerPath");
+      if (!aliased_base_name.empty())
+        model.SetModelBaseNameIfEmpty(aliased_base_name);
+      if (!model.GetModelBaseName().empty())
+        model.SetModelDisplayNameIfEmpty(
+            BenchmarkRunner::ModelBaseNameToPrettyName(
+                model.GetModelBaseName()));
+    } else if (is_image) {
+      if (!aliased_base_name.empty())
+        model.SetModelBaseNameIfEmpty(aliased_base_name);
+      if (!model.GetModelBaseName().empty())
+        model.SetModelDisplayNameIfEmpty(
+            BenchmarkRunner::ModelBaseNameToPrettyName(
+                model.GetModelBaseName()));
     }
     obj.models_.emplace_back(model);
   }
@@ -328,11 +360,14 @@ void ScenarioConfig::from_json(const nlohmann::json& j, ScenarioConfig& obj,
   if (j.contains("Delay")) {
     j.at("Delay").get_to(obj.inference_delay_);
   } else {
-    obj.inference_delay_ =
-        obj.name_ == "llama2" || obj.name_ == "llama3" || obj.name_ == "phi3.5" || obj.name_ == "phi4"
-            ? 5.0
-            : 0.0;  // seconds
+    obj.inference_delay_ = (BenchmarkRunner::IsLLMScenario(obj.name_) ||
+                            BenchmarkRunner::IsImageScenario(obj.name_))
+                               ? 5.0
+                               : 0.0;
   }
+  if (j.contains("IsAgentic")) j.at("IsAgentic").get_to(obj.is_agentic_);
+  if (j.contains("ToolsExecution"))
+    j.at("ToolsExecution").get_to(obj.tools_execution_);
   if (j.contains("AssetsPath")) j.at("AssetsPath").get_to(obj.assets_);
 
   const auto& execution_providers_json = j.at("ExecutionProviders");
@@ -366,6 +401,8 @@ nlohmann::json ScenarioConfig::ToJson() const {
   j["ResultsVerificationFile"] = results_file_;
   j["DataVerificationFile"] = data_verification_file_;
   j["Iterations"] = iterations_;
+  j["IsAgentic"] = is_agentic_;
+  j["ToolsExecution"] = tools_execution_;
   // we need to serialize the models and execution providers
   j["Models"] = nlohmann::json::array();
   for (const auto& model : models_) {

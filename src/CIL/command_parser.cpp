@@ -5,8 +5,8 @@
 #include <sstream>
 #include <string>
 
-#include "version.h"
 #include "utils.h"
+#include "version.h"
 
 const int MIN_CONSOLE_WIDTH = 60;
 
@@ -72,14 +72,15 @@ bool CommandParser::Process(int argc, char* argv[]) {
       continue;
     }
 
-    auto error_message = long_options_[name].GetCustomErrorMessage();
-    if (value.empty() && !long_options_[name].GetDefaultValue().empty()) {
+    if (auto error_message = long_options_[name].GetCustomErrorMessage();
+        value.empty() && !long_options_[name].GetDefaultValue().empty()) {
       std::cerr << "No value provided for option \"" << name << "\".\n"
                 << error_message << std::endl;
-    } else
+    } else {
       std::cerr << "Invalid value for option \"" << name << "\": \"" << value
                 << "\".\n"
                 << error_message << std::endl;
+    }
 
     return false;
   }
@@ -211,15 +212,17 @@ void CommandParser::ShowHelp() const {
   std::cout << std::string(header_width + help_message_width, '-') << std::endl;
   std::cout << "\nExamples:\n\n";
 
-  std::cout << "    " << program_name_
-            << " -c Intel_ORTGenAI-DML_GPU.json"
-               "\n\n Runs the benchmark using Intel_ORTGenAI-DML_GPU.json as the "
-               "configuration "
-               "file\n\n";
+  std::cout
+      << "    " << program_name_
+      << " -c Intel_ORTGenAI-DML_GPU.json"
+         "\n\n Runs the benchmark using Intel_ORTGenAI-DML_GPU.json as the "
+         "configuration "
+         "file\n\n";
 }
 
 void CommandParser::ShowVersion() const {
-  std::clog << "Application Version: " << APP_VERSION_STRING << " " << APP_BUILD_NAME << std::endl;
+  std::clog << "Application Version: " << APP_VERSION_STRING << " "
+            << APP_BUILD_NAME << std::endl;
 }
 
 void CommandParser::SetDisplayOptionOrder(

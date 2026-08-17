@@ -19,6 +19,7 @@ class ResultsHistoryPageController;
 class ResultsReportPageController;
 class SettingsPageController;
 class BenchmarkController;
+class LoadingWidgetController;
 
 /**
  * @class AppController
@@ -50,14 +51,18 @@ class AppController : public QObject {
   SettingsPageController* GetSettingsPageController() const {
     return settings_page_controller_;
   }
+  LoadingWidgetController* GetLoadingWidgetController() const {
+    return loading_widget_controller_;
+  }
 
  public slots:
   void EulaAccepted();
 
  signals:
   void SwitchToPage(PageType page_type);
-  void ShowGlobalPopup(const QString& message, bool is_progress = false);
-  void UpdateProgressPopup(int progress);
+  void ShowLoadingWidget();
+  void HideLoadingWidget();
+  void ShowGlobalPopup(const QString& message);
   void HidePopup();
 
  private slots:
@@ -133,6 +138,7 @@ class AppController : public QObject {
   ResultsReportPageController* results_report_page_controller_;
   SettingsPageController* settings_page_controller_;
   BenchmarkController* benchmark_controller_;
+  LoadingWidgetController* loading_widget_controller_;
 
   std::vector<std::shared_ptr<cil::ExecutionConfig>> base_configs_;
   std::vector<std::shared_ptr<cil::ExecutionConfig>> configs_;

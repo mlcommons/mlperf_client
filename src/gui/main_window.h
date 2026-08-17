@@ -9,6 +9,7 @@
 class QMouseEvent;
 class QShortcut;
 class PopupWidget;
+class LoadingWidget;
 class QGraphicsBlurEffect;
 
 namespace gui {
@@ -42,9 +43,10 @@ class MainWindow : public QMainWindow {
 
  public slots:
   void SwitchToPage(gui::PageType page_type);
-  void ShowGlobalPopup(const QString &message, bool is_progress);
-  void UpdateProgressPopup(int progress);
+  void ShowGlobalPopup(const QString &message);
   void HidePopup();
+  void ShowLoadingWidget();
+  void HideLoadingWidget();
 
  protected:
   /**
@@ -53,6 +55,7 @@ class MainWindow : public QMainWindow {
   void mousePressEvent(QMouseEvent *event) override;
   void mouseMoveEvent(QMouseEvent *event) override;
   void mouseReleaseEvent(QMouseEvent *event) override;
+
  private:
   Ui::MainWindow ui_;
   views::EULAWidget *eula_page_widget_;
@@ -62,6 +65,7 @@ class MainWindow : public QMainWindow {
   views::ResultsReportPage *report_page_widget_;
   views::SettingsPage *settings_page_widget_;
 
+  LoadingWidget *loading_widget_;
   PopupWidget *popup_widget_;
   QGraphicsBlurEffect *blur_effect_;
 

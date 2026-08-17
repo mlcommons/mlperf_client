@@ -37,6 +37,7 @@ class NativeQnnExecutionProviderSettings {
   const std::string& GetDeviceType() const { return device_type_; }
   const std::optional<int>& GetNumOfThreads() const { return num_of_threads_; }
   const std::optional<int>& GetNumStreams() const { return num_streams_; }
+  bool GetIsAgentic() const { return is_agentic_; }
 
   void FromJson(const nlohmann::json& j) { from_json(j, *this); }
 
@@ -50,6 +51,10 @@ class NativeQnnExecutionProviderSettings {
       obj.num_of_threads_ = j.value("num_of_threads", 0);
 
     if (j.contains("num_streams")) obj.num_streams_ = j.value("num_streams", 0);
+
+    // Injected by the LLM executor (AugmentEpConfigWithAgenticFlag): true when
+    // the scenario is an agentic, multi-turn conversation.
+    if (j.contains("IsAgentic")) obj.is_agentic_ = j.value("IsAgentic", false);
   }
 
   static inline std::string GetDeviceType(const nlohmann::json& j) {
@@ -62,6 +67,7 @@ class NativeQnnExecutionProviderSettings {
   std::string device_type_;
   std::optional<int> num_of_threads_;
   std::optional<int> num_streams_;
+  bool is_agentic_ = false;
 };
 }  // namespace IHV
 

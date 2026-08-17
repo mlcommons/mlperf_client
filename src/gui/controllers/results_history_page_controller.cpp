@@ -11,9 +11,20 @@
 namespace gui {
 namespace controllers {
 
+namespace {
+
+// Formats a main score for the history card, showing "N/A" when unavailable.
+QString FormatScore(double value, int precision) {
+  return value == 0.0 ? QStringLiteral("N/A")
+                      : QString::number(value, 'f', precision);
+}
+
+}  // namespace
+
 ResultsHistoryPageController::ResultsHistoryPageController(QObject* parent)
     : AbstractController(parent), current_entry_(-1) {
   qRegisterMetaType<SystemInfoDetails>("SystemInfoDetails");
+  qRegisterMetaType<MainScores>("MainScores");
   InitializeModels();
 }
 
@@ -65,14 +76,35 @@ void ResultsHistoryPageController::LoadHistory(
         QString::fromStdString(config_file_name), ep_name);
 
     auto model_display_name =
-        gui::utils::ModelDisplayName(result.scenario_name);
+        gui::utils::ModelDisplayName(result.model_base_name);
 
-    auto overall_it = result.performance_results.find("Overall");
-    double overall_TTFT = 0.0;
-    double overall_TPS = 0.0;
-    if (overall_it != result.performance_results.end()) {
-      overall_TTFT = overall_it->second.time_to_first_token_duration;
-      overall_TPS = overall_it->second.token_generation_rate;
+    // The card's two main scores depend on the scenario type.
+    const cil::PerformanceResult* agentic = nullptr;
+    for (const auto& [category, perf] : result.performance_results)
+      if (perf.is_agentic) {
+        agentic = &perf;
+        break;
+      }
+
+    MainScores main_scores;
+    if (result.is_image_benchmark) {
+      main_scores = {{{"Images/Min", FormatScore(result.images_per_minute, 2)},
+                      {"Avg E2E (s)",
+                       FormatScore(result.avg_end_to_end_seconds, 3)}}};
+    } else if (agentic) {
+      main_scores = {
+          {{"E2E (s)", FormatScore(agentic->average_expected_duration, 3)},
+           {"Tools (s)", FormatScore(agentic->average_tools_duration, 3)}}};
+    } else {
+      double overall_TTFT = 0.0;
+      double overall_TPS = 0.0;
+      if (auto overall_it = result.performance_results.find("Overall");
+          overall_it != result.performance_results.end()) {
+        overall_TTFT = overall_it->second.time_to_first_token_duration;
+        overall_TPS = overall_it->second.token_generation_rate;
+      }
+      main_scores = {{{"TTFT", FormatScore(overall_TTFT, 2)},
+                      {"TPS", FormatScore(overall_TPS, 1)}}};
     }
 
     HistoryEntry entry{model_display_name,
@@ -83,10 +115,9 @@ void ResultsHistoryPageController::LoadHistory(
                        result.benchmark_success,
                        result.config_verified,
                        result.config_category.c_str(),
-                       overall_TTFT,
-                       overall_TPS,
                        QString::fromStdString(result.error_message).trimmed(),
                        result.config_file_comment.c_str()};
+    entry.main_scores_ = main_scores;
     if (!result.system_info.cpu_model.empty() &&
         !result.system_info.cpu_architecture.empty()) {
       entry.system_info_.cpu_name = QString::fromStdString(
@@ -127,6 +158,18 @@ ResultsHistoryPageController::GetCurrentEntries() const {
     entries << qMakePair(model_->GetEntry(current_entry_),
                          results_.at(current_entry_));
   }
+  return entries;
+}
+
+QList<QPair<HistoryEntry, cil::BenchmarkResult> >
+ResultsHistoryPageController::GetEntriesByIds(const QStringList& ids) const {
+  QList<QPair<HistoryEntry, cil::BenchmarkResult> > entries;
+  for (const auto& id : ids)
+    for (int i = 0; i < results_.size(); ++i)
+      if (id == QString::fromStdString(results_.at(i).benchmark_start_time)) {
+        entries << qMakePair(model_->GetEntry(i), results_.at(i));
+        break;
+      }
   return entries;
 }
 

@@ -23,6 +23,7 @@ class JsonSchemaPair {
 
   nlohmann::json GetValue() const;
   QString GetKey() const { return key_; }
+  QString GetWidgetType() const { return widget_type_; }
   QLabel* GetLabelWidget() { return label_; }
   QWidget* GetInputWidget() { return input_widget_; }
 

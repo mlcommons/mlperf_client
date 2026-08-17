@@ -598,6 +598,30 @@ QWidget[class="category_widget"][category="extended"] QLabel{
     color: #E1B1FF;
 }
 
+QWidget[class="scenario_kind_widget"]{
+    min-height: 26px;
+    max-height: 26px;
+    border-radius: 6px;
+}
+QWidget[class="scenario_kind_widget"][scenario_kind="LLM"]{
+    background-color: #2960C9C9;
+}
+QWidget[class="scenario_kind_widget"][scenario_kind="LLM"] QLabel{
+    color: #BFEFEF;
+}
+QWidget[class="scenario_kind_widget"][scenario_kind="Agentic"]{
+    background-color: #29C97EE0;
+}
+QWidget[class="scenario_kind_widget"][scenario_kind="Agentic"] QLabel{
+    color: #E5C7F5;
+}
+QWidget[class="scenario_kind_widget"][scenario_kind="Image gen"]{
+    background-color: #29E07A5C;
+}
+QWidget[class="scenario_kind_widget"][scenario_kind="Image gen"] QLabel{
+    color: #FFD0BD;
+}
+
 QWidget[class="status_label"]{
     min-height: 26px;
     max-height: 26px;
@@ -695,6 +719,37 @@ CheckableComboBox, QLineEdit {
 
 CheckableComboBox QAbstractItemView {
     background: #0B3B5F;
+}
+
+QFrame#io_text_block {
+    border: 1px solid rgba(255, 255, 255, 30);
+    border-radius: 8px;
+    background: #125483;
+}
+
+QFrame#io_block_header {
+    background: #0C324E;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+}
+
+QPlainTextEdit#io_text_body {
+    background: transparent;
+    border: none;
+}
+
+QPushButton#category_title_toggle {
+    text-align: left;
+    padding: 8px 16px;
+    border: none;
+    background: transparent;
+    color: white;
+    font-weight: 700;
+    font-size: 16px;
+}
+
+QPushButton#category_title_toggle:hover {
+    background: rgba(255, 255, 255, 15);
 }
 
 QSpinBox {

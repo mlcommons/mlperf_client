@@ -1,0 +1,21 @@
+{
+  "model_config": {
+    "context_length": 4096,
+    "search": {
+      "method": "greedy",
+      "temperature": 0.6,
+      "top_k": 1,
+      "top_p": 0.9,
+      "stop_on_eos": true,
+      "max_length": 512
+    }
+  },
+  "prompts": [
+    {
+      "system": "You are an AI assistant. You will be given a task. You must generate a detailed and long answer.",
+      "user": "The film begins with Brick Bardo ( Tim Thomerson , from ( ( Dollman hitchhiking to get to the town of Pahoota , where he tries to find a girl named Nurse Ginger ( Melissa Behr , who was shrunken to 11 inches in ( ( Bad Channels , to prove to her that she's not alone .  Meanwhile , the film cuts to Judith Grey , who has a nightmare about the events that happened in the previous film a year before .  Ever since the events that took place a year before , Judith has been watching the Toyland Warehouse , believing that the toys are still alive .  Meanwhile , a bum breaks into the Warehouse , and starts to mess around with a clown tricycle , until he gets knocked in the head with a box of toys , causing him to hit his head on the ground , killing him .  However , his blood continues to flow over to the place where the demon was buried , and brings back : Baby Oopsie Daisy , Jack Attack , Mr. Static , and this time brings up a new killer toy named Zombietoid , a blonde GI JOE action figure with a sword as a weapon .  Judith , who's now inside the building , finally sees the toys in full view , but is then arrested for breaking into a secluded building .  After the police leave , the toys force the new security guard Ray Vernon to help them with their needs .  Meanwhile , Judith , who now knows about Nurse Ginger and Brick Bardo's history , bribes a news reporter to tell her where they 're at , and tells her they are in Pahoota .  Judith , after having a deal with Bardo and Ginger to help her kill the toys , they head off back to the Warehouse . \nDo you have any questions?"
+    }
+  ],
+  "category": "Creative Writing",
+  "apply_chat_template": true
+}

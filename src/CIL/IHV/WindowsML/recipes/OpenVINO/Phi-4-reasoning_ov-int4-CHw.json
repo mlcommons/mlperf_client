@@ -30,7 +30,7 @@
             "type": "OpenVINOEncapsulation",
             "target_device": "npu",
             "keep_ov_dynamic_dims": true,
-            "ov_version": "2025.3",
+            "ov_version": "2026.2",
             "reuse_cache": true
         }
     },
@@ -39,5 +39,5 @@
     "cache_dir": "cache",
     "clean_cache": true,
     "evaluate_input_model": false,
-    "output_dir": "models/Phi-4-reasoning_windowsML-ov-int4-CHw"
+    "output_dir": "models_WindowsML/Phi-4-reasoning_windowsML-ov-int4-CHw"
 }

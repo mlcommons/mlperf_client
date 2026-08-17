@@ -23,7 +23,7 @@ class WindowsMLExecutionProviderSettings {
   const std::string& GetDeviceVendor() const { return device_vendor_; }
   const std::string& GetDeviceEP() const { return device_ep_; }
   const std::optional<int>& GetDeviceId() const { return device_id_; }
-
+  std::optional<bool> GetIsAgentic() const { return is_agentic_; }
   void FromJson(const nlohmann::json& j) { from_json(j, *this); }
 
   static void from_json(const nlohmann::json& j,
@@ -33,6 +33,7 @@ class WindowsMLExecutionProviderSettings {
     if (j.contains("device_vendor"))
       obj.device_vendor_ = j.value("device_vendor", "");
     if (j.contains("device_ep")) obj.device_ep_ = j.value("device_ep", "");
+    if (j.contains("IsAgentic")) obj.is_agentic_ = j.value("IsAgentic", false);
   }
 
   static inline std::string GetDeviceType(const nlohmann::json& j) {
@@ -46,6 +47,7 @@ class WindowsMLExecutionProviderSettings {
   std::string device_vendor_;
   std::string device_ep_;
   std::optional<int> device_id_;
+  std::optional<bool> is_agentic_;
 };
 }  // namespace IHV
 

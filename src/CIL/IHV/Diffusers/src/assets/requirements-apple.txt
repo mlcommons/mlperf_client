@@ -1,0 +1,17 @@
+# Diffusers EP -- Apple / MPS (macOS arm64).
+#
+# torch and torchvision are installed separately by CMake (no special
+# index URL needed -- the default macOS arm64 wheel ships MPS support).
+# torchao and bitsandbytes are intentionally omitted: both are CUDA-only
+# at the kernel level on the platforms we ship today.
+diffusers
+transformers
+accelerate
+safetensors
+optimum-quanto
+sentencepiece
+protobuf
+huggingface_hub
+Pillow
+numpy
+pyinstaller

@@ -1,6 +1,9 @@
 #ifndef DOWNLOAD_STAGE_H_
 #define DOWNLOAD_STAGE_H_
 
+#include <string_view>
+#include <unordered_map>
+
 #include "stage.h"
 
 namespace cil {
@@ -38,7 +41,34 @@ class DownloadStage : public StageBase {
   static void ClearCache(std::string deps_dir);
 
  private:
+  // Pre-flight check: sizes every file that would be fetched and verifies the
+  // destination volumes have room before any download starts.
+  bool CheckDiskSpace(const ScenarioConfig& scenario_config,
+                      ScenarioData& scenario_data,
+                      const ReportProgressCb& raport_progress_cb);
+
+  // Builds and runs the storage tasks. With collect_sizes_only the files are
+  // not fetched, only their sizes recorded into scenario_data.file_sizes;
+  // include_local_sizes additionally counts files sourced from local paths.
+  bool RunStorageTasks(const ScenarioConfig& scenario_config,
+                       ScenarioData& scenario_data,
+                       const ReportProgressCb& raport_progress_cb,
+                       bool collect_sizes_only, bool include_local_sizes);
+
+  static std::string ComputeModelDir(const ScenarioConfig& scenario_config,
+                                     const std::string& model_base_name);
+
+  std::unordered_map<std::string, std::string> BuildPathToSubdirMap(
+      const ScenarioConfig& scenario_config) const;
+
+  std::vector<std::filesystem::path> UnpackFileIfNecessary(
+      const std::filesystem::path& file_path,
+      std::string_view keep_extension = std::string_view{});
+
   const std::string data_dir_;
+  bool unpacking_files_logged_ = false;
+  // Reason from the first failed task in the last RunStorageTasks call.
+  std::string last_storage_error_;
 
   static const std::chrono::milliseconds kProgressInterval;
 };

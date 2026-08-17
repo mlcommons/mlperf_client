@@ -6,6 +6,13 @@
         <file>resources/icons/chevron-up-48.png</file>
         <file>resources/icons/expand_down.png</file>
         <file>resources/icons/expand_left.png</file>
+        <file>resources/icons/chevron_gray_down.png</file>
+        <file>resources/icons/chevron_gray_right.png</file>
+        <file>resources/icons/expand_fullscreen.png</file>
+        <file>resources/icons/io_prompt.png</file>
+        <file>resources/icons/io_response.png</file>
+        <file>resources/icons/io_chat_user.png</file>
+        <file>resources/icons/io_chat_agent.png</file>
         <file>resources/icons/ep_checked.png</file>
         <file>resources/icons/ep_info_icon.png</file>
         <file>resources/icons/ep_unchecked.png</file>

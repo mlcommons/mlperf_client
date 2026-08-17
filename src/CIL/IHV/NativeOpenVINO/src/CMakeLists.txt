@@ -78,6 +78,10 @@ source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} PREFIX "Header files" FILES ${HEAD
 add_library(${PROJECT_NAME} SHARED ${SOURCES} ${HEADERS})
 set_target_properties(${PROJECT_NAME} PROPERTIES BUILD_RPATH "$ORIGIN/;$ORIGIN/../IHV/NativeOpenVINO/")
 set_target_properties(${PROJECT_NAME} PROPERTIES BUILD_RPATH_USE_ORIGIN TRUE)
+if(NOT WIN32)
+  # DT_RPATH (not DT_RUNPATH) so $ORIGIN resolves OpenVINO's transitive libtbb.
+  target_link_options(${PROJECT_NAME} PRIVATE "-Wl,--disable-new-dtags")
+endif()
 
 # Assuming you have the find_package for OpenVINO configured
 find_package(OpenVINO CONFIG REQUIRED COMPONENTS Runtime)
@@ -131,8 +135,6 @@ list(APPEND OPENVINO_EXTRA_DEPS "openvino_intel_gpu_plugin")
 list(APPEND OPENVINO_EXTRA_DEPS "openvino_onnx_frontend")
 list(APPEND OPENVINO_EXTRA_DEPS "openvino_pytorch_frontend")
 if(WIN32)
-  list(APPEND OPENVINO_EXTRA_DEPS "icudt70")
-  list(APPEND OPENVINO_EXTRA_DEPS "icuuc70")
   list(APPEND OPENVINO_EXTRA_DEPS "openvino_ir_frontend")
 endif()
 list(APPEND OPENVINO_EXTRA_DEPS "openvino_auto_batch_plugin")
@@ -151,9 +153,9 @@ if(WIN32)
 else() # Linux
   list(APPEND TBB_EXTRA_DEPS "tbb")
   list(APPEND TBB_EXTRA_DEPS_RELEASE "libtbb.so.12")
-  list(APPEND OPENVINO_EXTRA_DEPS_RELEASE libopenvino.so.2600)
-  list(APPEND OPENVINO_EXTRA_DEPS_RELEASE libopenvino_genai.so.2600)
-  list(APPEND OPENVINO_EXTRA_DEPS_RELEASE libopenvino_ir_frontend.so.2600)
+  list(APPEND OPENVINO_EXTRA_DEPS_RELEASE libopenvino.so.2630)
+  list(APPEND OPENVINO_EXTRA_DEPS_RELEASE libopenvino_genai.so.2630)
+  list(APPEND OPENVINO_EXTRA_DEPS_RELEASE libopenvino_ir_frontend.so.2630)
 endif()
 list(APPEND TBB_EXTRA_DEPS "tbbmalloc")
 

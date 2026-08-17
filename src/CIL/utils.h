@@ -30,6 +30,7 @@
 #undef SetCurrentDirectory
 #undef CreateDirectory
 #undef GetTempPath
+#undef SendMessage
 
 namespace fs = std::filesystem;
 
@@ -120,6 +121,7 @@ std::string GetCurrentDirectory();
  * `SetCurrentDirectoryA`, and for other systems, it uses `chdir`.
  */
 void SetCurrentDirectory(const std::string& path = "");
+
 /**
  * @brief Creates a directory at the specified path.
  *
@@ -311,6 +313,19 @@ std::string NormalizePath(const std::string& path);
  */
 std::string StringToLowerCase(const std::string& input_string);
 /**
+ * @brief Convert a snake_case identifier to a Title Case display string.
+ *
+ * Each underscore becomes a space; the first character of the input and the
+ * first character of every word is upper-cased; all other characters are
+ * preserved as-is. Useful for turning canonical lowercase identifiers (e.g.
+ * @c "phi_4_mini_instruct") into a human-readable label
+ * (@c "Phi 4 Mini Instruct").
+ *
+ * @param input_string snake_case identifier.
+ * @return Title-cased, space-separated display string.
+ */
+std::string StringToTitleCase(const std::string& input_string);
+/**
  * @brief Replace char withing the string.
  *
  * This function takes a string as input and returns a new string
@@ -405,32 +420,6 @@ std::string FormatDuration(const std::chrono::steady_clock::duration& duration,
                            bool with_millisec = true);
 
 /**
- * @brief Checks if the given execution provider is supported on this platform.
- *
- * This function checks if the given execution provider is supported on this
- * platform by checking the model name and the execution provider name.
- * For some EPs it will check if there is hardware compatibility too.
- *
- * @param model_name The name of the model.
- * @param ep_name The name of the execution provider.
- * @return True if the execution provider is supported on this platform, false
- * otherwise.
- */
-bool IsEpSupportedOnThisPlatform(const std::string_view& model_name,
-                                 const std::string_view& ep_name);
-
-/**
- * @brief Checks if the given config file is supported on this platform.
- *
- * This function checks support by examining the configuration file name.
- *
- * @param config_file_name Name of the configuration JSON file.
- * @return True if the file name indicates support, false otherwise.
- */
-bool IsEpConfigSupportedOnThisPlatform(
-    const std::string_view& config_file_name);
-
-/**
  * @brief Cleans and trims the given string.
  *
  * This function cleans and trims the given string by removing any null
@@ -441,9 +430,7 @@ bool IsEpConfigSupportedOnThisPlatform(
  */
 std::string CleanAndTrimString(std::string str);
 
-#ifdef _WIN32
 std::string GetExecutablePath();
-#endif
 
 double BytesToGb(size_t bytes);
 
@@ -457,6 +444,17 @@ std::string FormatCPU(std::string_view cpu_model,
 std::string FormatMemory(size_t bytes);
 
 std::string DoubleToFixedString(double value, int digits);
+
+/**
+ * @brief Retrieves the file path of the error log file.
+ *
+ * Queries the ErrorFileAppender attached to the root log4cxx logger and
+ * returns the path of the error log file. Returns an empty string if the
+ * appender is not found or is not a file appender.
+ *
+ * @return The file path of the error log, or an empty string if unavailable.
+ */
+std::string GetErrorLogFilePath();
 
 }  // namespace utils
 }  // namespace cil

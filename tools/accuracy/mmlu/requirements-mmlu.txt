@@ -1,0 +1,8 @@
+pandas
+pyarrow
+loguru
+tqdm
+huggingface_hub
+torch
+transformers
+requests

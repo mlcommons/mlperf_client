@@ -96,10 +96,13 @@ void generate_command_options(CommandParser& command_parser) {
   pause_option.SetDefaultValue("true");
   command_parser.AddBooleanOption(pause_option);
 
-  // Add list models option
   CommandOption list_models_option(
       "list-models", 'm', "List the supported models and exit.", false);
   command_parser.AddFlag(list_models_option);
+
+  CommandOption list_scenarios_option(
+      "list-scenarios", 'S', "List the supported scenarios and exit.", false);
+  command_parser.AddFlag(list_scenarios_option);
 
   // Add download behaviour option
   CommandOption download_behaviour_option(
@@ -169,6 +172,18 @@ void generate_command_options(CommandParser& command_parser) {
   temp_dir_option.SetOptionTypeHint("folder");
   command_parser.AddOption(temp_dir_option);
 
+  CommandOption python_path_option(
+      "python-path", '\0',
+      "Python interpreter for the agentic 'execute' tool. 'default' uses the "
+      "config PythonPath, else the bundled Python; 'system' uses the "
+      "installed python, PATH untouched; "
+      "any other value is used as the "
+      "interpreter directory (overrides config PythonPath).",
+      false);
+  python_path_option.SetOptionTypeHint("folder");
+  python_path_option.SetDefaultValue("default");
+  command_parser.AddOption(python_path_option);
+
   // Add Enumerate devices option
   CommandOption enumerate_option(
       "enumerate-devices", 'e',
@@ -186,10 +201,12 @@ void generate_command_options(CommandParser& command_parser) {
   command_parser.AddOption(device_id_override_option);
 
   CommandOption skip_failed_prompts_option(
-    "skip-failed-prompts", 's',
-    "Skip failed prompts during the execution of the application. If set to true, "
-    "the application will not stop on failed prompts and will continue execution.",
-    false);
+      "skip-failed-prompts", 's',
+      "Skip failed prompts during the execution of the application. If set to "
+      "true, "
+      "the application will not stop on failed prompts and will continue "
+      "execution.",
+      false);
   command_parser.AddFlag(skip_failed_prompts_option);
 
   // Add export-csv option
@@ -203,10 +220,10 @@ void generate_command_options(CommandParser& command_parser) {
 #if IHV_SUBPROCESS
   CommandOption subprocess_isolate_option(
       "subprocess-isolate", '\0',
-      "Run IHV code in isolated subprocess to prevent DLL conflicts (Windows "
-      "only).",
+      "Run IHV code in an isolated subprocess to isolate conflicting EP "
+      "libraries.",
       false);
-  subprocess_isolate_option.SetDefaultValue("false");
+  subprocess_isolate_option.SetDefaultValue("true");
   command_parser.AddBooleanOption(subprocess_isolate_option);
 #endif
 
@@ -219,10 +236,12 @@ void generate_command_options(CommandParser& command_parser) {
       "output-dir",
       "data-dir",
       "temp-dir",
+      "python-path",
       "enumerate-devices",
       "device-id",
       "pause",
       "list-models",
+      "list-scenarios",
       "download_behaviour",
       "prompts",
       "cache-local-files",
@@ -241,7 +260,6 @@ int main(int argc, char* argv[]) {
       return cil::API_Handler::RunSubprocessClient(argv[i + 1]);
     }
   }
-  cil::API_Handler::SetDefaultSubprocessMode(false);
 #endif
 
 #if defined(_WIN32) || defined(_WIN64)
@@ -275,19 +293,42 @@ int main(int argc, char* argv[]) {
     command_parser.ShowHelp();
     return 0;
   }
-  // Check for the list models option
   if (command_parser.OptionPassed("list-models")) {
-    std::clog << "List of supported models:" << std::endl;
-    for (const auto& model : cil::BenchmarkRunner::kSupportedModels) {
-      std::clog << "- " << model << std::endl;
+    using ModelInfo = cil::BenchmarkRunner::ModelInfo;
+    auto category_label = [](ModelInfo::Category c) {
+      using enum cil::BenchmarkRunner::ModelInfo::Category;
+      switch (c) {
+        case kBase:
+          return "Base";
+        case kExtended:
+          return "Extended";
+        case kExperimental:
+          return "Experimental";
+        case kCustom:
+        default:
+          return "Custom";
+      }
+    };
+    std::clog << "Supported models:" << std::endl;
+    for (const auto& [_, info] :
+         cil::BenchmarkRunner::GetSupportedModelsInfo()) {
+      std::clog << "  " << info.pretty_name << "  (" << info.base_name << ", "
+                << category_label(info.category) << ")" << std::endl;
+    }
+    return 0;
+  }
+
+  if (command_parser.OptionPassed("list-scenarios")) {
+    std::clog << "Supported scenarios:" << std::endl;
+    for (const auto& s : cil::BenchmarkRunner::GetScenarioNames()) {
+      std::clog << "  " << s << std::endl;
     }
     return 0;
   }
 
 #if IHV_SUBPROCESS
-  if (command_parser.GetOptionValue("subprocess-isolate") == "true") {
-    cil::API_Handler::SetDefaultSubprocessMode(true);
-  }
+  cil::API_Handler::SetDefaultSubprocessMode(
+      command_parser.GetOptionValue("subprocess-isolate") == "true");
 #endif
 
   utils::SetCurrentDirectory(utils::GetCurrentDirectory());
@@ -308,9 +349,15 @@ int main(int argc, char* argv[]) {
   bool temp_dir_overriden = false;
   if (command_parser.OptionPassed("temp-dir")) {
     auto temp_dir = command_parser.GetOptionValue("temp-dir");
-    if (!fs::exists(temp_dir) || !fs::is_directory(temp_dir)) {
-      LOG4CXX_ERROR(loggerMain,
-                    "temp-dir is not a valid directory: " << temp_dir);
+    // Logger is not configured yet here, so report via std::cerr.
+    if (!fs::exists(temp_dir)) {
+      if (!utils::CreateDirectory(temp_dir)) {
+        std::cerr << "Failed to create temp-dir: " << temp_dir << std::endl;
+        return 1;
+      }
+    } else if (!fs::is_directory(temp_dir)) {
+      std::cerr << "temp-dir exists but is not a directory: " << temp_dir
+                << std::endl;
       return 1;
     }
     unpacker->SetDepsDir(temp_dir, false);
@@ -431,6 +478,12 @@ int main(int argc, char* argv[]) {
 
   bool enumerate_only = command_parser.OptionPassed("enumerate-devices");
 
+#if IHV_SUBPROCESS
+  if (enumerate_only && !command_parser.OptionPassed("subprocess-isolate")) {
+    cil::API_Handler::SetDefaultSubprocessMode(false);
+  }
+#endif
+
   std::optional<int> device_id;
   if (auto option = command_parser["device-id"]; option.has_value()) {
     try {
@@ -481,6 +534,17 @@ int main(int argc, char* argv[]) {
         command_parser.GetOptionValue("cache-local-files") ==
         "true";  // default value is true
     controller.SetSystemCacheLocalFiles(cache_local_files);
+  }
+
+  if (command_parser.OptionPassed("python-path")) {
+    auto python_path = command_parser.GetOptionValue("python-path");
+    if (python_path.find("file://") == 0) {
+      python_path = python_path.substr(7);
+    }
+    if (python_path != "default") {
+      controller.SetSystemPythonPath(python_path);
+      LOG4CXX_INFO(loggerMain, "Python path override used: " << python_path);
+    }
   }
 
   auto logger = [](cli::SystemController::LogLevel log_level,

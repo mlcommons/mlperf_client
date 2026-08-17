@@ -50,7 +50,7 @@ static std::vector<double> RoundedVector(const std::vector<double>& input,
 
 namespace {
 struct DataFileResults {
-  std::string scenario_name;
+  std::string model_base_name;
   std::string model_name;
   std::string data_file_name;
   int iterations = 0;
@@ -75,29 +75,27 @@ BenchmarkLogger::BenchmarkLogger(const std::string& output_dir)
   }
 }
 
-bool ValidateUTF8inJSONObj(const nlohmann::json& json_obj) {
-  // this will be a recursive function to check all the strings in the json_obj
+// Replaces invalid-UTF-8 string nodes in place; returns how many were
+// sanitized.
+size_t SanitizeUtf8InJSONObj(nlohmann::ordered_json& json_obj) {
+  size_t sanitized = 0;
   if (json_obj.is_string()) {
-    std::string str = json_obj.get<std::string>();
-    if (!utils::IsUtf8(str)) {
+    if (auto str = json_obj.get<std::string>(); !utils::IsUtf8(str)) {
       LOG4CXX_ERROR(loggerBenchmarkLogger,
-                    "Invalid UTF-8 string found in JSON object: " << str);
-      return false;
+                    "Invalid UTF-8 string in JSON object, sanitizing: " << str);
+      json_obj = utils::SanitizeToUtf8(str);
+      ++sanitized;
     }
   } else if (json_obj.is_object()) {
     for (auto it = json_obj.begin(); it != json_obj.end(); ++it) {
-      if (!ValidateUTF8inJSONObj(it.value())) {
-        return false;
-      }
+      sanitized += SanitizeUtf8InJSONObj(it.value());
     }
   } else if (json_obj.is_array()) {
-    for (const auto& element : json_obj) {
-      if (!ValidateUTF8inJSONObj(element)) {
-        return false;
-      }
+    for (auto& element : json_obj) {
+      sanitized += SanitizeUtf8InJSONObj(element);
     }
   }
-  return true;
+  return sanitized;
 }
 
 static std::string EscapeCsvField(const std::string& field) {
@@ -184,17 +182,14 @@ bool BenchmarkLogger::AppendBenchmarkResult(const BenchmarkResult& result) {
   res.config_verified = config_verified_;
 
   nlohmann::ordered_json json_obj = BenchmarkResultToJson(res);
-  bool validated = ValidateUTF8inJSONObj(json_obj);
-  if (validated) {
-    WriteResults(json_obj);
-  } else {
-    res.benchmark_success = false;
-    res.error_message = "Invalid UTF-8 string found in output";
+  if (size_t sanitized = SanitizeUtf8InJSONObj(json_obj); sanitized > 0) {
     LOG4CXX_ERROR(loggerBenchmarkLogger,
-                  "Invalid UTF-8 string found in BenchmarkResult");
+                  sanitized << " invalid UTF-8 string(s) sanitized in "
+                               "BenchmarkResult");
   }
+  WriteResults(json_obj);
   results_.push_back(res);
-  return validated;
+  return true;
 }
 
 void BenchmarkLogger::DisplayAllResults() {
@@ -232,16 +227,16 @@ void BenchmarkLogger::DisplayAllResults() {
 
     for (size_t i = 0; i < result.data_file_names.size(); ++i) {
       DataFileResults data_result;
-      data_result.scenario_name = result.scenario_name;
+      data_result.model_base_name = result.model_base_name;
       data_result.model_name = result.model_name;
 
       data_result.data_file_name = result.data_file_names[i];
       data_result.iterations = result.iterations;
       data_result.iterations_warmup = result.iterations_warmup;
 
-      auto it = std::find(results_per_data_file.begin(),
-                          results_per_data_file.end(), data_result);
-      if (it == results_per_data_file.end()) {
+      if (auto it = std::find(results_per_data_file.begin(),
+                              results_per_data_file.end(), data_result);
+          it == results_per_data_file.end()) {
         it = results_per_data_file.insert(results_per_data_file.end(),
                                           data_result);
       }
@@ -305,7 +300,38 @@ void BenchmarkLogger::DisplayAllResults() {
         oss << Indent(2) << exec_result.execution_provider_name << " "
             << exec_result.ep_configuration << ":\n";
         if (exec_result.benchmark_success) {
-          if (exec_result.is_llm_benchmark) {
+          if (exec_result.is_image_benchmark) {
+            oss << Indent(3) << "Images/Min: "
+                << DumpRoundedDouble(exec_result.images_per_minute, 2)
+                << ", Steps/Sec: "
+                << DumpRoundedDouble(exec_result.steps_per_second, 2)
+                << ", Avg End-to-End: "
+                << DumpRoundedDouble(exec_result.avg_end_to_end_seconds, 3)
+                << " s"
+                << " (" << exec_result.image_width << "x"
+                << exec_result.image_height << ", "
+                << exec_result.num_inference_steps << " steps)\n";
+            if (exec_result.first_step_seconds > 0.0 ||
+                exec_result.stdev_end_to_end_seconds > 0.0) {
+              oss << Indent(3) << "E2E min/max/stdev: "
+                  << DumpRoundedDouble(exec_result.min_end_to_end_seconds, 3)
+                  << " / "
+                  << DumpRoundedDouble(exec_result.max_end_to_end_seconds, 3)
+                  << " / "
+                  << DumpRoundedDouble(exec_result.stdev_end_to_end_seconds, 3)
+                  << " s, First-Step: "
+                  << DumpRoundedDouble(exec_result.first_step_seconds, 3)
+                  << " s\n";
+            }
+            if (exec_result.setup_load_seconds > 0.0 ||
+                exec_result.setup_warmup_seconds > 0.0) {
+              oss << Indent(3) << "Setup load/warmup: "
+                  << DumpRoundedDouble(exec_result.setup_load_seconds, 3)
+                  << " / "
+                  << DumpRoundedDouble(exec_result.setup_warmup_seconds, 3)
+                  << " s\n";
+            }
+          } else if (exec_result.is_llm_benchmark) {
             const bool show_overall = config_verified_;
             if (show_overall) {
               auto it = exec_result.performance_results.find(
@@ -337,21 +363,41 @@ void BenchmarkLogger::DisplayAllResults() {
               if (category == "Overall") {
                 continue;
               }
-              oss << Indent(3) << category << ":\tAvg Time to First Token: "
-                  << DumpRoundedDouble(perf_result.time_to_first_token_duration,
-                                       3)
-                  << " s, ";
+              if (!perf_result.is_agentic) {
+                // Legacy LLM benchmark results
+                oss << Indent(3) << category << ":\tAvg Time to First Token: "
+                    << DumpRoundedDouble(
+                           perf_result.time_to_first_token_duration, 3)
+                    << " s, ";
 
-              if (std::fabs(perf_result.token_generation_rate) > 1e-5) {
-                oss << "Avg 2nd+ Token Generation Rate: "
-                    << DumpRoundedDouble(perf_result.token_generation_rate, 2)
-                    << " tokens/s, ";
+                if (std::fabs(perf_result.token_generation_rate) > 1e-5) {
+                  oss << "Avg 2nd+ Token Generation Rate: "
+                      << DumpRoundedDouble(perf_result.token_generation_rate, 2)
+                      << " tokens/s, ";
+                } else {
+                  oss << "Token Generation Rate: N/A, ";
+                }
+                oss << "Avg Input Tokens: " << perf_result.average_input_tokens
+                    << ", Avg Generated Tokens: "
+                    << perf_result.average_generated_tokens;
+
+                oss << std::endl;
               } else {
-                oss << "Token Generation Rate: N/A, ";
+                // Agentic benchmark results
+                oss << Indent(3) << category << ":\tAvg Expected Duration: "
+                    << DumpRoundedDouble(perf_result.average_expected_duration,
+                                         3)
+                    << " s";
+
+                oss << ", Avg Tools Duration: "
+                    << DumpRoundedDouble(perf_result.average_tools_duration, 3)
+                    << " s";
+
+                oss << ", Context Window Size: "
+                    << perf_result.average_input_tokens;
+
+                oss << std::endl;
               }
-              oss << "Avg Input Tokens: " << perf_result.average_input_tokens
-                  << ", Avg Generated Tokens: "
-                  << perf_result.average_generated_tokens << "\n";
             }
           } else {
             oss << Indent(3) << ", Avg Inference Duration: "
@@ -374,12 +420,12 @@ void BenchmarkLogger::DisplayAllResults() {
             oss << Indent(3) << "Error: " << exec_result.ep_error_messages;
           }
           std::string scenario_logs_location;
-          if (exec_result.scenario_name == "Llama2") {
-            scenario_logs_location = "Logs/llama2_executor.log";
-          } else if (exec_result.scenario_name == "Llama3") {
-            scenario_logs_location = "Logs/llama3_executor.log";
-          } else if (exec_result.scenario_name == "Phi3.5") {
-            scenario_logs_location = "Logs/phi3_5_executor.log";
+          if (!exec_result.model_base_name.empty()) {
+            std::string log_dir = exec_result.scenario_name.empty()
+                                      ? "Logs"
+                                      : "Logs/" + exec_result.scenario_name;
+            scenario_logs_location =
+                log_dir + "/" + exec_result.model_base_name + ".log";
           }
           oss << Indent(3) << "Check Logs/error.log"
               << (!scenario_logs_location.empty()
@@ -433,6 +479,7 @@ nlohmann::ordered_json BenchmarkLogger::BenchmarkResultToJson(
   json_obj["ConfigComment"] = result.config_file_comment;
   json_obj["ConfigHash"] = result.config_file_hash;
   json_obj["Scenario Name"] = result.scenario_name;
+  json_obj["Model Base Name"] = result.model_base_name;
   json_obj["Model Name"] = result.model_name;
   json_obj["Model Path"] = result.model_path;
   json_obj["Asset Paths"] = result.asset_paths;
@@ -464,11 +511,48 @@ nlohmann::ordered_json BenchmarkLogger::BenchmarkResultToJson(
     json_obj["Error Message"] = result.error_message;
   json_obj["Device Type"] = result.device_type;
 
+  if (result.is_image_benchmark) {
+    json_obj["Is Image Benchmark"] = true;
+    json_obj["Images Per Minute"] = RoundDouble(result.images_per_minute, 2);
+    json_obj["Steps Per Second"] = RoundDouble(result.steps_per_second, 2);
+    json_obj["Avg End-to-End Seconds"] =
+        RoundDouble(result.avg_end_to_end_seconds, 3);
+    json_obj["Min End-to-End Seconds"] =
+        RoundDouble(result.min_end_to_end_seconds, 3);
+    json_obj["Max End-to-End Seconds"] =
+        RoundDouble(result.max_end_to_end_seconds, 3);
+    json_obj["Stdev End-to-End Seconds"] =
+        RoundDouble(result.stdev_end_to_end_seconds, 3);
+    json_obj["First Step Seconds"] = RoundDouble(result.first_step_seconds, 3);
+    json_obj["Setup Load Seconds"] = RoundDouble(result.setup_load_seconds, 3);
+    json_obj["Setup Warmup Seconds"] =
+        RoundDouble(result.setup_warmup_seconds, 3);
+    if (!result.setup_opt_seconds.empty()) {
+      auto& opts =
+          (json_obj["Setup Optimization Seconds"] = nlohmann::json::object());
+      for (const auto& [name, seconds] : result.setup_opt_seconds) {
+        opts[name] = RoundDouble(seconds, 3);
+      }
+    }
+    if (!result.submodule_timings_ms.empty()) {
+      auto& submodules =
+          (json_obj["Submodule Timings Ms"] = nlohmann::json::object());
+      for (const auto& [name, durations] : result.submodule_timings_ms) {
+        submodules[name] = RoundedVector(durations, 3);
+      }
+    }
+    json_obj["Image Width"] = result.image_width;
+    json_obj["Image Height"] = result.image_height;
+    json_obj["Num Inference Steps"] = result.num_inference_steps;
+    json_obj["Output Image Paths"] = result.output_image_paths;
+  }
+
   if (result.is_llm_benchmark) {
     nlohmann::json overall_perf_results_json{};
     const bool show_overall = config_verified_;
     if (show_overall) {
-      auto it = result.performance_results.find("Overall");
+      auto it =
+          result.performance_results.find(BenchmarkResult::kLLMOverallCategory);
       if (it != result.performance_results.end()) {
         auto overall_perf_results = it->second;
         overall_perf_results_json["Geomean Time to First Token"] =
@@ -485,7 +569,7 @@ nlohmann::ordered_json BenchmarkLogger::BenchmarkResultToJson(
 
     nlohmann::json category_results_json{};
     for (const auto& [category, perf_result] : result.performance_results) {
-      if (category == "Overall") {
+      if (category == BenchmarkResult::kLLMOverallCategory) {
         continue;
       }
       nlohmann::json per_category_results_json{};
@@ -498,6 +582,16 @@ nlohmann::ordered_json BenchmarkLogger::BenchmarkResultToJson(
           perf_result.average_input_tokens;
       per_category_results_json["Avg Generated Tokens"] =
           perf_result.average_generated_tokens;
+
+      per_category_results_json["Is Agentic"] = perf_result.is_agentic;
+      if (perf_result.is_agentic) {
+        per_category_results_json["Avg Expected Duration"] =
+            RoundDouble(perf_result.average_expected_duration, 3);
+        per_category_results_json["Avg Tools Duration"] =
+            RoundDouble(perf_result.average_tools_duration, 3);
+        per_category_results_json["Context Window Size"] =
+            perf_result.average_input_tokens;
+      }
 
       category_results_json[category] = per_category_results_json;
     }
@@ -512,6 +606,13 @@ nlohmann::ordered_json BenchmarkLogger::BenchmarkResultToJson(
     }
 
     json_obj["Output"] = sanitized_output;
+  }
+
+  // I/O viewer: keep prompts aligned with outputs (or image paths).
+  if (!result.input_prompts.empty()) {
+    json_obj["Input Prompts"] = result.input_prompts;
+    json_obj["Input Categories"] = result.input_categories;
+    json_obj["Input History"] = result.input_history;
   }
 
   if (!system_info_provider_) return json_obj;
@@ -587,6 +688,8 @@ std::vector<BenchmarkResult> BenchmarkLogger::ReadResultsFromFile(
     }
     BenchmarkResult result;
     result.scenario_name = item.value("Scenario Name", "");
+    result.model_base_name =
+        item.value("Model Base Name", result.scenario_name);
     result.execution_provider_name = item.value("Execution Provider Name", "");
     result.benchmark_success = item.value("Benchmark Success", false);
     result.benchmark_start_time = item.value("Benchmark Start Time", "");
@@ -617,6 +720,60 @@ std::vector<BenchmarkResult> BenchmarkLogger::ReadResultsFromFile(
       device_name = item["EP Configuration"].value("device_name", "");
     }
 
+    // I/O viewer: restore prompts/outputs persisted in results.json.
+    if (item.contains("Output") && item["Output"].is_array())
+      result.output = item["Output"].get<std::vector<std::string>>();
+    if (item.contains("Output Image Paths") &&
+        item["Output Image Paths"].is_array())
+      result.output_image_paths =
+          item["Output Image Paths"].get<std::vector<std::string>>();
+    if (item.contains("Data Paths") && item["Data Paths"].is_array())
+      result.data_paths = item["Data Paths"].get<std::vector<std::string>>();
+    if (item.contains("Input Prompts") && item["Input Prompts"].is_array())
+      result.input_prompts =
+          item["Input Prompts"].get<std::vector<std::string>>();
+    if (item.contains("Input Categories") &&
+        item["Input Categories"].is_array())
+      result.input_categories =
+          item["Input Categories"].get<std::vector<std::string>>();
+    if (item.contains("Input History") && item["Input History"].is_array())
+      result.input_history =
+          item["Input History"].get<std::vector<std::string>>();
+
+    result.is_image_benchmark = item.value("Is Image Benchmark", false);
+    result.is_llm_benchmark =
+        !result.is_image_benchmark &&
+        (item.contains("category_results") || item.contains("Output"));
+    if (result.is_image_benchmark) {
+      result.images_per_minute = item.value("Images Per Minute", 0.0);
+      result.steps_per_second = item.value("Steps Per Second", 0.0);
+      result.avg_end_to_end_seconds = item.value("Avg End-to-End Seconds", 0.0);
+      result.min_end_to_end_seconds = item.value("Min End-to-End Seconds", 0.0);
+      result.max_end_to_end_seconds = item.value("Max End-to-End Seconds", 0.0);
+      result.stdev_end_to_end_seconds =
+          item.value("Stdev End-to-End Seconds", 0.0);
+      result.first_step_seconds = item.value("First Step Seconds", 0.0);
+      result.setup_load_seconds = item.value("Setup Load Seconds", 0.0);
+      result.setup_warmup_seconds = item.value("Setup Warmup Seconds", 0.0);
+      result.image_width = item.value("Image Width", 0u);
+      result.image_height = item.value("Image Height", 0u);
+      result.num_inference_steps = item.value("Num Inference Steps", 0u);
+      if (item.contains("Setup Optimization Seconds") &&
+          item["Setup Optimization Seconds"].is_object()) {
+        for (auto& [name, seconds] :
+             item["Setup Optimization Seconds"].items()) {
+          result.setup_opt_seconds[name] = seconds.get<double>();
+        }
+      }
+      if (item.contains("Submodule Timings Ms") &&
+          item["Submodule Timings Ms"].is_object()) {
+        for (auto& [name, durations] : item["Submodule Timings Ms"].items()) {
+          result.submodule_timings_ms[name] =
+              durations.get<std::vector<double>>();
+        }
+      }
+    }
+
     if (item.contains("overall_results") &&
         item["overall_results"].contains(
             "Geomean 2nd+ Token Generation Rate") &&
@@ -634,6 +791,22 @@ std::vector<BenchmarkResult> BenchmarkLogger::ReadResultsFromFile(
           value.value("Avg 2nd+ Token Generation Rate", 0.0);
       category_result.time_to_first_token_duration =
           value.value("Avg Time to First Token", 0.0);
+      category_result.is_agentic = value.value("Is Agentic", false);
+      category_result.average_input_tokens =
+          value.value("Avg Input Tokens", static_cast<uint64_t>(0));
+      category_result.average_generated_tokens =
+          value.value("Avg Generated Tokens", static_cast<uint64_t>(0));
+      if (category_result.is_agentic) {
+        category_result.average_expected_duration =
+            value.value("Avg Expected Duration", 0.0);
+        category_result.average_tools_duration =
+            value.value("Avg Tools Duration", 0.0);
+        // The writer stores the context window under a dedicated key for
+        // agentic runs. Fall back to Avg Input Tokens if the older key is
+        // present so historic results still display correctly.
+        category_result.average_input_tokens = value.value(
+            "Context Window Size", category_result.average_input_tokens);
+      }
       result.performance_results[category] = category_result;
     }
     result.system_info.os_name =
@@ -747,9 +920,10 @@ bool BenchmarkLogger::ExportResultsToCSV(
     ep_headers.push_back(r.execution_provider_name);
     device_headers.push_back(r.device_type);
 
-    auto model_full_name = cil::BenchmarkRunner::GetModelFullName(
-        cil::utils::StringToLowerCase(r.scenario_name));
-    scenario_headers.push_back(model_full_name.value_or(r.scenario_name));
+    auto model_full_name =
+        cil::BenchmarkRunner::GetModelFullName(r.model_base_name);
+    scenario_headers.push_back(model_full_name.empty() ? r.model_base_name
+                                                       : model_full_name);
 
     time_headers.push_back(r.benchmark_start_time);
     is_tested_headers.emplace_back(r.config_verified ? "Yes" : "No");
@@ -768,27 +942,134 @@ bool BenchmarkLogger::ExportResultsToCSV(
 
   const auto ordered_categories = GetOrderedCategories(results);
 
+  // Builds a labeled metric row for a category, pulling `value` from each
+  // result's PerformanceResult (blank where the category is absent).
+  auto MetricRow = [&results](const std::string& category, std::string label,
+                              double (*value)(const PerformanceResult&),
+                              int precision) {
+    CsvRow row = {"", "", std::move(label)};
+    for (const auto& r : results) {
+      if (auto it = r.performance_results.find(category);
+          it != r.performance_results.end())
+        row.push_back(utils::DoubleToFixedString(value(it->second), precision));
+      else
+        row.emplace_back("");
+    }
+    return row;
+  };
+
   for (const auto& category : ordered_categories) {
     WriteCsvRow(out, CsvRow{category});
 
-    CsvRow TTFT_row = {"", "", "TTFT (seconds)"};
-    CsvRow TPS_row = {"", "", "TPS"};
+    const bool is_agentic =
+        std::any_of(results.begin(), results.end(), [&category](const auto& r) {
+          auto it = r.performance_results.find(category);
+          return it != r.performance_results.end() && it->second.is_agentic;
+        });
+
+    if (is_agentic) {
+      WriteCsvRow(out, MetricRow(
+                           category, "Avg Expected Duration (seconds)",
+                           [](const PerformanceResult& p) {
+                             return p.average_expected_duration;
+                           },
+                           3));
+      WriteCsvRow(out, MetricRow(
+                           category, "Avg Tools Duration (seconds)",
+                           [](const PerformanceResult& p) {
+                             return p.average_tools_duration;
+                           },
+                           3));
+    } else {
+      WriteCsvRow(out, MetricRow(
+                           category, "TTFT (seconds)",
+                           [](const PerformanceResult& p) {
+                             return p.time_to_first_token_duration;
+                           },
+                           2));
+      WriteCsvRow(out, MetricRow(
+                           category, "TPS",
+                           [](const PerformanceResult& p) {
+                             return p.token_generation_rate;
+                           },
+                           1));
+    }
+  }
+
+  // Image-gen sections
+  std::vector<std::string> image_categories;
+  for (const auto& r : results) {
+    if (!r.is_image_benchmark) continue;
+    for (const auto& c : r.input_categories)
+      if (!c.empty() &&
+          std::ranges::find(image_categories, c) == image_categories.end())
+        image_categories.push_back(c);
+  }
+
+  for (const auto& category : image_categories) {
+    WriteCsvRow(out, CsvRow{category});
+
+    CsvRow images_per_min_row = {"", "", "Images/Min"};
+    CsvRow steps_per_sec_row = {"", "", "Steps/Sec"};
+    CsvRow avg_e2e_row = {"", "", "Avg E2E (seconds)"};
+    CsvRow image_size_row = {"", "", "Image Size"};
+    CsvRow inference_steps_row = {"", "", "Inference Steps"};
+    CsvRow e2e_min_row = {"", "", "E2E Min (seconds)"};
+    CsvRow e2e_max_row = {"", "", "E2E Max (seconds)"};
+    CsvRow e2e_stdev_row = {"", "", "E2E Stdev (seconds)"};
+    CsvRow first_step_row = {"", "", "First-Step (seconds)"};
+    CsvRow setup_load_row = {"", "", "Setup Load (seconds)"};
+    CsvRow setup_warmup_row = {"", "", "Setup Warmup (seconds)"};
 
     for (const auto& r : results) {
-      auto it = r.performance_results.find(category);
-      if (it != r.performance_results.end()) {
-        TTFT_row.push_back(utils::DoubleToFixedString(
-            it->second.time_to_first_token_duration, 2));
-        TPS_row.push_back(
-            utils::DoubleToFixedString(it->second.token_generation_rate, 1));
+      if (r.is_image_benchmark) {
+        images_per_min_row.push_back(
+            utils::DoubleToFixedString(r.images_per_minute, 2));
+        steps_per_sec_row.push_back(
+            utils::DoubleToFixedString(r.steps_per_second, 2));
+        avg_e2e_row.push_back(
+            utils::DoubleToFixedString(r.avg_end_to_end_seconds, 3));
+        image_size_row.push_back(std::to_string(r.image_width) + "x" +
+                                 std::to_string(r.image_height));
+        inference_steps_row.push_back(std::to_string(r.num_inference_steps));
+        e2e_min_row.push_back(
+            utils::DoubleToFixedString(r.min_end_to_end_seconds, 3));
+        e2e_max_row.push_back(
+            utils::DoubleToFixedString(r.max_end_to_end_seconds, 3));
+        e2e_stdev_row.push_back(
+            utils::DoubleToFixedString(r.stdev_end_to_end_seconds, 3));
+        first_step_row.push_back(
+            utils::DoubleToFixedString(r.first_step_seconds, 3));
+        setup_load_row.push_back(
+            utils::DoubleToFixedString(r.setup_load_seconds, 3));
+        setup_warmup_row.push_back(
+            utils::DoubleToFixedString(r.setup_warmup_seconds, 3));
       } else {
-        TTFT_row.emplace_back("");
-        TPS_row.emplace_back("");
+        images_per_min_row.emplace_back("");
+        steps_per_sec_row.emplace_back("");
+        avg_e2e_row.emplace_back("");
+        image_size_row.emplace_back("");
+        inference_steps_row.emplace_back("");
+        e2e_min_row.emplace_back("");
+        e2e_max_row.emplace_back("");
+        e2e_stdev_row.emplace_back("");
+        first_step_row.emplace_back("");
+        setup_load_row.emplace_back("");
+        setup_warmup_row.emplace_back("");
       }
     }
 
-    WriteCsvRow(out, TTFT_row);
-    WriteCsvRow(out, TPS_row);
+    WriteCsvRow(out, images_per_min_row);
+    WriteCsvRow(out, steps_per_sec_row);
+    WriteCsvRow(out, avg_e2e_row);
+    WriteCsvRow(out, image_size_row);
+    WriteCsvRow(out, inference_steps_row);
+    WriteCsvRow(out, e2e_min_row);
+    WriteCsvRow(out, e2e_max_row);
+    WriteCsvRow(out, e2e_stdev_row);
+    WriteCsvRow(out, first_step_row);
+    WriteCsvRow(out, setup_load_row);
+    WriteCsvRow(out, setup_warmup_row);
   }
   return true;
 }

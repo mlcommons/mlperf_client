@@ -1,0 +1,21 @@
+{
+  "model_config": {
+    "context_length": 4096,
+    "search": {
+      "method": "greedy",
+      "temperature": 0.6,
+      "top_k": 1,
+      "top_p": 0.9,
+      "stop_on_eos": true,
+      "max_length": 256
+    }
+  },
+  "prompts": [
+    {
+      "system": "convert all the given ics events into a single XML file, use the following XML structure: <Events> <Event> <EventID>1</EventID> <EventName>Bay Area Soccer Open Training</EventName> <EventTypeID>1</EventTypeID> <Location>PayPal Park, San Jose, CA</Location> <StartDateTime>2026-05-01T16:00:00</StartDateTime> <EndDateTime>2026-05-01T18:00:00</EndDateTime> <Description>Open training session for local Bay Area soccer fans.</Description> </Event> </Events>",
+      "user": "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//Bay Area Soccer//Event Calendar//EN\nCALSCALE:GREGORIAN\n\nBEGIN:VEVENT\nUID:event-1@bayareasoccer.org\nDTSTAMP:20260409T234500Z\nDTSTART:20260501T230000Z\nDTEND:20260502T010000Z\nSUMMARY:Bay Area Soccer Open Training\nLOCATION:PayPal Park, San Jose, CA\nDESCRIPTION:Open training session for local Bay Area soccer fans.\nEND:VEVENT\n\nBEGIN:VEVENT\nUID:event-2@bayareasoccer.org\nDTSTAMP:20260409T234500Z\nDTSTART:20260503T160000Z\nDTEND:20260503T210000Z\nSUMMARY:Youth Soccer Development Camp\nLOCATION:Golden Gate Park Soccer Fields, San Francisco, CA\nDESCRIPTION:Skill-focused development camp for youth players ages 10–14.\nEND:VEVENT\n\nBEGIN:VEVENT\nUID:event-3@bayareasoccer.org\nDTSTAMP:20260409T234500Z\nDTSTART:20260508T020000Z\nDTEND:20260508T040000Z\nSUMMARY:NorCal Friendly Match\nLOCATION:Stanford Soccer Stadium, Palo Alto, CA\nDESCRIPTION:Friendly match between Bay Area regional teams.\nEND:VEVENT\n\nBEGIN:VEVENT\nUID:event-4@bayareasoccer.org\nDTSTAMP:20260409T234500Z\nDTSTART:20260511T010000Z\nDTEND:20260511T040000Z\nSUMMARY:Women’s Soccer Community Night\nLOCATION:Laney College Field, Oakland, CA\nDESCRIPTION:Community celebration supporting women’s soccer.\nEND:VEVENT\n\nBEGIN:VEVENT\nUID:event-5@bayareasoccer.org\nDTSTAMP:20260409T234500Z\nDTSTART:20260512T170000Z\nDTEND:20260512T220000Z\nSUMMARY:Bay Area Soccer Coaches Workshop\nLOCATION:Levi’s Stadium Conference Center, Santa Clara, CA\nDESCRIPTION:Coaching education workshop covering tactics and player development.\nEND:VEVENT\n\nBEGIN:VEVENT\nUID:event-6@bayareasoccer.org\nDTSTAMP:20260409T234500Z\nDTSTART:20260515T190000Z\nDTEND:20260515T230000Z\nSUMMARY:Fan Appreciation Day\nLOCATION:PayPal Park Plaza, San Jose, CA\nDESCRIPTION:Meet-and-greet with players, merchandise giveaways, and activities.\nEND:VEVENT\n\nBEGIN:VEVENT\nUID:event-7@bayareasoccer.org\nDTSTAMP:20260409T234500Z\nDTSTART:20260518T220000Z\nDTEND:20260519T010000Z\nSUMMARY:Local Club Tryouts\nLOCATION:Mission College Soccer Complex, Santa Clara, CA\nDESCRIPTION:Open tryouts for upcoming competitive club season.\nEND:VEVENT\n\nEND:VCALENDAR"
+    }
+  ],
+  "category": "Structured Text",
+  "apply_chat_template": true
+}

@@ -128,9 +128,10 @@ int ExecutionProgressWidget::AddEPProgressWidget(const QString &name,
                                                  const QString &description,
                                                  const QString &icon_path,
                                                  const QString &long_name,
-                                                 const QString &model_name) {
+                                                 const QString &model_name,
+                                                 bool is_agentic) {
   auto ep_widget = new EPProgressWidget(name, description, icon_path, long_name,
-                                        model_name, this);
+                                        model_name, is_agentic, this);
   m_ep_widgets.append(ep_widget);
   m_ep_layout->insertWidget(m_ep_layout->count() - 1, ep_widget);
   ep_widget->SetTransparent(m_ep_widgets.size() % 2 == 0);
@@ -169,9 +170,10 @@ void ExecutionProgressWidget::AddEP(const QString &name,
                                     const QString &description,
                                     const QString &device_type,
                                     const QString &long_name,
-                                    const QString &model_name) {
+                                    const QString &model_name,
+                                    bool is_agentic) {
   AddEPProgressWidget(name, description, gui::utils::GetDeviceIcon(device_type),
-                      long_name, model_name);
+                      long_name, model_name, is_agentic);
 }
 
 void ExecutionProgressWidget::SetTaskName(const QString &name) {

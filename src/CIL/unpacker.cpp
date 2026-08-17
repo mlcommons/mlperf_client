@@ -6,13 +6,11 @@
 #include <future>
 #include <map>
 #include <numeric>
+#include <optional>
 #include <thread>
 #include <vector>
 
-#include "scope_exit.h"
-
 #include "assets/assets.h"
-#include "config.h"
 #include "execution_provider.h"
 #include "minizip/mz.h"
 #include "minizip/mz_strm.h"
@@ -20,11 +18,13 @@
 #include "minizip/mz_strm_split.h"
 #include "minizip/mz_zip.h"
 #include "minizip/mz_zip_rw.h"
+#include "scope_exit.h"
 
-// Include Windows headers if available
 #ifdef _WIN32
+// clang-format off
 #include <comdef.h>
 #include <atlcomcli.h>
+// clang-format on
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <windows.h>
@@ -60,12 +60,12 @@ constexpr std::chrono::milliseconds kMaxTimeoutDuration{30 * 60 * 1000};
 // Each MB of file size adds 200ms to timeout
 constexpr double kTimeoutPerMegabyte{200};
 // Maximum number of entries allowed in a zip file
-constexpr size_t kMaxMiniZipEntries{10000};
+constexpr size_t kMaxMiniZipEntries{50000};
 
 #ifdef _WIN32
 
-std::uint64_t WinApiCalculateTotalUncompressedSize(
-    const std::string& zip_file) {
+std::optional<std::uint64_t> WinApiCalculateTotalUncompressedSize(
+    const std::string& zip_file, const std::string& dest_dir) {
   fs::path zip_path = fs::absolute(std::filesystem::path(zip_file));
 
   std::wstring w_zip_path = zip_path.wstring();
@@ -76,7 +76,7 @@ std::uint64_t WinApiCalculateTotalUncompressedSize(
   if (FAILED(hr)) {
     LOG4CXX_ERROR(loggerUnpacker,
                   "Failed to initialize COM. Error code: " << hr);
-    return 0;
+    return std::nullopt;
   }
 
   std::uint64_t total_size = 0;
@@ -111,6 +111,7 @@ std::uint64_t WinApiCalculateTotalUncompressedSize(
 
           hr = p_items->Item(vIndex, &p_item);
           if (SUCCEEDED(hr) && p_item) {
+            std::uint64_t file_size_64 = 0;
             if (CComQIPtr<FolderItem2> p_item2 = p_item; p_item2) {
               CComVariant varSize;
               hr =
@@ -118,15 +119,31 @@ std::uint64_t WinApiCalculateTotalUncompressedSize(
               if (SUCCEEDED(hr) && varSize.vt != VT_EMPTY) {
                 varSize.ChangeType(VT_UI8);
                 if (varSize.vt == VT_UI8) {
-                  std::uint64_t file_size_64 = varSize.ullVal;
-                  total_size += file_size_64;
+                  file_size_64 = varSize.ullVal;
                 }
               }
             } else {
               LONG file_size_32 = 0;
               p_item->get_Size(&file_size_32);
-              total_size += (std::uint64_t)file_size_32;
+              file_size_64 = static_cast<std::uint64_t>(file_size_32);
             }
+
+            BSTR item_path_bstr = nullptr;
+            p_item->get_Path(&item_path_bstr);
+            if (item_path_bstr) {
+              fs::path dest_file =
+                  fs::path(dest_dir) /
+                  fs::path(std::wstring(item_path_bstr)).filename();
+              std::error_code ec;
+              if (const auto size = fs::file_size(dest_file, ec);
+                  ec || size != file_size_64) {
+                total_size += file_size_64;
+              }
+              SysFreeString(item_path_bstr);
+            } else {
+              total_size += file_size_64;
+            }
+
             p_item->Release();
           }
           VariantClear(&vIndex);
@@ -136,7 +153,6 @@ std::uint64_t WinApiCalculateTotalUncompressedSize(
       input_zip_file_ptr->Release();
     }
 
-    SysFreeString(v_file.bstrVal);
     VariantClear(&v_file);
     pISD->Release();
   } else {
@@ -251,19 +267,18 @@ std::vector<std::string> WinApiExtractZip(const std::string& zip_file,
     vIndex.vt = VT_I4;
     vIndex.lVal = i;
 
-    auto hr = p_items->Item(vIndex, &p_item);
+    if (auto hr = p_items->Item(vIndex, &p_item); FAILED(hr) || !p_item) break;
 
-    if (FAILED(hr) || !p_item) break;
-
-    BSTR item_name;
-    p_item->get_Name(&item_name);
-    std::wstring wstr(item_name);
-    fs::path extracted_file_path = fs::path(dest_folder) / fs::path(wstr);
+    BSTR item_path_bstr;
+    p_item->get_Path(&item_path_bstr);
+    fs::path extracted_file_path =
+        fs::path(dest_folder) /
+        fs::path(std::wstring(item_path_bstr)).filename();
     extracted_files.push_back(extracted_file_path.string());
     LOG4CXX_DEBUG(loggerUnpacker,
                   "Extracting file: " << extracted_file_path.string());
     p_item->Release();
-    SysFreeString(item_name);
+    SysFreeString(item_path_bstr);
 
     VariantClear(&vIndex);
   }
@@ -278,21 +293,22 @@ std::vector<std::string> WinApiExtractZip(const std::string& zip_file,
 }
 #endif
 
-std::uint64_t MinizipCalculateTotalUncompressedSize(
-    const std::string& zip_file) {
+std::optional<std::uint64_t> MinizipCalculateTotalUncompressedSize(
+    const std::string& zip_file, const std::string& dest_dir) {
   std::uint64_t total_size = 0;
   int32_t err = MZ_OK;
   void* reader = mz_zip_reader_create();
   if (!reader) {
     LOG4CXX_ERROR(loggerUnpacker, "Failed to create zip reader");
-    return total_size;
+    return std::nullopt;
   }
   err = mz_zip_reader_open_file(reader, zip_file.c_str());
   if (err != MZ_OK) {
     LOG4CXX_ERROR(loggerUnpacker, "Failed to open zip file " << zip_file);
     mz_zip_reader_delete(&reader);
-    return total_size;
+    return std::nullopt;
   }
+  bool success = true;
   err = mz_zip_reader_goto_first_entry(reader);
   if (err == MZ_OK) {
     int num_entries = 0;
@@ -300,30 +316,48 @@ std::uint64_t MinizipCalculateTotalUncompressedSize(
       num_entries++;
       if (num_entries > kMaxMiniZipEntries) {
         LOG4CXX_ERROR(loggerUnpacker, "Too many entries in zip file");
-        total_size = 0;
+        success = false;
         break;
       }
       mz_zip_file* file_info = NULL;
       err = mz_zip_reader_entry_get_info(reader, &file_info);
       if (err != MZ_OK) {
         LOG4CXX_ERROR(loggerUnpacker, "Failed to get zip file info");
-        total_size = 0;
+        success = false;
         break;
       }
-      std::string file_name = file_info->filename;
       if (mz_zip_reader_entry_is_dir(reader) != MZ_OK) {
-        // get the file size from the zip archive
-
-        total_size += file_info->uncompressed_size;
+        fs::path dest_file = fs::path(dest_dir) / file_info->filename;
+        std::error_code ec;
+        if (const auto size = fs::file_size(dest_file, ec);
+            ec || size != file_info->uncompressed_size) {
+          total_size += file_info->uncompressed_size;
+        }
       }
       err = mz_zip_reader_goto_next_entry(reader);
     } while (err == MZ_OK);
   }
   if (err != MZ_END_OF_LIST) {
     LOG4CXX_ERROR(loggerUnpacker, "Failed to read all entries from zip file");
-    total_size = 0;
+    success = false;
   }
-  return total_size;
+  return success ? std::optional<std::uint64_t>(total_size) : std::nullopt;
+}
+
+static fs::path ToExtendedPath(const fs::path& p) {
+#ifdef _WIN32
+  std::error_code ec;
+  fs::path abs = fs::absolute(p, ec);
+  if (ec) abs = p;
+  abs = abs.lexically_normal().make_preferred();
+  std::wstring w = abs.wstring();
+  if (w.rfind(LR"(\\?\)", 0) == 0) return abs;
+  if (w.rfind(LR"(\\)", 0) == 0)
+    return fs::path(LR"(\\?\UNC\)" + w.substr(2));
+  return fs::path(LR"(\\?\)" + w);
+#else
+  return p;
+#endif
 }
 
 std::vector<std::string> UnZipUsingMinizip(const std::string& zip_file,
@@ -361,9 +395,10 @@ std::vector<std::string> UnZipUsingMinizip(const std::string& zip_file,
       }
       std::string file_name = file_info->filename;
       fs::path dest_file = fs::path(dest_dir) / file_name;
+      fs::path long_dest = ToExtendedPath(dest_file);
       if (mz_zip_reader_entry_is_dir(reader) == MZ_OK) {
         try {
-          fs::create_directories(dest_file);
+          fs::create_directories(long_dest);
         } catch (const std::exception& e) {
           LOG4CXX_ERROR(loggerUnpacker, "Failed to create directory "
                                             << dest_file << " " << e.what());
@@ -371,9 +406,9 @@ std::vector<std::string> UnZipUsingMinizip(const std::string& zip_file,
           break;
         }
       } else {
-        if (!fs::exists(dest_file.parent_path())) {
+        if (!fs::exists(long_dest.parent_path())) {
           try {
-            fs::create_directories(dest_file.parent_path());
+            fs::create_directories(long_dest.parent_path());
           } catch (const std::exception& e) {
             LOG4CXX_ERROR(loggerUnpacker, "Failed to create directory "
                                               << dest_file.parent_path() << " "
@@ -386,28 +421,28 @@ std::vector<std::string> UnZipUsingMinizip(const std::string& zip_file,
         // get the file size from the zip archive
 
         bool skip_current_file = false;
-        if (fs::exists(dest_file)) {
+        if (fs::exists(long_dest)) {
           std::error_code ec;
-          std::uintmax_t size = fs::file_size(dest_file, ec);
-          if (!ec && size == file_info->uncompressed_size) {
+          if (const auto size = fs::file_size(long_dest, ec);
+              !ec && size == file_info->uncompressed_size) {
             skip_current_file = true;
           }
         }
-        auto free_space =
-            utils::GetAvailableDiskSpace(dest_file.parent_path().string());
-        if (free_space < file_info->uncompressed_size) {
-          std::stringstream error_ss{"Don't have enough space to unpack "};
-          error_ss << file_name << ". Free space "
-                   << std::to_string(free_space);
-          error_ss << ", uncopressed file size "
-                   << std::to_string(file_info->uncompressed_size);
-          auto error_string = error_ss.str();
-          LOG4CXX_ERROR(loggerUnpacker, error_string.c_str());
-          skip_current_file = true;
-        }
 
         if (!skip_current_file) {
-          std::ofstream out_stream(dest_file, std::ios::binary);
+          auto free_space =
+              utils::GetAvailableDiskSpace(long_dest.parent_path().string());
+          if (free_space < file_info->uncompressed_size) {
+            std::stringstream error_ss{"Don't have enough space to unpack "};
+            error_ss << file_name << ". Free space "
+                     << std::to_string(free_space);
+            error_ss << ", uncompressed file size "
+                     << std::to_string(file_info->uncompressed_size);
+            LOG4CXX_ERROR(loggerUnpacker, error_ss.str().c_str());
+            unzipped_files.clear();
+            break;
+          }
+          std::ofstream out_stream(long_dest, std::ios::binary);
           if (!out_stream.is_open()) {
             LOG4CXX_ERROR(loggerUnpacker, "Failed to open file " << dest_file);
             unzipped_files.clear();
@@ -486,36 +521,66 @@ static const std::map<Unpacker::Asset, std::string>& GetAssetFileMapping() {
   // An asset to file mapping for both Windows, MacOS and iOS
 
   static const std::map<Unpacker::Asset, std::string> file_map = {
-    {kLog4cxxConfig, "Log4CxxConfig.xml"},
-    {kConfigSchema, "ConfigSchema.json"},
-    {kLLMInputFileSchema, "LLMInputSchema.json"},
-    {kOutputResultsSchema, "OutputResultsSchema.json"},
-    {kDataVerificationFile, "data_verification.json"},
-    {kDataVerificationFileSchema, "DataVerificationSchema.json"},
-    {kConfigVerificationFile, "config_verification.json"},
-    {kConfigExperimentalVerificationFile,
-     "config_experimental_verification.json"},
-    {kConfigExtendedVerificationFile, "config_extended_verification.json"},
-    {kEPDependenciesConfig, "ep_dependencies_config.json"},
-    {kEPDependenciesConfigSchema, "EPDependenciesConfigSchema.json"},
-    {kVendorsDefault, "vendors_default.zip"},
+      {kLog4cxxConfig, "Log4CxxConfig.xml"},
+      {kConfigSchema, "ConfigSchema.json"},
+      {kLLMInputFileSchema, "LLMInputSchema.json"},
+      {kImageInputFileSchema, "ImageInputSchema.json"},
+      {kOutputResultsSchema, "OutputResultsSchema.json"},
+      {kDataVerificationFile, "data_verification.json"},
+      {kDataVerificationFileSchema, "DataVerificationSchema.json"},
+      {kConfigVerificationFile, "config_verification.json"},
+      {kConfigExperimentalVerificationFile,
+       "config_experimental_verification.json"},
+      {kConfigExtendedVerificationFile, "config_extended_verification.json"},
+      {kEPDependenciesConfig, "ep_dependencies_config.json"},
+      {kEPDependenciesConfigSchema, "EPDependenciesConfigSchema.json"},
+      {kVendorsDefault, "vendors_default.zip"},
 #ifdef _WIN32
-    {kNativeOpenVINO, "IHV_NativeOpenVINO.dll"},
-    {kNativeQNN, "IHV_NativeQNN.dll"},
-    {kOrtGenAI, "IHV_OrtGenAI.dll"},
-    {kOrtGenAIRyzenAI, "IHV_OrtGenAI_RyzenAI.dll"},
-    {kWindowsML, "IHV_WindowsML.dll"},
-    {kGGML_EPs, "IHV_GGML_EPs.dll"},
-    {kGGML_Vulkan, "GGML_Vulkan.dll"},
-    {kGGML_CUDA, "GGML_CUDA.dll"},
-    {kGGML_ROCm, "GGML_ROCm.dll"},
+      {kNativeOpenVINO, "IHV_NativeOpenVINO.dll"},
+      {kNativeQNN, "IHV_NativeQNN.dll"},
+      {kOrtGenAI, "IHV_OrtGenAI.dll"},
+      {kOrtGenAIRyzenAI, "IHV_OrtGenAI_RyzenAI.dll"},
+      {kWindowsML, "IHV_WindowsML.dll"},
+      {kGGML_EPs, "IHV_GGML_EPs.dll"},
+      {kLlama_cpp_Vulkan, "llama_cpp_Vulkan.dll"},
+      {kLlama_cpp_CUDA, "llama_cpp_CUDA.dll"},
+      {kLlama_cpp_ROCm, "llama_cpp_ROCm.dll"},
+      {kDiffusers, "IHV_Diffusers.dll"},
+#if WITH_IHV_DIFFUSERS_DISPATCHER && WITH_IHV_DIFFUSERS_NVIDIA
+      // Slash in Name → lands in nvidia/ subdir under deps_dir/Diffusers/
+      // automatically (unpack_regular_file calls fs::create_directories
+      // on the parent path before writing).
+      {kDiffusers_NVIDIA, "nvidia/Diffusers_NVIDIA.dll"},
+#endif
+#if WITH_IHV_DIFFUSERS_DISPATCHER && WITH_IHV_DIFFUSERS_APPLE
+      {kDiffusers_APPLE, "apple/Diffusers_APPLE.dll"},
+#endif
+#if WITH_IHV_DIFFUSERS_DISPATCHER && WITH_IHV_DIFFUSERS_AMD
+      {kDiffusers_AMD, "amd/Diffusers_AMD.dll"},
+#endif
+      {kTokenizer, "tokenizer.dll"},
+      {kImageIO, "imageio.dll"},
 #elif __linux__
-    {kNativeOpenVINO, "libIHV_NativeOpenVINO.so"},
+      {kNativeOpenVINO, "libIHV_NativeOpenVINO.so"},
+      {kGGML_EPs, "libIHV_GGML_EPs.so"},
+      {kLlama_cpp_Vulkan, "libllama_cpp_Vulkan.so"},
+      {kLlama_cpp_CUDA, "libllama_cpp_CUDA.so"},
+      {kTokenizer, "libtokenizer.so"},
+      {kImageIO, "libimageio.so"},
 #else  // Apple
-    {kGGML_EPs, "libIHV_GGML_EPs.dylib"},
-    {kGGML_Vulkan, "libGGML_Vulkan.dylib"},
-    {kGGML_Metal, "libGGML_Metal.dylib"},
-    {kMLX, "libIHV_MLX.dylib"}
+      {kGGML_EPs, "libIHV_GGML_EPs.dylib"},
+      {kLlama_cpp_Vulkan, "libllama_cpp_Vulkan.dylib"},
+      {kLlama_cpp_Metal, "libllama_cpp_Metal.dylib"},
+      {kMLX, "libIHV_MLX.dylib"},
+      {kDiffusers, "libIHV_Diffusers.dylib"},
+#if WITH_IHV_DIFFUSERS_DISPATCHER && WITH_IHV_DIFFUSERS_NVIDIA
+      {kDiffusers_NVIDIA, "nvidia/libDiffusers_NVIDIA.dylib"},
+#endif
+#if WITH_IHV_DIFFUSERS_DISPATCHER && WITH_IHV_DIFFUSERS_APPLE
+      {kDiffusers_APPLE, "apple/libDiffusers_APPLE.dylib"},
+#endif
+      {kTokenizer, "libtokenizer.dylib"},
+      {kImageIO, "libimageio.dylib"},
 #endif
   };
   return file_map;
@@ -539,6 +604,7 @@ GetAssetMemoryMapping() {
   ADD_ASSET_MAP_ENTRY(kLog4cxxConfig, Log4CxxConfig_xml);
   ADD_ASSET_MAP_ENTRY(kConfigSchema, ConfigSchema_json);
   ADD_ASSET_MAP_ENTRY(kLLMInputFileSchema, LLMInputSchema_json);
+  ADD_ASSET_MAP_ENTRY(kImageInputFileSchema, ImageInputSchema_json);
   ADD_ASSET_MAP_ENTRY(kOutputResultsSchema, OutputResultsSchema_json);
   ADD_ASSET_MAP_ENTRY(kDataVerificationFile, data_verification_json);
   ADD_ASSET_MAP_ENTRY(kDataVerificationFileSchema, DataVerificationSchema_json);
@@ -586,21 +652,44 @@ GetAssetMemoryMapping() {
 #endif  // WITH_IHV_GGML
 
 #if WITH_IHV_GGML_VULKAN
-  ADD_ASSET_MAP_ENTRY(kGGML_Vulkan, GGML_Vulkan_dll);
+  ADD_ASSET_MAP_ENTRY(kLlama_cpp_Vulkan, llama_cpp_Vulkan_dll);
 #endif  // WITH_IHV_GGML_VULKAN
 
 #if WITH_IHV_GGML_CUDA
-  ADD_ASSET_MAP_ENTRY(kGGML_CUDA, GGML_CUDA_dll);
+  ADD_ASSET_MAP_ENTRY(kLlama_cpp_CUDA, llama_cpp_CUDA_dll);
 #endif  // WITH_IHV_GGML_CUDA
 
 #if WITH_IHV_GGML_ROCM
-  ADD_ASSET_MAP_ENTRY(kGGML_ROCm, GGML_ROCm_dll);
+  ADD_ASSET_MAP_ENTRY(kLlama_cpp_ROCm, llama_cpp_ROCm_dll);
 #endif  // WITH_IHV_GGML_ROCM
 
-#elif __linux__  // _WIN32
+#if WITH_IHV_DIFFUSERS
+  // In N=1 mode this blob IS the sub-EP renamed (built artifact
+  // IHV_Diffusers.dll). In N≥2 mode it's the pure-C++ dispatcher
+  // (built artifact IHV_Diffusers.dll, the dispatcher target).
+  ADD_ASSET_MAP_ENTRY(kDiffusers, IHV_Diffusers_dll);
+#if WITH_IHV_DIFFUSERS_DISPATCHER
+  // Multi-vendor: one shared sub-EP blob (built artifact
+  // Diffusers_Vendor.dll). Both vendor enums alias to the SAME bytes
+  // — unpacker writes each into its own vendor subdir under different
+  // file names (Diffusers_NVIDIA.dll, Diffusers_APPLE.dll, ...).
+#if WITH_IHV_DIFFUSERS_NVIDIA
+  ADD_ASSET_MAP_ENTRY(kDiffusers_NVIDIA, Diffusers_Vendor_dll);
+#endif
+#if WITH_IHV_DIFFUSERS_APPLE
+  ADD_ASSET_MAP_ENTRY(kDiffusers_APPLE, Diffusers_Vendor_dll);
+#endif
+#if WITH_IHV_DIFFUSERS_AMD
+  ADD_ASSET_MAP_ENTRY(kDiffusers_AMD, Diffusers_Vendor_dll);
+#endif
+#endif  // WITH_IHV_DIFFUSERS_DISPATCHER
+#endif  // WITH_IHV_DIFFUSERS
 
-  ADD_ASSET_MAP_ENTRY(kEPDependenciesConfig,
-                      ep_dependencies_config_linux_x64_json);
+  ADD_ASSET_MAP_ENTRY(kTokenizer, tokenizer_dll);
+  ADD_ASSET_MAP_ENTRY(kImageIO, imageio_dll);
+
+#elif __linux__ // _WIN32
+   ADD_ASSET_MAP_ENTRY(kEPDependenciesConfig, ep_dependencies_config_linux_x64_json);
 
 #if WITH_IHV_NATIVE_OPENVINO
   ADD_ASSET_MAP_ENTRY(kNativeOpenVINO, libIHV_NativeOpenVINO_so);
@@ -612,9 +701,15 @@ GetAssetMemoryMapping() {
   ADD_ASSET_MAP_ENTRY(kGGML_EPs, libIHV_GGML_EPs_so);
 #endif  // WITH_IHV_GGML
 
+#if WITH_IHV_GGML_CUDA
+  ADD_ASSET_MAP_ENTRY(kLlama_cpp_CUDA, libllama_cpp_CUDA_so);
+#endif  // WITH_IHV_GGML_CUDA
 #if WITH_IHV_GGML_VULKAN
-  ADD_ASSET_MAP_ENTRY(kGGML_Vulkan, libGGML_Vulkan_so);
+  ADD_ASSET_MAP_ENTRY(kLlama_cpp_Vulkan, libllama_cpp_Vulkan_so);
 #endif  // WITH_IHV_GGML_VULKAN
+
+  ADD_ASSET_MAP_ENTRY(kTokenizer, libtokenizer_so);
+  ADD_ASSET_MAP_ENTRY(kImageIO, libimageio_so);
 
 #else  // __linux__
 
@@ -629,16 +724,23 @@ GetAssetMemoryMapping() {
 #endif
 
 #if WITH_IHV_GGML_VULKAN
-  ADD_ASSET_MAP_ENTRY(kGGML_Vulkan, libGGML_Vulkan_dylib);
+  ADD_ASSET_MAP_ENTRY(kLlama_cpp_Vulkan, libllama_cpp_Vulkan_dylib);
 #endif
 
 #if WITH_IHV_GGML_METAL
-  ADD_ASSET_MAP_ENTRY(kGGML_Metal, libGGML_Metal_dylib);
+  ADD_ASSET_MAP_ENTRY(kLlama_cpp_Metal, libllama_cpp_Metal_dylib);
 #endif
 
 #if WITH_IHV_MLX
   ADD_ASSET_MAP_ENTRY(kMLX, libIHV_MLX_dylib);
 #endif
+
+#if WITH_IHV_DIFFUSERS
+  ADD_ASSET_MAP_ENTRY(kDiffusers, libIHV_Diffusers_dylib);
+#endif  // WITH_IHV_DIFFUSERS
+
+  ADD_ASSET_MAP_ENTRY(kTokenizer, libtokenizer_dylib);
+  ADD_ASSET_MAP_ENTRY(kImageIO, libimageio_dylib);
 
 #endif  // TARGET_OS_IOS
 
@@ -707,22 +809,28 @@ bool Unpacker::UnpackAsset(Asset asset, std::string& path, bool forced) {
       adjust_for_ep(EP::kIHVWindowsML);
       break;
     case kGGML_EPs:
-      adjust_for_ep(EP::kIHVVulkan);
-      break;
-    case kGGML_Vulkan:
-      adjust_for_ep(EP::kIHVVulkan);
-      break;
-    case kGGML_CUDA:
-      adjust_for_ep(EP::kIHVCUDA);
-      break;
-    case kGGML_Metal:
-      adjust_for_ep(EP::kIHVMetal);
-      break;
-    case kGGML_ROCm:
-      adjust_for_ep(EP::kIHVROCm);
+    case kLlama_cpp_Vulkan:
+    case kLlama_cpp_CUDA:
+    case kLlama_cpp_Metal:
+    case kLlama_cpp_ROCm:
+      adjust_for_ep(EP::kIHVLlamaCpp);
       break;
     case kMLX:
       adjust_for_ep(EP::kIHVMLX);
+      break;
+    case kDiffusers:
+#if WITH_IHV_DIFFUSERS_DISPATCHER
+    case kDiffusers_NVIDIA:
+    case kDiffusers_APPLE:
+    case kDiffusers_AMD:
+#endif
+      adjust_for_ep(EP::kIHVDiffusers);
+      break;
+    case kTokenizer:
+      file_name = "tokenizer/" + file_name;
+      break;
+    case kImageIO:
+      file_name = "imageio/" + file_name;
       break;
   }
 
@@ -762,6 +870,7 @@ bool Unpacker::UnpackAsset(Asset asset, std::string& path, bool forced) {
     case kLog4cxxConfig:
     case kConfigSchema:
     case kLLMInputFileSchema:
+    case kImageInputFileSchema:
     case kOutputResultsSchema:
     case kDataVerificationFile:
     case kDataVerificationFileSchema:
@@ -773,10 +882,11 @@ bool Unpacker::UnpackAsset(Asset asset, std::string& path, bool forced) {
 #if VENDORS_DEFAULT_PACKED
     case kVendorsDefault:
 #endif
-#if (defined(_WIN32) || defined(linux) || defined(__linux__)) && WITH_IHV_NATIVE_OPENVINO
+#if (defined(_WIN32) || defined(linux) || defined(__linux__)) && \
+    WITH_IHV_NATIVE_OPENVINO
     case kNativeOpenVINO:
 #endif  // WITH_IHV_NATIVE_OPENVINO
-#if defined(_WIN32) && WITH_IHV_ORT_GENAI
+#if (defined(_WIN32) || defined (__linux__)) && WITH_IHV_ORT_GENAI
     case kOrtGenAI:
 #endif
 #if defined(_WIN32) && WITH_IHV_ORT_GENAI_RYZENAI
@@ -791,26 +901,64 @@ bool Unpacker::UnpackAsset(Asset asset, std::string& path, bool forced) {
 #if WITH_IHV_GGML
     case kGGML_EPs:
 #if WITH_IHV_GGML_VULKAN
-    case kGGML_Vulkan:
+    case kLlama_cpp_Vulkan:
 #endif
-#if defined(_WIN32) && WITH_IHV_GGML_CUDA
-    case kGGML_CUDA:
+#if (defined(_WIN32) || defined (__linux__)) && WITH_IHV_GGML_CUDA
+    case kLlama_cpp_CUDA:
 #endif
 #if !defined(_WIN32) && WITH_IHV_GGML_METAL
-    case kGGML_Metal:
+    case kLlama_cpp_Metal:
 #endif
 #if defined(_WIN32) && WITH_IHV_GGML_ROCM
-    case kGGML_ROCm:
+    case kLlama_cpp_ROCm:
 #endif
 #endif  // WITH_IHV_GGML
 #if !defined(_WIN32) && WITH_IHV_MLX
     case kMLX:
 #endif
+#if WITH_IHV_DIFFUSERS
+    case kDiffusers:
+#if WITH_IHV_DIFFUSERS_DISPATCHER && WITH_IHV_DIFFUSERS_NVIDIA
+    case kDiffusers_NVIDIA:
+#endif
+#if WITH_IHV_DIFFUSERS_DISPATCHER && WITH_IHV_DIFFUSERS_APPLE
+    case kDiffusers_APPLE:
+#endif
+#if WITH_IHV_DIFFUSERS_DISPATCHER && WITH_IHV_DIFFUSERS_AMD
+    case kDiffusers_AMD:
+#endif
+#endif
+    case kTokenizer:
+    case kImageIO:
       return unpack_regular_file();
     default:
       LOG4CXX_ERROR(loggerUnpacker, "Unknown packed file type: " << (int)asset);
       return false;
   }
+}
+
+static std::optional<std::uint64_t> CalculateTotalUncompressedSize(
+    const std::string& zip_file, const std::string& dest_dir) {
+  LOG4CXX_DEBUG(
+      loggerUnpacker,
+      "Calculating total uncompressed size of zip file: " << zip_file);
+  auto total_uncompressed_size =
+      MinizipCalculateTotalUncompressedSize(zip_file, dest_dir);
+  if (!total_uncompressed_size.has_value()) {
+    LOG4CXX_DEBUG(loggerUnpacker,
+                  "Failed to calculate total uncompressed "
+                  "size using minizip");
+#ifdef _WIN32
+    total_uncompressed_size =
+        WinApiCalculateTotalUncompressedSize(zip_file, dest_dir);
+    if (!total_uncompressed_size.has_value()) {
+      LOG4CXX_DEBUG(loggerUnpacker,
+                    "Failed to calculate total uncompressed "
+                    "size using WinAPI");
+    }
+#endif
+  }
+  return total_uncompressed_size;
 }
 
 std::vector<std::string> Unpacker::UnpackFilesFromZIP(
@@ -821,40 +969,20 @@ std::vector<std::string> Unpacker::UnpackFilesFromZIP(
     return {};
   }
 
-  auto free_space = utils::GetAvailableDiskSpace(dest_dir);
-
-  auto check_size = [&free_space,
+  auto check_size = [&dest_dir,
                      &zip_file](std::uintmax_t total_uncompressed_size) {
-    if (free_space >= total_uncompressed_size) return;
-    std::stringstream error_ss{"Don't have enough space to unpack "};
-    error_ss << zip_file << ". Free space " << std::to_string(free_space);
-    error_ss << ", uncompressed files size "
-             << std::to_string(total_uncompressed_size);
-    auto error_string = error_ss.str();
-    LOG4CXX_DEBUG(loggerUnpacker, error_string.c_str());
-    throw std::runtime_error("Don't have enough space to unpack");
-  };
-
-  auto calculate_size = [zip_file]() {
-    LOG4CXX_DEBUG(
-        loggerUnpacker,
-        "Calculating total uncompressed size of zip file: " << zip_file);
-    std::uint64_t total_uncompressed_size = 0;
-    total_uncompressed_size = MinizipCalculateTotalUncompressedSize(zip_file);
-    if (total_uncompressed_size == 0) {
-      LOG4CXX_DEBUG(loggerUnpacker,
-                    "Failed to calculate total uncompressed "
-                    "size using minizip");
-#ifdef _WIN32
-      total_uncompressed_size = WinApiCalculateTotalUncompressedSize(zip_file);
-      if (total_uncompressed_size == 0) {
-        LOG4CXX_DEBUG(loggerUnpacker,
-                      "Failed to calculate total uncompressed "
-                      "size using WinAPI");
-      }
-#endif
-    }
-    return total_uncompressed_size;
+    if (total_uncompressed_size == 0) return true;
+    auto free_space = utils::GetAvailableDiskSpace(dest_dir);
+    if (free_space >= total_uncompressed_size) return true;
+    auto gb_needed = utils::DoubleToFixedString(
+        utils::BytesToGb(total_uncompressed_size), 2);
+    auto gb_available =
+        utils::DoubleToFixedString(utils::BytesToGb(free_space), 2);
+    LOG4CXX_ERROR(loggerUnpacker, "Not enough disk space to unpack "
+                                      << zip_file << ": needs " << gb_needed
+                                      << " GB, " << gb_available
+                                      << " available");
+    return false;
   };
 
   auto unzip = [zip_file, dest_dir, return_relative_paths]() {
@@ -879,25 +1007,26 @@ std::vector<std::string> Unpacker::UnpackFilesFromZIP(
     std::uint64_t zip_size = 0;
     try {
       zip_size = std::filesystem::file_size(zip_file);
-
-    } catch (const std::exception& e) {
-      throw std::runtime_error("Failed to get file size (" +
-                               std::string(e.what()) + ")");
+    } catch (const std::filesystem::filesystem_error& e) {
+      LOG4CXX_ERROR(loggerUnpacker, "Failed to get file size of "
+                                        << zip_file << ": " << e.what());
+      return {};
     }
     if (zip_size == 0) {
-      throw std::runtime_error("Zip file is empty");
+      LOG4CXX_ERROR(loggerUnpacker, "Zip file is empty: " << zip_file);
+      return {};
     }
-    check_size(zip_size);
 
     {
-      std::promise<std::uint64_t> promise;
-      auto future = promise.get_future();
-      std::thread worker([&promise, calculate_size]() {
+      auto promise =
+          std::make_shared<std::promise<std::optional<std::uint64_t>>>();
+      auto future = promise->get_future();
+      std::thread worker([promise, zip_file, dest_dir]() {
         try {
-          auto result = calculate_size();
-          promise.set_value(result);
+          auto result = CalculateTotalUncompressedSize(zip_file, dest_dir);
+          promise->set_value(result);
         } catch (...) {
-          promise.set_exception(std::current_exception());
+          promise->set_exception(std::current_exception());
         }
       });
 
@@ -913,44 +1042,44 @@ std::vector<std::string> Unpacker::UnpackFilesFromZIP(
         return {};
       }
 
-      zip_size = future.get();
+      auto uncompressed_size = future.get();
+      zip_size = uncompressed_size.value_or(0);
+      if (!uncompressed_size.has_value()) {
+        LOG4CXX_WARN(loggerUnpacker,
+                     "Could not calculate total uncompressed size for "
+                         << zip_file
+                         << ", disk space pre-check will be skipped");
+      } else if (!check_size(*uncompressed_size)) {
+        return {};
+      }
     }
-
-    check_size(zip_size);
 
     if (timeout_ms == 0) return unzip();
 
     std::chrono::milliseconds timeout_duration;
     if (timeout_ms < 0) {
-      try {
-        const double file_size_mb =
-            static_cast<double>(zip_size) / (1024.0 * 1024.0);
-        timeout_duration = std::chrono::milliseconds(
-            static_cast<int64_t>(file_size_mb * kTimeoutPerMegabyte));
-        if (timeout_duration < kMinTimeoutDuration) {
-          timeout_duration = kMinTimeoutDuration;
-        } else if (timeout_duration > kMaxTimeoutDuration) {
-          timeout_duration = kMaxTimeoutDuration;
-        }
-      } catch (const std::exception& e) {
-        std::string error_msg = "Failed to get file size (";
-        error_msg += e.what();
-        error_msg += ")";
-        throw std::runtime_error(error_msg);
+      const double file_size_mb =
+          static_cast<double>(zip_size) / (1024.0 * 1024.0);
+      timeout_duration = std::chrono::milliseconds(
+          static_cast<int64_t>(file_size_mb * kTimeoutPerMegabyte));
+      if (timeout_duration < kMinTimeoutDuration) {
+        timeout_duration = kMinTimeoutDuration;
+      } else if (timeout_duration > kMaxTimeoutDuration) {
+        timeout_duration = kMaxTimeoutDuration;
       }
     } else if (timeout_ms > 0) {
       timeout_duration = std::chrono::milliseconds(timeout_ms);
     }
 
     {
-      std::promise<std::vector<std::string>> promise;
-      auto future = promise.get_future();
-      std::thread worker([&promise, &unzip]() {
+      auto promise = std::make_shared<std::promise<std::vector<std::string>>>();
+      auto future = promise->get_future();
+      std::thread worker([promise, unzip]() {
         try {
           auto result = unzip();
-          promise.set_value(result);
+          promise->set_value(result);
         } catch (...) {
-          promise.set_exception(std::current_exception());
+          promise->set_exception(std::current_exception());
         }
       });
 
@@ -976,6 +1105,21 @@ bool Unpacker::ExtractFileFromMemory(const unsigned char* data[],
                                      size_t data_size, unsigned int parts,
                                      const unsigned part_sizes[],
                                      const std::string& file_path) {
+  // A file already present at the embedded blob's exact size is byte-identical
+  // (blob fixed per build, deps dir keyed by version) — skip the rewrite. Also
+  // avoids failing when the file is a loaded, locked EP DLL.
+  try {
+    if (fs::exists(file_path) && fs::file_size(file_path) == data_size) {
+      if (std::find(unpacked_files_.begin(), unpacked_files_.end(),
+                    file_path) == unpacked_files_.end()) {
+        unpacked_files_.emplace_back(file_path);
+      }
+      return true;
+    }
+  } catch (const fs::filesystem_error&) {
+    // Fall through and attempt a normal extraction.
+  }
+
 #ifdef __APPLE__
   // dyld may fail to load an overwritten .dylib due to cached data, so remove
   // it first before writing.
@@ -1008,8 +1152,37 @@ bool Unpacker::ExtractFileFromMemory(const unsigned char* data[],
   } else {
     LOG4CXX_ERROR(loggerUnpacker, "Unable to create file " << file_path);
   }
-  if (success) unpacked_files_.push_back(file_path);
+  if (success) unpacked_files_.emplace_back(file_path);
   return success;
+}
+
+bool Unpacker::ZipFiles(const std::string& zip_file,
+                        const std::vector<std::string>& files_to_add) {
+  void* writer = mz_zip_writer_create();
+  if (!writer) {
+    LOG4CXX_ERROR(loggerUnpacker, "Failed to create zip writer");
+    return false;
+  }
+
+  int32_t err = mz_zip_writer_open_file(writer, zip_file.c_str(), 0, 0);
+  if (err != MZ_OK) {
+    LOG4CXX_ERROR(loggerUnpacker,
+                  "Failed to open zip file for writing " << zip_file);
+    mz_zip_writer_delete(&writer);
+    return false;
+  }
+
+  for (const std::string& file_path : files_to_add) {
+    err = mz_zip_writer_add_path(writer, file_path.c_str(), NULL, 0, 0);
+    if (err != MZ_OK) {
+      LOG4CXX_ERROR(loggerUnpacker, "Failed to add file to zip " << file_path);
+    }
+  }
+
+  mz_zip_writer_close(writer);
+  mz_zip_writer_delete(&writer);
+
+  return err == MZ_OK;
 }
 
 }  // namespace cil

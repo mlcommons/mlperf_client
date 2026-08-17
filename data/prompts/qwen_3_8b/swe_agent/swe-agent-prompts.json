@@ -1,0 +1,26 @@
+{
+  "model_config": {
+    "context_length": 12000,
+    "search": {
+      "method": "greedy",
+      "temperature": 0.6,
+      "top_k": 1,
+      "top_p": 0.9,
+      "stop_on_eos": true,
+      "max_length": 1000
+    }
+  },
+  "prompt_files": true,
+  "apply_chat_template": true,
+  "enable_thinking": false,
+  "prompts": [
+    {"system": "swe_warmup.md"},
+    {"system": "swe_system.md", "user": "swe_user_0.md"},
+    {"agent": "swe_agent_0.md"},
+    {"user": "swe_user_1.md"},
+    {"agent": "swe_agent_1.md"},
+    {"user": "swe_user_2.md"},
+    {"agent": "swe_agent_2.md"}
+  ],
+  "category": "SWE Agent"
+}

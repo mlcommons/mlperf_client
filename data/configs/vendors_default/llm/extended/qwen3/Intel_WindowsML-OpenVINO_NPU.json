@@ -1,0 +1,55 @@
+{
+  "SystemConfig": {
+    "Comment": "Windows ML OpenVINO, NPU",
+    "TempPath": "",
+    "EPDependenciesConfigPath": ""
+  },
+  "Scenarios": [
+    {
+      "Name": "qwen3",
+      "Models": [
+        {
+          "ModelName": "Qwen3 windowsml-OV Qwen3-8B_ov-int4-CHw",
+          "FilePath": "https://client.mlcommons-storage.org/deps/2.0/scenario_files/models/qwen3/8b/WindowsML/NPU/OpenVINO/openvino_model_dy.onnx",
+          "DataFilePath": "https://client.mlcommons-storage.org/deps/2.0/scenario_files/models/qwen3/8b/WindowsML/NPU/OpenVINO/model.onnx.data.zip",
+          "TokenizerPath": "https://client.mlcommons-storage.org/deps/2.0/scenario_files/models/qwen3/8b/WindowsML/NPU/OpenVINO/tokenizer.zip"
+        }
+      ],
+      "InputFilePath": {
+        "base": [
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/qwen3/8b/content_generation/greedy-prompt_cot.39329.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/qwen3/8b/content_generation/greedy-prompt_niv.415874.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/qwen3/8b/content_generation/greedy-prompt_t0.677207.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/qwen3/8b/creative_writing/greedy-prompt_flan.63349.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/qwen3/8b/creative_writing/greedy-prompt_niv.123362.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/qwen3/8b/creative_writing/greedy-prompt_niv.77134.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/qwen3/8b/structured_text/data_csv2json.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/qwen3/8b/structured_text/events_ics2xml.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/qwen3/8b/code_analysis/benchmark_stage_cpp_2k.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/qwen3/8b/code_analysis/command_parser_cpp_2k.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/qwen3/8b/code_analysis/performance_counter_group_cpp_2k.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/qwen3/8b/intermediate4k/booksum_4k.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/qwen3/8b/intermediate4k/downloader_cpp_4k.json"
+        ],
+        "extended": [
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/qwen3/8b/substantial8k/booksum_8k.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/qwen3/8b/substantial8k/gov_report_train_infrastructure.json"
+        ]
+      },
+      "AssetsPath": [],
+      "ResultsVerificationFile": "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/generation-greedy-results.json",
+      "DataVerificationFile": "",
+      "Iterations": 3,
+      "Delay": 0,
+      "ExecutionProviders": [
+        {
+          "Name": "WindowsML",
+          "Config": {
+            "device_type": "NPU",
+            "device_ep": "OpenVINO"
+          }
+        }
+      ]
+    }
+  ]
+}

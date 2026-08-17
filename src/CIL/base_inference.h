@@ -16,6 +16,7 @@
 
 #include <log4cxx/logger.h>
 
+#include <filesystem>
 #include <nlohmann/json.hpp>
 #include <vector>
 
@@ -54,7 +55,9 @@ class BaseInference {
    * libraries.
    * @param ep The execution provider to use for running inference.
    * @param ep_settings The settings for the execution provider.
-   * @param scenario_name The unique identifier for the inference scenario name.
+   * @param scenario_name The scenario name (e.g. "txt2txt").
+   * @param model_base_name The unique model identifier (e.g.
+   * "phi_4_mini_instruct").
    * @param logger_name The name of the logger.
    * @param library_path The full path of the library supporting IHV API.
    *
@@ -62,6 +65,7 @@ class BaseInference {
   BaseInference(const std::string& model_path, const std::string& deps_dir,
                 EP ep, const nlohmann::json& ep_settings,
                 const std::string& scenario_name,
+                const std::string& model_base_name,
                 const std::string& logger_name,
                 const std::string& library_path);
   /**
@@ -144,12 +148,12 @@ class BaseInference {
 
   /**
    * @brief Gets the EP error messages.
-  * 
-  * * This method returns the EP error messages if any error occurred during
+   *
+   * * This method returns the EP error messages if any error occurred during
    * the calls to IHV implementations
    *
    * @return The IHV error messages.
-  */
+   */
   std::string GetEPErrorMessages() const;
 
   /**
@@ -212,7 +216,7 @@ class BaseInference {
 
  protected:
   const std::string scenario_name_;
-  const std::string logger_name_;
+  const std::string model_base_name_;
   const std::string model_path_;
   const std::string deps_dir_;
   const EP ep_;
@@ -230,10 +234,12 @@ class BaseInference {
   // Logger
   log4cxx::LoggerPtr logger_;
 
-  private:
-
+ private:
   std::string device_type_;
   std::string error_message_;
+
+  std::filesystem::path saved_cwd_;
+  bool saved_cwd_valid_ = false;
 };
 }  // namespace infer
 }  // namespace cil

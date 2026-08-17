@@ -1,0 +1,21 @@
+{
+  "model_config": {
+    "context_length": 4096,
+    "search": {
+      "method": "greedy",
+      "temperature": 0.6,
+      "top_k": 1,
+      "top_p": 0.9,
+      "stop_on_eos": true,
+      "max_length": 256
+    }
+  },
+  "prompts": [
+    {
+      "system": "You are an AI assistant, who knows every language and how to translate one language to another. Given a task, you explain in simple steps what the task is asking, any guidelines that it provides. You solve the task and show how you used the guidelines to solve the task.",
+      "user": "Q: Given a negotiation between two participants, answer 'Yes' if both participants agree to the deal, otherwise answer 'No'.\nTHEM: give me books and hats  YOU: all th books and 1 hat for you  THEM: ok.\nA:"
+    }
+  ],
+  "category": "Content Generation",
+  "apply_chat_template": true
+}

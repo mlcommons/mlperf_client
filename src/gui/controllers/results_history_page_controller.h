@@ -37,6 +37,9 @@ class ResultsHistoryPageController : public AbstractController {
 
   QList<QPair<HistoryEntry, cil::BenchmarkResult> > GetCurrentEntries() const;
 
+  QList<QPair<HistoryEntry, cil::BenchmarkResult> > GetEntriesByIds(
+      const QStringList& ids) const;
+
  public slots:
   void OnDeleteHistoryRequested();
   void OnSortRequested(const QString& mode);

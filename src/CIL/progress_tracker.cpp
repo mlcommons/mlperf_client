@@ -4,11 +4,12 @@ namespace cil {
 
 ProgressTracker::ProgressTracker(
     size_t expected_task_count, const std::string &task_description,
-    const std::chrono::milliseconds &update_interval)
+    const std::chrono::milliseconds &update_interval, bool quiet)
     : task_description_(task_description),
       expected_task_count_(expected_task_count),
       current_task_index_(0),
-      update_interval_(update_interval) {}
+      update_interval_(update_interval),
+      quiet_(quiet) {}
 
 void ProgressTracker::StartTracking() {
   if (expected_task_count_ == 0) {

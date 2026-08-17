@@ -86,7 +86,6 @@ int main(int argc, char* argv[]) {
       return cil::API_Handler::RunSubprocessClient(argv[i + 1]);
     }
   }
-  cil::API_Handler::SetDefaultSubprocessMode(true);
 #endif
 
 #if defined(_WIN32) || defined(_WIN64)

@@ -17,11 +17,13 @@ class BenchmargStage : public StageBase {
                  BenchmarkLogger& results_logger,
                  const std::string& output_results_schema_path,
                  const std::string& input_file_schema_path,
+                 const std::string& image_input_file_schema_path,
                  bool skip_failed_prompts)
       : StageBase(logger, config, unpacker, ep_dependencies_manager),
         results_logger_(results_logger),
         output_results_schema_path_(output_results_schema_path),
         input_file_schema_path_(input_file_schema_path),
+        image_input_file_schema_path_(image_input_file_schema_path),
         skip_failed_prompts_(skip_failed_prompts) {}
 
   /**
@@ -60,6 +62,7 @@ class BenchmargStage : public StageBase {
 
   const std::string& output_results_schema_path_;
   const std::string& input_file_schema_path_;
+  const std::string& image_input_file_schema_path_;
   const bool skip_failed_prompts_;
 
   static const std::chrono::milliseconds kProgressInterval;

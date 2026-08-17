@@ -2,7 +2,12 @@ cmake_minimum_required(VERSION 3.15)
 project(MLPerf)
 
 if(APPLE)
-set(CMAKE_OSX_DEPLOYMENT_TARGET 12)
+    if(IOS)
+        set(CMAKE_OSX_DEPLOYMENT_TARGET 12)
+    else()
+        # 14.0: the Diffusers EP embeds torch >= 2.12 wheels (built minos 14.0).
+        set(CMAKE_OSX_DEPLOYMENT_TARGET 14)
+    endif()
 endif()
 
 include(FetchContent)
@@ -21,15 +26,18 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-find_program(CLANG_TIDY_EXE NAMES "clang-tidy" REQUIRED)
-
-set(CLANG_TIDY_COMMAND "${CLANG_TIDY_EXE}" "-checks=-*,modernize-*")
-
-# Add extra arguments for exception handling based on compiler
-if (MSVC)
-    list(APPEND CLANG_TIDY_COMMAND "--extra-arg=/EHsc")
-else()
-    list(APPEND CLANG_TIDY_COMMAND "--extra-arg=-fexceptions")
+# clang-tidy runs on native builds. Cross toolchains don't have it
+# wired up, so skip it only when truly cross-compiling (target
+# processor differs from host).
+if("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "${CMAKE_HOST_SYSTEM_PROCESSOR}")
+    find_program(CLANG_TIDY_EXE NAMES "clang-tidy" REQUIRED)
+    set(CLANG_TIDY_COMMAND "${CLANG_TIDY_EXE}" "-checks=-*,modernize-*")
+    # Add extra arguments for exception handling based on compiler
+    if (MSVC)
+        list(APPEND CLANG_TIDY_COMMAND "--extra-arg=/EHsc")
+    else()
+        list(APPEND CLANG_TIDY_COMMAND "--extra-arg=-fexceptions")
+    endif()
 endif()
 
 if(APPLE)
@@ -48,6 +56,7 @@ endif()
 
 message(STATUS "PLATFORM: ${PLATFORM}")
 message(STATUS "CMAKE_SYSTEM_PROCESSOR: ${CMAKE_SYSTEM_PROCESSOR}")
+message(STATUS "CMAKE_HOST_SYSTEM_PROCESSOR: ${CMAKE_HOST_SYSTEM_PROCESSOR}")
 message(STATUS "CMAKE_GENERATOR_PLATFORM: ${CMAKE_GENERATOR_PLATFORM}")
 
 if(WIN32 AND NOT CMAKE_GENERATOR_PLATFORM)
@@ -79,10 +88,11 @@ endif()
 
 # Platform-specific compiler flags
 if(MSVC)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MT")
-    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MTd")
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MT")
     set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} /MT")
-    set(CMAKE_C_FLAGS_DEBUG   "${CMAKE_C_FLAGS_DEBUG} /MTd")
+    set(CMAKE_C_FLAGS_DEBUG   "${CMAKE_C_FLAGS_DEBUG} /MT")
 elseif(UNIX AND NOT APPLE)  # Linux
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
@@ -96,7 +106,6 @@ add_compile_definitions(
 
 add_subdirectory(deps/JSON)
 set(BUILD_SHARED_LIBS OFF)
-set(CMAKE_MSVC_RUNTIME_LIBRARY MultiThreaded)
 add_subdirectory(deps/JSONSchema)
 
 set(HTTPLIB_COMPILE ON CACHE BOOL "Lets compile the httplib as a regular library instead of header-only" FORCE)
@@ -105,7 +114,18 @@ set(HTTPLIB_USE_ZLIB_IF_AVAILABLE OFF CACHE BOOL "Disable ZLIB support" FORCE)
 set(HTTPLIB_USE_ZSTD_IF_AVAILABLE OFF CACHE BOOL "Disable ZSTD support" FORCE)
 set(HTTPLIB_REQUIRE_BROTLI OFF CACHE BOOL "Disable Brotli usage" FORCE)
 set(HTTPLIB_USE_BROTLI_IF_AVAILABLE OFF CACHE BOOL "Disable Brotli usage" FORCE)
+if(IOS)
+  add_compile_definitions(CPPHTTPLIB_DISABLE_MACOSX_AUTOMATIC_ROOT_CERTIFICATES)
+endif()
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/deps/OpenSSL")
+
+# Cross-compiling x64->ARM64: cpp-httplib's find_package(Python3) only runs split.py
+# on the host, but would reject the x64 interpreter as wrong-arch. Pin a host one.
+if(WIN32 AND CMAKE_GENERATOR_PLATFORM MATCHES "ARM64"
+        AND CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "AMD64|x86_64"
+        AND NOT Python3_EXECUTABLE)
+    find_program(Python3_EXECUTABLE NAMES python python3)
+endif()
 
 add_subdirectory(deps/cpp-httplib)
 set(HTTPLIB_LIBRARY "httplib")
@@ -113,12 +133,13 @@ set(HTTPLIB_INCLUDE_DIR ${httplib_SOURCE_DIR})
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/deps/Log4cxx")
 
-# IHV Subprocess isolation - runs IHV code in a separate process to prevent DLL conflicts
-# Currently only supported on Windows
-if(WIN32)
-  option(MLPERF_SUBPROCESS_IHV_ISOLATION "Enable IHV subprocess isolation" ON)
-else()
+# IHV Subprocess isolation - runs IHV code in a separate process to isolate
+# conflicting EP libraries. Supported on desktop platforms; iOS cannot spawn
+# subprocesses, so it stays disabled there.
+if(IOS)
   set(MLPERF_SUBPROCESS_IHV_ISOLATION OFF)
+else()
+  option(MLPERF_SUBPROCESS_IHV_ISOLATION "Enable IHV subprocess isolation" ON)
 endif()
 
 if(WIN32)
@@ -131,18 +152,23 @@ if(WIN32)
         # Native OpenVINO only supported on x64 build
         option(MLPERF_IHV_NATIVE_OPENVINO "Enable IHV Native OpenVINO EP" ON)
 		option(MLPERF_IHV_NATIVE_QNN "Enable IHV Native QNN EP" OFF)
-        option(MLPERF_IHV_ORT_GENAI "Enable Onnx Runtime GenAI path using DML." ON)
+        set(MLPERF_IHV_ORT_GENAI OFF)
         option(MLPERF_IHV_ORT_GENAI_RYZENAI "Enable ONNX Runtime GenAI path using RyzenAI." ON)
         option(MLPERF_IHV_GGML_CUDA "Enable IHV GGML CUDA EP" ON)
-        option(MLPERF_IHV_GGML_ROCM "Enable IHV GGML ROCM EP" ON)
+        set(MLPERF_IHV_GGML_ROCM OFF)
+        option(MLPERF_IHV_DIFFUSERS_NVIDIA "Enable NVIDIA / CUDA Diffusers sub-EP" ON)
+        option(MLPERF_IHV_DIFFUSERS_AMD "Enable AMD / RyzenAI Diffusers sub-EP" ON)
     else()
         set(MLPERF_IHV_NATIVE_OPENVINO OFF)
 		option(MLPERF_IHV_NATIVE_QNN "Enable IHV Native QNN EP" ON)
         set(MLPERF_IHV_ORT_GENAI OFF)
         set(MLPERF_IHV_ORT_GENAI_RYZENAI OFF)
-        set(MLPERF_IHV_GGML_CUDA OFF)
+        option(MLPERF_IHV_GGML_CUDA "Enable IHV GGML CUDA EP" OFF)
         set(MLPERF_IHV_GGML_ROCM OFF)
+        set(MLPERF_IHV_DIFFUSERS_NVIDIA OFF)
+        set(MLPERF_IHV_DIFFUSERS_AMD OFF)
 	endif()
+    set(MLPERF_IHV_DIFFUSERS_APPLE OFF)
     set(MLPERF_IHV_GGML_VULKAN OFF)
     option(MLPERF_IHV_WINDOWSML "Enable IHV Windows ML" ON)
 elseif(APPLE)
@@ -155,6 +181,13 @@ elseif(APPLE)
     set(MLPERF_IHV_GGML_CUDA OFF)
     set(MLPERF_IHV_GGML_ROCM OFF)
     option(MLPERF_IHV_MLX "Enable IHV MLX EP" ON)
+    if(IOS)
+        set(MLPERF_IHV_DIFFUSERS_APPLE OFF)
+    else()
+        option(MLPERF_IHV_DIFFUSERS_APPLE  "Enable Apple / MPS Diffusers sub-EP"  ON)
+    endif()
+    set(MLPERF_IHV_DIFFUSERS_NVIDIA OFF)
+    set(MLPERF_IHV_DIFFUSERS_AMD OFF)
 	set(MLPERF_IHV_NATIVE_QNN OFF)
 	set(MLPERF_IHV_WINDOWSML OFF)
 elseif(UNIX AND NOT APPLE)  # Linux
@@ -166,6 +199,16 @@ elseif(UNIX AND NOT APPLE)  # Linux
     set(MLPERF_IHV_GGML_ROCM OFF)
     set(MLPERF_IHV_NATIVE_QNN OFF)
     set(MLPERF_IHV_WINDOWSML OFF)
+    set(MLPERF_IHV_DIFFUSERS_NVIDIA OFF)
+    set(MLPERF_IHV_DIFFUSERS_APPLE  OFF)
+    set(MLPERF_IHV_DIFFUSERS_AMD OFF)
+    set(MLPERF_IHV_GGML_CUDA OFF)
+endif()
+
+if(MLPERF_IHV_DIFFUSERS_NVIDIA OR MLPERF_IHV_DIFFUSERS_APPLE OR MLPERF_IHV_DIFFUSERS_AMD)
+    set(MLPERF_IHV_DIFFUSERS ON CACHE BOOL "Enable IHV Diffusers" FORCE)
+else()
+    set(MLPERF_IHV_DIFFUSERS OFF CACHE BOOL "Disable IHV Diffusers" FORCE)
 endif()
 
 if(MLPERF_IHV_GGML_VULKAN)
@@ -185,10 +228,10 @@ if(MLPERF_IHV_GGML_CUDA)
 find_package(CUDAToolkit)
 
 if (NOT CUDAToolkit_FOUND)
-    message(WARNING "CUDA toolkit not found, the build will be executed without CUDA, please install CUDA Toolkit (12.6), or set the path to CUDA Toolkit in the environment variable. ")
+    message(WARNING "CUDA toolkit not found, the build will be executed without CUDA, please install CUDA Toolkit (13.x), or set CUDAToolkit_ROOT / CUDA_PATH. ")
     set(MLPERF_IHV_GGML_CUDA OFF)
 else()
-    message(STATUS "CUDA Toolkit found: enabling GGML CUDA build")
+    message(STATUS "CUDA Toolkit ${CUDAToolkit_VERSION} found (${CUDAToolkit_NVCC_EXECUTABLE}): enabling GGML CUDA build")
 endif()
 
 endif()
@@ -215,6 +258,11 @@ else()
 endif()
 
 option(MLPERF_BUILD_GUI "Build the GUI target" OFF)
+option(MLPERF_IHV_DIFFUSERS_INSTALL_PYTHON "Download embedded Python and install packages for Diffusers EP (dev only)" ON)
+include(CMakeDependentOption)
+cmake_dependent_option(MLPERF_IHV_DIFFUSERS_BUILD_STANDALONE
+    "Provide the diffusers_standalone build target (dev only, on-demand)" ON
+    "MLPERF_IHV_DIFFUSERS_INSTALL_PYTHON" OFF)
 set(MLPERF_PACK_VENDORS_DEFAULT ${MLPERF_BUILD_GUI} CACHE BOOL "Zip and pack vendors default configurations" FORCE)
 
 add_subdirectory(src)

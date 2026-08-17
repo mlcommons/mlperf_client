@@ -33,9 +33,10 @@ class ExecutionProviderConfig {
     obj.config_ = j.value("Config", nlohmann::json());
 
     if (j.contains("LibraryPath")) {
-      //convert to full path if not empty
-      std::string  p = j.at("LibraryPath");
-      obj.library_path_ = !p.empty() ? std::filesystem::absolute(p).string() : "";
+      // convert to full path if not empty
+      std::string p = j.at("LibraryPath");
+      obj.library_path_ =
+          !p.empty() ? std::filesystem::absolute(p).string() : "";
     }
     if (j.contains("Dependencies")) {
       j.at("Dependencies").get_to(obj.dependencies_);
@@ -48,8 +49,15 @@ class ExecutionProviderConfig {
         obj.models_.emplace_back(model);
       }
     }
-    if (obj.name_ == "RyzenAI" && (obj.config_["device_type"] == "NPU" || obj.config_["device_type"] == "NPU and GPU"))
+    if (obj.name_ == "RyzenAI" && (obj.config_["device_type"] == "NPU" ||
+                                   obj.config_["device_type"] == "NPU and GPU"))
       obj.name_ = "OrtGenAI-RyzenAI";
+
+    if (obj.name_ == "Vulkan" || obj.name_ == "Metal" ||
+        obj.name_ == "CUDA" || obj.name_ == "ROCm") {
+      if (!obj.config_.contains("backend")) obj.config_["backend"] = obj.name_;
+      obj.name_ = "llama-cpp";
+    }
   }
 
   nlohmann::json ToJson() const {
@@ -75,6 +83,20 @@ class ExecutionProviderConfig {
   const std::string& GetName() const { return name_; }
   const nlohmann::json& GetConfig() const { return config_; }
   void SetConfig(const nlohmann::json& config) { config_ = config; }
+
+  // Filename-style name carrying the sub-backend, e.g. "llama-cpp-CUDA" or
+  // "WindowsML-DirectML"; the bare name when the EP has no sub-backend.
+  std::string GetFullName() const {
+    const char* key = nullptr;
+    if (name_ == "llama-cpp" || name_ == "Diffusers")
+      key = "backend";
+    else if (name_ == "WindowsML")
+      key = "device_ep";
+    if (key && config_.is_object())
+      if (auto it = config_.find(key); it != config_.end() && it->is_string())
+        return name_ + "-" + it->get<std::string>();
+    return name_;
+  }
   const std::string& GetLibraryPath() const { return library_path_; }
   const std::vector<std::string>& GetDependencies() const {
     return dependencies_;

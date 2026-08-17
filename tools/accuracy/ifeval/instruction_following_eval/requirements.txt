@@ -1,0 +1,4 @@
+absl-py
+pycld2
+immutabledict
+pystemmer

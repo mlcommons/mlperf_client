@@ -1,0 +1,79 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "model_config": {
+      "type": "object",
+      "properties": {
+        "image_generation": {
+          "type": "object",
+          "properties": {
+            "width": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "height": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "num_inference_steps": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "guidance_scale": {
+              "type": "number"
+            },
+            "seed": {
+              "type": "integer"
+            },
+            "num_images_per_prompt": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "seeds": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            },
+            "max_sequence_length": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      },
+      "required": [
+        "image_generation"
+      ]
+    },
+    "prompts": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "positive": { "type": "string" },
+              "negative": { "type": "string" }
+            },
+            "required": ["positive"],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "minItems": 1
+    },
+    "category": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "model_config",
+    "prompts"
+  ],
+  "additionalProperties": false
+}

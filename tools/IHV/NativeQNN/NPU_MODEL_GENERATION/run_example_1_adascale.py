@@ -14,14 +14,14 @@ qairt_path = os.path.abspath(qairt_path)
 qairt_version_path = os.listdir(qairt_path)[0]
 print(f"Qairt Version Used: {qairt_version_path}")
 QNN_SDK_ROOT = os.path.join(qairt_path, qairt_version_path) + "/"
-if model_name == "phi3.5":
-    model_id = os.path.abspath(os.path.join(qairt_path, "..", "Phi-3.5-mini-instruct")) + "/"
-elif model_name == "llama3.1":
+if model_name == "llama3.1":
     model_id = os.path.abspath(os.path.join(qairt_path, "..", "Llama-3.1-8B-Instruct")) + "/"
+elif model_name == "phi4mini":
+    model_id = os.path.abspath(os.path.join(qairt_path, "..", "Phi-4-mini-instruct")) + "/"
 else:
     print(f"Model not supported")
     sys.exit(1)
-    
+
 print(f"model_id: {model_id}")
 
 parameters={"model_id": model_id}
@@ -36,7 +36,7 @@ def modify_notebook(notebook_path, output_path, variable_changes):
     for cell in nb.cells:
         if cell.cell_type == "code" and isinstance(cell.source, str):
             for var_name, new_value in variable_changes.items():
-                if ((model_name == "llama3.1" or model_name == "phi3.5") and var_name == "model_id"):
+                if var_name == "model_id":
                     pattern = r'^(?P<prefix>\s*model_id\s*=\s*)(?P<q>["\'])(?P<val>.*?)(?P=q)\s*$'
                 replacement = f"{var_name} = {repr(new_value)}"
                 cell.source = re.sub(pattern, replacement, cell.source, flags=re.MULTILINE)
@@ -44,14 +44,14 @@ def modify_notebook(notebook_path, output_path, variable_changes):
     with open(output_path, "w", encoding="utf-8") as f:
         nbformat.write(nb, f)
 
-if model_name == "phi3.5":
+if model_name == "llama3.1":
     modify_notebook("adascale.ipynb", "updated-adascale.ipynb", parameters)
     pm.execute_notebook(
         "updated-adascale.ipynb",
         "output-adascale.ipynb",
         kernel_name="python"
     )
-elif model_name == "llama3.1":
+elif model_name == "phi4mini":
     modify_notebook("adascale.ipynb", "updated-adascale.ipynb", parameters)
     pm.execute_notebook(
         "updated-adascale.ipynb",

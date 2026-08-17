@@ -1,21 +1,88 @@
 #include "benchmark_controller.h"
 
 #include <QThread>
+#include <cstdint>
+#include <functional>
+#include <nlohmann/json.hpp>
+#include <set>
+#include <utility>
 
 #include "../CIL/benchmark/runner.h"
 #include "../CIL/benchmark_logger.h"
 #include "../CIL/benchmark_result.h"
+#include "../CIL/disk_space_tracker.h"
 #include "../CIL/ep_dependencies_manager.h"
 #include "../CIL/execution_config.h"
 #include "../CIL/execution_provider.h"
+#include "../CIL/storage_task.h"
 #include "../CIL/utils.h"
 #include "gui_progress_tracker_handler.h"
 #include "realtime_page_controller.h"
+#include "settings_manager.h"
 
 using namespace log4cxx;
 
 const LoggerPtr loggerBenchmarkController(
     Logger::getLogger("BenchmarkController"));
+
+namespace {
+
+// Progress handler used during device enumeration. In addition to the base
+// console/interrupt handling, it sums the byte-level download progress of every
+// StorageTask in the active "download" tracker and reports it through a
+// callback, so the GUI can show continuously-advancing download progress and a
+// stable ETA even while a single large dependency is being fetched.
+class EnumerationDownloadHandler : public cil::ProgressTrackerHandler {
+ public:
+  using BytesCallback =
+      std::function<void(uint64_t downloaded, uint64_t total)>;
+
+  EnumerationDownloadHandler(std::atomic<bool>& interrupt,
+                             BytesCallback on_bytes)
+      : cil::ProgressTrackerHandler(interrupt),
+        on_bytes_(std::move(on_bytes)) {}
+
+  void Update(cil::ProgressTracker& tracker) override {
+    if (tracker.GetTaskDescription() == "download") {
+      uint64_t downloaded = 0, total = 0;
+      for (const auto& task : tracker.GetTasks()) {
+        if (auto* storage_task = dynamic_cast<cil::StorageTask*>(task.get())) {
+          downloaded += storage_task->GetDownloadedBytes();
+          total += storage_task->GetTotalBytes();
+        }
+      }
+      if (on_bytes_ &&
+          (downloaded != last_downloaded_ || total != last_total_)) {
+        last_downloaded_ = downloaded;
+        last_total_ = total;
+        on_bytes_(downloaded, total);
+      }
+    }
+    cil::ProgressTrackerHandler::Update(tracker);
+  }
+
+ private:
+  BytesCallback on_bytes_;
+  uint64_t last_downloaded_ = 0;
+  uint64_t last_total_ = 0;
+};
+
+// Applies the Python path setting (empty = keep the config value, "system",
+// or an interpreter directory) to the run's system config. No-op on iOS,
+// which can't run Python; the setting is also hidden there.
+void ApplyPythonPathSetting(cil::ExecutionConfig& config) {
+#if !defined(Q_OS_IOS)
+  if (const auto python_path =
+          SettingsManager::getInstance().GetPythonPath().toStdString();
+      !python_path.empty()) {
+    config.GetSystemConfig().SetPythonPath(python_path);
+  }
+#else
+  (void)config;
+#endif
+}
+
+}  // namespace
 
 namespace gui {
 namespace controllers {
@@ -46,11 +113,14 @@ void BenchmarkController::SetOutputDir(const std::string& dir) {
 void BenchmarkController::SetRunnerConfigs(
     const std::string& ep_deps_config_path,
     const std::string& ep_deps_config_schema_path,
-    const std::string& input_schema_path, const std::string& output_schema_path,
+    const std::string& input_schema_path,
+    const std::string& image_input_schema_path,
+    const std::string& output_schema_path,
     const std::string& verification_file_schema_path) {
   ep_dependencies_config_path_ = ep_deps_config_path;
   ep_dependencies_config_schema_path_ = ep_deps_config_schema_path;
   input_file_schema_path_ = input_schema_path;
+  image_input_file_schema_path_ = image_input_schema_path;
   output_results_schema_path_ = output_schema_path;
   data_verification_file_schema_path_ = verification_file_schema_path;
 }
@@ -67,10 +137,15 @@ const BenchmarkStatus& BenchmarkController::GetBenchmarkStatus() const {
   return benchmark_status_;
 }
 
+const QString& BenchmarkController::GetEnumerationErrorMessage() const {
+  return enumeration_error_message_;
+}
+
 void BenchmarkController::EnumerateDevices(
     const QList<EPInformationCard>& all_eps) {
-  benchmark_status_ = BenchmarkStatus{
-      false, false, false, QString::fromStdString(output_dir_), {}};
+  benchmark_status_ = BenchmarkStatus(QString::fromStdString(output_dir_));
+  eps_to_enumerate_ = all_eps;
+  enumeration_error_message_.clear();
   benchmark_thread_ = QThread::create([this] { EnumerateDevicesWorker(); });
   connect(benchmark_thread_, &QThread::finished, benchmark_thread_,
           [all_eps, this]() {
@@ -78,8 +153,14 @@ void BenchmarkController::EnumerateDevices(
             benchmark_thread_ = nullptr;
 
             eps_overridden_ = all_eps;
-            for (int i = 0; i < eps_overridden_.size(); ++i) {
-              const auto& prepared_configs = prepared_eps_configs_.at(i);
+            // Enumeration can finish early (interrupt, disk-space failure)
+            // without filling prepared_eps_configs_ for every EP; iterate only
+            // over the entries we actually have to avoid an out-of-range throw.
+            const int prepared_count =
+                static_cast<int>(prepared_eps_configs_.size());
+            for (int i = 0; i < eps_overridden_.size() && i < prepared_count;
+                 ++i) {
+              const auto& prepared_configs = prepared_eps_configs_[i];
               for (const auto& config : prepared_configs) {
                 int device_id = config["device_id"];
                 std::string device_name = config["device_name"];
@@ -98,8 +179,7 @@ void BenchmarkController::RunBenchmark(bool download_deps_only,
                                        bool ask_before_download) {
   if (benchmark_thread_) benchmark_thread_->wait();
 
-  benchmark_status_ = BenchmarkStatus{
-      false, false, false, QString::fromStdString(output_dir_), {}};
+  benchmark_status_ = BenchmarkStatus(QString::fromStdString(output_dir_));
   benchmark_thread_ = QThread::create([this, download_deps_only,
                                        ask_before_download] {
     if (ask_before_download && !CollectRemoteSizesWorker(ask_before_download))
@@ -110,6 +190,8 @@ void BenchmarkController::RunBenchmark(bool download_deps_only,
           [this, download_deps_only]() {
             benchmark_thread_->deleteLater();
             benchmark_thread_ = nullptr;
+
+            benchmark_status_.cancelled_ |= interrupt_;
 
             emit BenchmarkFinished(download_deps_only);
           });
@@ -140,17 +222,23 @@ void BenchmarkController::BenchmarkWorker(bool download_deps_only) {
     params.progress_handler = benchmark_page_controller_->GetProgressHandler();
     params.config = config.get();
     params.config->GetSystemConfig().SetDownloadBehavior("normal");
+    ApplyPythonPathSetting(*params.config);
     params.unpacker = unpacker_.get();
     params.ep_dependencies_manager = ep_dependencies_manager.get();
     params.output_dir = output_dir_;
     params.data_dir = data_dir_;
     params.output_results_schema_path = output_results_schema_path_;
     params.input_file_schema_path = input_file_schema_path_;
+    params.image_input_file_schema_path = image_input_file_schema_path_;
     params.data_verification_file_schema_path =
         data_verification_file_schema_path_;
 
-    EPBenchmarkStatus status{benchmark_page_controller_->GetEPDisplayName(i),
-                             true, ""};
+    EPBenchmarkStatus status = {
+        .ep_name_ = benchmark_page_controller_->GetEPDisplayName(i),
+        .success_ = true,
+        .error_message_ = "",
+        .benchmark_start_time_ = ""};
+
     try {
       auto benchmark_runner = std::make_unique<cil::BenchmarkRunner>(params);
       if (!stages_per_ep) {
@@ -211,6 +299,8 @@ void BenchmarkController::BenchmarkWorker(bool download_deps_only) {
                           results.front().benchmark_success;
       if (!results.empty()) {
         const auto& res = results.front();
+        status.benchmark_start_time_ =
+            QString::fromStdString(res.benchmark_start_time);
         if (!res.error_message.empty()) {
           status.error_message_ += QString::fromStdString(
               cil::utils::CleanErrorMessageFromStaticPaths(res.error_message));
@@ -253,7 +343,10 @@ bool BenchmarkController::CollectRemoteSizesWorker(bool ask_before_download) {
   std::map<std::string, uint64_t> remote_files;
   bool collected = true;
   for (int i = 0; i < configs_.size(); ++i) {
-    if (interrupt_) break;
+    if (interrupt_) {
+      collected = false;
+      break;
+    }
     const auto& config = configs_[i];
     auto ep_dependencies_manager = CreateEPDependenciesManager(config);
 
@@ -262,10 +355,11 @@ bool BenchmarkController::CollectRemoteSizesWorker(bool ask_before_download) {
     params.progress_handler = progress_handler.get();
     params.config = config.get();
     params.config->GetSystemConfig().SetDownloadBehavior("normal");
+    ApplyPythonPathSetting(*params.config);
     params.unpacker = unpacker_.get();
     params.ep_dependencies_manager = ep_dependencies_manager.get();
     params.data_dir = data_dir_;
-    params.collect_remote_sizes_only = true;
+    params.collect_file_sizes_only = true;
 
     try {
       auto benchmark_runner = std::make_unique<cil::BenchmarkRunner>(params);
@@ -286,7 +380,7 @@ bool BenchmarkController::CollectRemoteSizesWorker(bool ask_before_download) {
 
       benchmark_runner->Run();
 
-      const auto& sizes_map = benchmark_runner->GetRemoteFileSizes();
+      const auto& sizes_map = benchmark_runner->GetFileSizes();
       remote_files.insert(sizes_map.begin(), sizes_map.end());
     } catch (const std::exception& e) {
       std::string error_message =
@@ -324,22 +418,123 @@ bool BenchmarkController::CollectRemoteSizesWorker(bool ask_before_download) {
   if (download_do_not_ask_again && benchmark_status_.download_accepted_)
     emit DownloadDoNotAskAgainRequested();
 
+  // Reaching this prompt means there was data to download; declining it is a
+  // user cancellation rather than a failure.
+  if (!benchmark_status_.download_accepted_)
+    benchmark_status_.cancelled_ = true;
+
   return benchmark_status_.download_accepted_;
 }
 
 void BenchmarkController::EnumerateDevicesWorker() {
   benchmark_status_.success_ = true;
+
+  // Phase 1: size every enumeration download up front, fail early if the
+  // target volume can't fit it.
+  const qint64 total_download_bytes = CollectEnumerationDownloadSize();
+
+  if (total_download_bytes > 0) {
+    cil::DiskSpaceTracker tracker;
+    for (const auto& [url, info] : enumeration_file_infos_)
+      tracker.RegisterPlannedDownload(info.planned_path, info.size);
+
+    std::string failure_message;
+    if (!tracker.HasEnoughSpace(loggerBenchmarkController,
+                                "Enumeration download", &failure_message)) {
+      // Forwarded to ShowGlobalPopup via OnEnumerationFinished so the message
+      // survives the HidePopup() that fires when the worker thread ends.
+      benchmark_status_.success_ = false;
+      enumeration_error_message_ =
+          QStringLiteral(
+              "Not enough disk space to download benchmark assets.\n%1")
+              .arg(QString::fromStdString(failure_message));
+      return;
+    }
+  }
+
+  // total==0 doubles as the "nothing to fetch" signal; the popup uses it to
+  // suppress the byte-based ETA in the preparation phase.
+  emit EnumerationDownloadProgress(0, total_download_bytes);
+
+  // Phase 2: download-only loop. on_enter returning false for "Preparation"
+  // breaks the stage loop after Download — the same semantic used by
+  // `download_deps_only`.
+  qint64 cumulative_downloaded = 0;
+  if (total_download_bytes > 0) {
+    qint64 current_config_downloaded = 0;
+    for (int i = 0; i < configs_.size(); ++i) {
+      const auto& config = configs_[i];
+      if (interrupt_) break;
+
+      current_config_downloaded = 0;
+      auto ep_dependencies_manager = CreateEPDependenciesManager(config);
+      auto progress_handler = std::make_unique<EnumerationDownloadHandler>(
+          interrupt_, [this, total_download_bytes, &cumulative_downloaded,
+                       &current_config_downloaded](uint64_t downloaded,
+                                                   uint64_t /*total*/) {
+            current_config_downloaded = static_cast<qint64>(downloaded);
+            emit EnumerationDownloadProgress(
+                cumulative_downloaded + current_config_downloaded,
+                total_download_bytes);
+          });
+      progress_handler->SetForceAcceptInterruptRequest(true);
+
+      cil::BenchmarkRunner::Params params;
+      params.logger = loggerBenchmarkController;
+      params.progress_handler = progress_handler.get();
+      params.config = config.get();
+      params.unpacker = unpacker_.get();
+      params.ep_dependencies_manager = ep_dependencies_manager.get();
+      params.enumerate_only = true;
+
+      try {
+        auto benchmark_runner = std::make_unique<cil::BenchmarkRunner>(params);
+        benchmark_runner->SetOnEnterStageCallback(
+            [](const std::string_view& stage_name, int) {
+              return stage_name == "Download";
+            });
+        benchmark_runner->SetOnFailedStageCallback(
+            [this](const std::string_view&, int) {
+              LOG4CXX_ERROR(loggerBenchmarkController,
+                            "Failed to download necessary files for devices "
+                            "enumeration...\n");
+              benchmark_status_.success_ = false;
+              return false;
+            });
+        benchmark_runner->Run();
+      } catch (const std::exception& e) {
+        LOG4CXX_ERROR(
+            loggerBenchmarkController,
+            std::string("Exception while downloading enumeration deps: ") +
+                e.what());
+        benchmark_status_.success_ = false;
+      }
+      cumulative_downloaded += current_config_downloaded;
+    }
+  }
+
+  // Phase 3: preparation/enumeration only. PreparationStage in enumerate-only
+  // mode does not depend on Download's scenario_data outputs, so running them
+  // in two separate passes is safe. The default download_behavior
+  // ("deps_only_enumeration") makes Download a no-op here since every dep was
+  // brought on-disk in Phase 2.
+  emit EnumerationPreparationPhaseStarted();
+
+  auto prep_progress_handler =
+      std::make_unique<cil::ProgressTrackerHandler>(interrupt_);
+  prep_progress_handler->SetForceAcceptInterruptRequest(true);
+
   for (int i = 0; i < configs_.size(); ++i) {
     const auto& config = configs_[i];
     if (interrupt_) break;
+
+    emit EnumerationProgressChanged(i * 100 / configs_.size());
+
     auto ep_dependencies_manager = CreateEPDependenciesManager(config);
-    auto progress_handler =
-        std::make_unique<cil::ProgressTrackerHandler>(interrupt_);
-    progress_handler->SetForceAcceptInterruptRequest(true);
 
     cil::BenchmarkRunner::Params params;
     params.logger = loggerBenchmarkController;
-    params.progress_handler = progress_handler.get();
+    params.progress_handler = prep_progress_handler.get();
     params.config = config.get();
     params.unpacker = unpacker_.get();
     params.ep_dependencies_manager = ep_dependencies_manager.get();
@@ -347,30 +542,13 @@ void BenchmarkController::EnumerateDevicesWorker() {
 
     try {
       auto benchmark_runner = std::make_unique<cil::BenchmarkRunner>(params);
-
-      auto on_enter_stage_callback = [&](const std::string_view& stage_name,
-                                         int) {
-        return stage_name == "Preparation" || stage_name == "Download";
-      };
-
-      benchmark_runner->SetOnEnterStageCallback(on_enter_stage_callback);
-
-      auto on_failed_stage_callback = [&](const std::string_view& stage_name,
-                                          int) {
-        if (stage_name == "Download") {
-          LOG4CXX_ERROR(loggerBenchmarkController,
-                        "Failed to download necessary files for devices "
-                        "enumeration...\n");
-        } else if (stage_name == "Preparation") {
-          LOG4CXX_ERROR(loggerBenchmarkController,
-                        "Devices enumeration failed...\n");
-        }
-        benchmark_status_.success_ = false;
-        return false;
-      };
-
-      benchmark_runner->SetOnFailedStageCallback(on_failed_stage_callback);
-
+      benchmark_runner->SetOnFailedStageCallback(
+          [this](const std::string_view&, int) {
+            LOG4CXX_ERROR(loggerBenchmarkController,
+                          "Devices enumeration failed...\n");
+            benchmark_status_.success_ = false;
+            return false;
+          });
       benchmark_runner->Run();
 
       auto prepared_eps = benchmark_runner->GetPreparedEPs();
@@ -381,12 +559,93 @@ void BenchmarkController::EnumerateDevicesWorker() {
         prepared_eps_configs_.push_back(json_configs);
       }
     } catch (const std::exception& e) {
-      std::string error_message = "Exception while enumerating devices: ";
-      LOG4CXX_ERROR(loggerBenchmarkController, error_message + e.what());
+      LOG4CXX_ERROR(
+          loggerBenchmarkController,
+          std::string("Exception while enumerating devices: ") + e.what());
       benchmark_status_.success_ = false;
     }
     emit EnumerationProgressChanged((i + 1) * 100 / configs_.size());
   }
+}
+
+qint64 BenchmarkController::CollectEnumerationDownloadSize() {
+  enumeration_file_infos_.clear();
+
+  auto progress_handler =
+      std::make_unique<cil::ProgressTrackerHandler>(interrupt_);
+  progress_handler->SetForceAcceptInterruptRequest(true);
+
+  const int configs_total = static_cast<int>(configs_.size());
+  emit EnumerationSizingProgress(0, configs_total);
+
+  // Dedupe on the same key the DeviceEnumerationCache uses (EP + relevant
+  // device settings) so configs that differ only by model don't re-size the
+  // same shared deps. is_string() guards json::get against type_error on
+  // null / non-string fields.
+  auto dedup_key = [](const cil::ExecutionProviderConfig& ep) {
+    std::string key = ep.GetName();
+    const auto& cfg = ep.GetConfig();
+    auto append = [&](const char* field, const char* prefix) {
+      auto it = cfg.find(field);
+      if (it != cfg.end() && it->is_string()) {
+        key += '|';
+        key += prefix;
+        key += it->get<std::string>();
+      }
+    };
+    append("device_type", "dt:");
+    append("device_vendor", "dv:");
+    append("device_ep", "de:");
+    return key;
+  };
+  std::set<std::string> sized_ep_keys;
+
+  for (int i = 0; i < configs_.size(); ++i) {
+    if (interrupt_) break;
+    const auto& config = configs_[i];
+
+    const auto& ep =
+        config->GetScenarios().front().GetExecutionProviders().front();
+    if (!sized_ep_keys.insert(dedup_key(ep)).second) {
+      emit EnumerationSizingProgress(i + 1, configs_total);
+      continue;
+    }
+
+    auto ep_dependencies_manager = CreateEPDependenciesManager(config);
+
+    cil::BenchmarkRunner::Params params;
+    params.logger = loggerBenchmarkController;
+    params.progress_handler = progress_handler.get();
+    params.config = config.get();
+    params.unpacker = unpacker_.get();
+    params.ep_dependencies_manager = ep_dependencies_manager.get();
+    params.enumerate_only = true;
+    params.collect_file_sizes_only = true;
+
+    try {
+      auto benchmark_runner = std::make_unique<cil::BenchmarkRunner>(params);
+      benchmark_runner->SetOnEnterStageCallback(
+          [](const std::string_view& stage_name, int) {
+            return stage_name == "Download";
+          });
+      benchmark_runner->SetOnFailedStageCallback(
+          [](const std::string_view&, int) { return false; });
+      benchmark_runner->Run();
+      const auto& infos = benchmark_runner->GetFileInfos();
+      // map::insert keeps the first insertion per key, so a dep shared by
+      // several EPs contributes its size exactly once.
+      enumeration_file_infos_.insert(infos.begin(), infos.end());
+    } catch (const std::exception& e) {
+      LOG4CXX_ERROR(
+          loggerBenchmarkController,
+          std::string("Failed to size enumeration downloads: ") + e.what());
+    }
+    emit EnumerationSizingProgress(i + 1, configs_total);
+  }
+
+  uint64_t total = 0;
+  for (const auto& [url, info] : enumeration_file_infos_) total += info.size;
+  return static_cast<qint64>(total);
 }
 
 void BenchmarkController::ClearCache() {
@@ -419,17 +678,21 @@ BenchmarkController::CreateEPDependenciesManager(
   auto empty_library_path = ep.GetLibraryPath().empty();
 
   std::unordered_map<std::string, std::string> eps_dependencies_dest;
+  std::unordered_map<std::string, std::vector<nlohmann::json>>
+      eps_dependencies_configs;
   if (empty_library_path && is_valid_ep) {
     std::string ep_deps_dir = unpacker_->GetDepsDir();
 
-    eps_dependencies_dest.insert(
-        {ep.GetName(),
-         cil::GetExecutionProviderParentLocation(ep, ep_deps_dir).string()});
+    const auto ep_dest =
+        cil::GetExecutionProviderParentLocation(ep, ep_deps_dir).string();
+    eps_dependencies_dest.try_emplace(ep.GetName(), ep_dest);
+    eps_dependencies_configs[ep.GetName()].push_back(ep.GetConfig());
   }
 
   auto ep_dependencies_manager = std::make_shared<cil::EPDependenciesManager>(
       eps_dependencies_dest, ep_dependencies_config_path_,
-      ep_dependencies_config_schema_path_, unpacker_->GetDepsDir());
+      ep_dependencies_config_schema_path_, unpacker_->GetDepsDir(),
+      eps_dependencies_configs);
   ep_dependencies_manager->Initialize();
   return ep_dependencies_manager;
 }

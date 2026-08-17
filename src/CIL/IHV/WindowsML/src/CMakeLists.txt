@@ -55,28 +55,60 @@ source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} PREFIX "Header files" FILES ${HEAD
 
 add_library(${PROJECT_NAME} SHARED ${SOURCES} ${HEADERS})
 
+# MIGraphX EP (AMD GPU rail 2.x EP) is currently non-functional in the
+# Microsoft Store-distributed package but is still surfaced by the WinML
+# catalog on AMD systems. Enumerating/registering it triggers spurious
+# initialization that the benchmark cannot use. Leave this OFF until the EP
+# becomes functional in the certified WinML rail; then flip ON.
+option(MLPERF_WINDOWSML_ENABLE_MIGRAPHX
+       "Enable enumeration/registration of the MIGraphX WinML EP" OFF)
+if(MLPERF_WINDOWSML_ENABLE_MIGRAPHX)
+  target_compile_definitions(${PROJECT_NAME} PRIVATE
+      MLPERF_WINDOWSML_ENABLE_MIGRAPHX=1)
+  message(STATUS "WindowsML: MIGraphX EP enumeration ENABLED")
+else()
+  target_compile_definitions(${PROJECT_NAME} PRIVATE
+      MLPERF_WINDOWSML_ENABLE_MIGRAPHX=0)
+  message(STATUS "WindowsML: MIGraphX EP enumeration DISABLED (default)")
+endif()
+
 add_subdirectory(../../../../../deps/JSON JSON)
 add_subdirectory(../../../../../deps/JSONSchema JSONSchema)
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../../common" common_cil)
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../../common/directml" common_directml_cil)
 
-set(MML_OGA_URL   "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntimeGenAI.WinML/0.11.2")
-# set(MML_WAML_URL  "https://www.nuget.org/api/v2/package/Microsoft.Windows.AI.MachineLearning/0.3.131-beta")
+# Centralized version pins. Bump here, then nuke build/IHV/WindowsML to force re-install.
+set(MML_OGA_VERSION    "0.14.1")
+set(MML_WINML_VERSION  "2.4.66-preview")
+set(MML_OGA_URL   "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntimeGenAI.WinML/${MML_OGA_VERSION}")
 
 # Ensure ML package is available during configure
-set(WASDKML_PACKAGE_ROOT   "${CMAKE_CURRENT_BINARY_DIR}/.nuget/packages/Microsoft.WindowsAppSDK.ML")
-if(NOT EXISTS "${WASDKML_PACKAGE_ROOT}")
-  message(STATUS "Microsoft.WindowsAppSDK.ML not found at ${WASDKML_PACKAGE_ROOT}; installing into build tree...")
-  execute_process(
-    COMMAND powershell -NoProfile -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_SOURCE_DIR}/scripts/install-winappsdk-ml.ps1" -Version 1.8.2119 -OutputDir "${CMAKE_CURRENT_BINARY_DIR}/.nuget/packages"
-    WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
-    RESULT_VARIABLE WINAPPSDK_ML_INSTALL_RES
-    OUTPUT_VARIABLE WINAPPSDK_ML_INSTALL_OUT
-    ERROR_VARIABLE WINAPPSDK_ML_INSTALL_ERR
-  )
-  if(NOT WINAPPSDK_ML_INSTALL_RES EQUAL 0)
-    message(FATAL_ERROR "Failed to install Microsoft.WindowsAppSDK.ML (code ${WINAPPSDK_ML_INSTALL_RES}).\n${WINAPPSDK_ML_INSTALL_ERR}")
+set(WAML_PACKAGE_ROOT   "${CMAKE_CURRENT_BINARY_DIR}/.nuget/packages/Microsoft.Windows.AI.MachineLearning")
+set(WAML_VERSION_STAMP  "${WAML_PACKAGE_ROOT}/.installed-version")
+
+# Invalidate cached install if pinned version changed since last configure
+if(EXISTS "${WAML_VERSION_STAMP}")
+  file(READ "${WAML_VERSION_STAMP}" _installed_version)
+  string(STRIP "${_installed_version}" _installed_version)
+  if(NOT "${_installed_version}" STREQUAL "${MML_WINML_VERSION}")
+    message(STATUS "Microsoft.Windows.AI.MachineLearning version changed (${_installed_version} -> ${MML_WINML_VERSION}); refreshing cache...")
+    file(REMOVE_RECURSE "${WAML_PACKAGE_ROOT}")
   endif()
+endif()
+
+if(NOT EXISTS "${WAML_PACKAGE_ROOT}")
+  message(STATUS "Microsoft.Windows.AI.MachineLearning not found at ${WAML_PACKAGE_ROOT}; installing ${MML_WINML_VERSION} into build tree...")
+  execute_process(
+    COMMAND powershell -NoProfile -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_SOURCE_DIR}/scripts/install-winml.ps1" -Version ${MML_WINML_VERSION} -OutputDir "${CMAKE_CURRENT_BINARY_DIR}/.nuget/packages"
+    WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+    RESULT_VARIABLE WINML_INSTALL_RES
+    OUTPUT_VARIABLE WINML_INSTALL_OUT
+    ERROR_VARIABLE WINML_INSTALL_ERR
+  )
+  if(NOT WINML_INSTALL_RES EQUAL 0)
+    message(FATAL_ERROR "Failed to install Microsoft.Windows.AI.MachineLearning (code ${WINML_INSTALL_RES}).\n${WINML_INSTALL_ERR}")
+  endif()
+  file(WRITE "${WAML_VERSION_STAMP}" "${MML_WINML_VERSION}\n")
 endif()
 
 # Resolve Windows SDK Union Metadata (Windows.winmd) from installed Windows SDK
@@ -108,7 +140,7 @@ if(EXISTS "${WINDOWS_FACADE_WINMD}")
   list(APPEND CPPWINRT_REF_ARGS -reference "${WINDOWS_FACADE_WINMD}")
 endif()
 
-set(WASDKML_METADATA_DIR "${WASDKML_PACKAGE_ROOT}/metadata")
+set(WAML_METADATA_DIR "${WAML_PACKAGE_ROOT}/metadata")
 
 include(FetchContent)
 
@@ -133,68 +165,42 @@ add_custom_target(generate_winml_projection
     COMMAND ${CPPWINRT_EXECUTABLE}
       -verbose
       -in "${WSDK_UNION_METADATA_DIR}"
-      -in "${WASDKML_METADATA_DIR}"
+      -in "${WAML_METADATA_DIR}"
       ${CPPWINRT_REF_ARGS}
-      -out "${WASDKML_METADATA_DIR}"
-    DEPENDS "${WASDKML_METADATA_DIR}/Microsoft.Windows.AI.MachineLearning.winmd"
+      -out "${WAML_METADATA_DIR}"
+    DEPENDS "${WAML_METADATA_DIR}/Microsoft.Windows.AI.MachineLearning.winmd"
     COMMENT "Generating C++/WinRT projection headers for Microsoft.Windows.AI.MachineLearning"
 )
 add_dependencies(${PROJECT_NAME} generate_winml_projection)
 
-get_filename_component(NUGET_PACKAGES_ROOT "${WASDKML_PACKAGE_ROOT}" DIRECTORY)
-set(WASDK_FOUNDATION_INCLUDE_DIR "${NUGET_PACKAGES_ROOT}/Microsoft.WindowsAppSDK.Foundation/include")
-
 if(NOT (CMAKE_SYSTEM_PROCESSOR MATCHES "arm" OR CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64" OR CMAKE_GENERATOR_PLATFORM MATCHES "ARM64"))
   set(OGA_LIB_DIR "${OGA_ROOT}/runtimes/win-x64/native")
-  set(WASDKML_LIB_DIR "${WASDKML_PACKAGE_ROOT}/runtimes/win-x64/native")
-  set(WASDKML_DLL_DIR "${WASDKML_PACKAGE_ROOT}/runtimes-framework/win-x64/native")
-  set(WASDK_FOUNDATION_LIB_DIR "${NUGET_PACKAGES_ROOT}/Microsoft.WindowsAppSDK.Foundation/lib/native/x64")
+  # 2.0.300 layout: .lib files live in lib/native/<arch>, .dll files in runtimes/win-<arch>/native
+  set(WAML_LIB_DIR "${WAML_PACKAGE_ROOT}/lib/native/x64")
+  set(WAML_DLL_DIR "${WAML_PACKAGE_ROOT}/runtimes/win-x64/native")
 else()
   set(OGA_LIB_DIR "${OGA_ROOT}/runtimes/win-arm64/native")
-  set(WASDKML_LIB_DIR "${WASDKML_PACKAGE_ROOT}/runtimes/win-arm64/native")
-  set(WASDKML_DLL_DIR "${WASDKML_PACKAGE_ROOT}/runtimes-framework/win-arm64/native")
-  set(WASDK_FOUNDATION_LIB_DIR "${NUGET_PACKAGES_ROOT}/Microsoft.WindowsAppSDK.Foundation/lib/native/arm64")
-  
+  set(WAML_LIB_DIR "${WAML_PACKAGE_ROOT}/lib/native/arm64")
+  set(WAML_DLL_DIR "${WAML_PACKAGE_ROOT}/runtimes/win-arm64/native")
 endif()
 
 set(OGA_INCLUDE_DIR "${OGA_ROOT}/build/native/include")
-set(WASDKML_INCLUDE_DIR "${WASDKML_PACKAGE_ROOT}/include")
+set(WAML_INCLUDE_DIR "${WAML_PACKAGE_ROOT}/include")
 
 file(GLOB OGA_LIBS "${OGA_LIB_DIR}/*.lib")
 file(GLOB OGA_DLLS "${OGA_LIB_DIR}/*.dll")
-file(GLOB WASDKML_LIBS "${WASDKML_LIB_DIR}/*.lib")
-file(GLOB WASDKML_DLLS "${WASDKML_DLL_DIR}/*.dll")
-file(GLOB WASDKML_NATIVE_DLLS "${WASDKML_LIB_DIR}/*.dll")
+file(GLOB WAML_LIBS "${WAML_LIB_DIR}/*.lib")
+file(GLOB WAML_DLLS "${WAML_DLL_DIR}/*.dll")
 
 target_include_directories(${PROJECT_NAME}
     PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/../../../common"
     "${OGA_INCLUDE_DIR}"
-    "${WASDKML_INCLUDE_DIR}"
-    "${WASDK_FOUNDATION_INCLUDE_DIR}"
-    "${WASDKML_METADATA_DIR}"
+    "${WAML_INCLUDE_DIR}"
+    "${WAML_METADATA_DIR}"
 )
-
-# Include the WindowsML auto-initializer for self-contained deployment
-# This provides the OrtGetApiBase symbol and handles onnxruntime.dll loading at runtime
-set(WINML_AUTOINIT_SRC "${WASDKML_INCLUDE_DIR}/WindowsMLAutoInitializer.SelfContained.cpp")
-if(EXISTS "${WINML_AUTOINIT_SRC}")
-  target_sources(${PROJECT_NAME} PRIVATE "${WINML_AUTOINIT_SRC}")
-  message(STATUS "Using WindowsML Self-Contained auto-initializer")
-else()
-  message(WARNING "WindowsMLAutoInitializer.SelfContained.cpp not found at ${WINML_AUTOINIT_SRC}")
-endif()
 
 set_target_properties(${PROJECT_NAME} PROPERTIES CXX_CLANG_TIDY "${CLANG_TIDY_COMMAND}")
-
-# Configure Windows App SDK for unpackaged apps and self-contained deployment
-# These MSBuild properties are picked up by the Visual Studio generator
-set_target_properties(${PROJECT_NAME} PROPERTIES
-    VS_GLOBAL_WindowsPackageType "None"                     # Unpackaged app: enable bootstrapper path
-    VS_GLOBAL_WindowsAppSDKSelfContained "true"            # Deploy ORT/DirectML/WinML binaries alongside output
-    VS_GLOBAL_WindowsAppSdkBootstrapInitialize "true"      # Allow bootstrapping from this DLL when host doesn't
-)
-
 
 target_link_libraries(${PROJECT_NAME}
     PRIVATE
@@ -203,36 +209,125 @@ target_link_libraries(${PROJECT_NAME}
     common_cil
     common_directml_cil
     ${OGA_LIBS}
-    ${WASDKML_LIBS}
-    "${WASDK_FOUNDATION_LIB_DIR}/Microsoft.WindowsAppRuntime.Bootstrap.lib"
+    ${WAML_LIBS}
 )
 
-if(OGA_DLLS)
+# `onnxruntime-genai-cuda.dll` goes into a `tensorrtrtx/` subfolder so the
+# loader can't find it unless the IHV explicitly adds that subfolder for
+# NvTensorRtRtx scenarios. See base_inference.cpp for the rationale.
+foreach(_oga_dll IN LISTS OGA_DLLS)
+  get_filename_component(_oga_name "${_oga_dll}" NAME)
+  if(_oga_name STREQUAL "onnxruntime-genai-cuda.dll")
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/tensorrtrtx"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${_oga_dll}"
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/tensorrtrtx/"
+    )
+  else()
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${_oga_dll}"
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
+    )
+  endif()
+endforeach()
+
+if(WAML_DLLS)
   add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
       COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        ${OGA_DLLS}
+        ${WAML_DLLS}
         $<TARGET_FILE_DIR:${PROJECT_NAME}>
   )
 endif()
 
-if(WASDKML_DLLS)
-  add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        ${WASDKML_DLLS}
-        $<TARGET_FILE_DIR:${PROJECT_NAME}>
-  )
-endif()
 
-if(WASDKML_NATIVE_DLLS)
-  add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        ${WASDKML_NATIVE_DLLS}
-        $<TARGET_FILE_DIR:${PROJECT_NAME}>
-  )
+# OGA 0.14.x ships onnxruntime-genai-cuda.dll built against CUDA 12 (it imports
+# cudart64_12.dll). OGA probes the CUDA backend during OgaCreateModel even when
+# the model uses NvTensorRtRtx, so cudart64_12.dll must be loadable next to the
+# IHV.
+#
+# We deliberately do NOT use the system CUDA toolkit here: CI/CD machines build
+# with CUDA 13 (required for llama-cpp), which ships only `cudart64_13.dll` —
+# ABI-incompatible with OGA's CUDA 12 imports. Forcing CI to install a second
+# CUDA 12 toolkit would be fragile and brittle.
+#
+# Instead, fetch the redistributable archive directly from NVIDIA's official
+# CUDA redist server (https://developer.download.nvidia.com/compute/cuda/redist/)
+# at configure time. This is the path NVIDIA documents for static linking /
+# redistribution; the archives are versioned, EULA-compliant for redistribution
+# (see https://docs.nvidia.com/cuda/eula/index.html), and bandwidth is cheap
+# (~600 KB).
+#
+# To bump: visit the URL above, look under cuda_cudart/windows-x86_64/, copy
+# the latest 12.x archive name, and update MLPERF_WINDOWSML_CUDART_VERSION
+# below. Users can override with -DMLPERF_WINDOWSML_CUDART_DLL_PATH=<absolute
+# path> to skip the download and use a local copy.
+if(NOT (CMAKE_SYSTEM_PROCESSOR MATCHES "arm" OR CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64" OR CMAKE_GENERATOR_PLATFORM MATCHES "ARM64"))
+  if(NOT MLPERF_WINDOWSML_CUDART_DLL_PATH)
+    set(MLPERF_WINDOWSML_CUDART_VERSION "12.6.77")
+    set(_cudart_archive_name
+        "cuda_cudart-windows-x86_64-${MLPERF_WINDOWSML_CUDART_VERSION}-archive")
+    set(_cudart_url
+        "https://developer.download.nvidia.com/compute/cuda/redist/cuda_cudart/windows-x86_64/${_cudart_archive_name}.zip")
+    set(_cudart_cache_zip
+        "${CMAKE_CURRENT_BINARY_DIR}/.nuget/${_cudart_archive_name}.zip")
+    set(_cudart_extract_dir
+        "${CMAKE_CURRENT_BINARY_DIR}/.nuget/cudart-${MLPERF_WINDOWSML_CUDART_VERSION}")
+    set(_cudart_extracted_dll
+        "${_cudart_extract_dir}/${_cudart_archive_name}/bin/cudart64_12.dll")
+
+    if(NOT EXISTS "${_cudart_extracted_dll}")
+      if(NOT EXISTS "${_cudart_cache_zip}")
+        message(STATUS "Downloading CUDA 12 redistributable: ${_cudart_url}")
+        file(DOWNLOAD "${_cudart_url}" "${_cudart_cache_zip}"
+             STATUS _cudart_dl_status
+             TLS_VERIFY ON
+             SHOW_PROGRESS)
+        list(GET _cudart_dl_status 0 _cudart_dl_rc)
+        list(GET _cudart_dl_status 1 _cudart_dl_msg)
+        if(NOT _cudart_dl_rc EQUAL 0)
+          file(REMOVE "${_cudart_cache_zip}")
+          message(WARNING
+              "Failed to download cuda_cudart from ${_cudart_url} "
+              "(rc=${_cudart_dl_rc}: ${_cudart_dl_msg}). "
+              "onnxruntime-genai-cuda.dll will fail to load. "
+              "Pass -DMLPERF_WINDOWSML_CUDART_DLL_PATH=<absolute path to "
+              "cudart64_12.dll> to use a local copy.")
+        endif()
+      endif()
+      if(EXISTS "${_cudart_cache_zip}")
+        file(ARCHIVE_EXTRACT INPUT "${_cudart_cache_zip}"
+             DESTINATION "${_cudart_extract_dir}")
+      endif()
+    endif()
+
+    if(EXISTS "${_cudart_extracted_dll}")
+      set(MLPERF_WINDOWSML_CUDART_DLL_PATH "${_cudart_extracted_dll}")
+    endif()
+  endif()
+
+  if(MLPERF_WINDOWSML_CUDART_DLL_PATH AND EXISTS "${MLPERF_WINDOWSML_CUDART_DLL_PATH}")
+    message(STATUS "Staging CUDA 12 runtime DLL into tensorrtrtx/: ${MLPERF_WINDOWSML_CUDART_DLL_PATH}")
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/tensorrtrtx"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${MLPERF_WINDOWSML_CUDART_DLL_PATH}"
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>/tensorrtrtx/"
+    )
+  else()
+    message(WARNING
+        "cudart64_12.dll not available. NV-flavored WindowsML scenarios will "
+        "fail at OGA model load. Either let CMake download it from NVIDIA's "
+        "redist server (requires internet at configure time) or pass "
+        "-DMLPERF_WINDOWSML_CUDART_DLL_PATH=<absolute path>.")
+  endif()
 endif()
 
 # Link necessary WinRT libraries
 target_link_libraries(${PROJECT_NAME} PRIVATE
     windowsapp
-    runtimeobject 
+    runtimeobject
 )

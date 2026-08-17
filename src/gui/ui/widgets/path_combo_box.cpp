@@ -1,5 +1,6 @@
 #include "path_combo_box.h"
 
+#include <QDir>
 #include <QFileDialog>
 #include <QListView>
 
@@ -36,12 +37,24 @@ void PathComboBox::SetSelectedPath(const QString& path) {
 
 QString PathComboBox::GetSelectedPath() const { return currentText(); }
 
+void PathComboBox::SetRequireWritable(bool require_writable) {
+  require_writable_ = require_writable;
+}
+
+void PathComboBox::SetBrowseDialogTitle(const QString& title) {
+  browse_dialog_title_ = title;
+}
+
 void PathComboBox::OnCurrentTextChanged(const QString& text) {
   if (text == "Browse...") {
     QString new_path = QFileDialog::getExistingDirectory(
-        dynamic_cast<QWidget*>(parent()), "Select Data Directory");
+        dynamic_cast<QWidget*>(parent()), browse_dialog_title_);
 
-    if (cil::utils::IsDirectoryWritable(new_path.toStdString())) {
+    const bool acceptable =
+        require_writable_
+            ? cil::utils::IsDirectoryWritable(new_path.toStdString())
+            : !new_path.isEmpty() && QDir(new_path).exists();
+    if (acceptable) {
       int existing_index = findText(new_path);
       blockSignals(true);
       if (existing_index == -1) {

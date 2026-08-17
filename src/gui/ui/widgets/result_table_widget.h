@@ -111,6 +111,30 @@ class ResultTableWidget : public QWidget {
   void AddTitle(const QString& main_text = "", const QString& sub_text = "");
   void SetText(int row, int col, const QString& text);
 
+  /**
+   * @brief Append a row of arbitrary widgets aligned to the table's columns.
+   *        First widget goes into column 0 (row label area), remaining
+   *        widgets fill columns 1..N. Used by the I/O explorer to attach
+   *        per-entry panels directly to the existing grid so they line up
+   *        with the metric columns above.
+   */
+  void AppendCustomRow(const QList<QWidget*>& widgets);
+
+  /**
+   * @brief Append a title row whose column 0 is the supplied widget (the
+   *        per-category chevron toggle). Marks the row as a title so the
+   *        existing paint pass highlights it the same way string titles
+   *        are highlighted.
+   */
+  void AppendCustomTitleRow(QWidget* title_widget);
+
+  /**
+   * @brief Append a row whose column 0 is empty and a single widget spans
+   *        all data columns (1..N). Used by the merged-input I/O view so
+   *        the shared prompts can stretch across the comparison columns.
+   */
+  void AppendSpanningCustomRow(QWidget* widget);
+
  protected:
   void paintEvent(QPaintEvent* event) override;
 

@@ -20,19 +20,23 @@ class SettingsPage : public AbstractView {
 
   void SetDataPaths(const QStringList& paths);
   void SetLogPaths(const QStringList& paths);
+  void SetPythonPaths(const QStringList& paths);
   void SetDataCurrentPath(const QString& path);
   void SetLogsCurrentPath(const QString& path);
+  void SetPythonCurrentPath(const QString& path);
   void SetKeepLogs(bool keep);
   void SetAskBeforeDownload(bool ask);
 
   QString GetDataCurrentPath() const;
   QString GetLogsCurrentPath() const;
+  QString GetPythonCurrentPath() const;
   bool GetKeepLogs() const;
   bool AskBeforeDownload() const;
 
  signals:
   void DataPathChanged(const QString& new_path);
   void LogsPathChanged(const QString& new_path);
+  void PythonPathChanged(const QString& new_path);
   void KeepLogsChanged(bool keep);
   void AskBeforeDownloadChanged(bool ask);
   void ClearCacheRequested();

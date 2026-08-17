@@ -6,7 +6,6 @@
 class QLabel;
 class QPushButton;
 class QVBoxLayout;
-class QProgressBar;
 class QCheckBox;
 
 class PopupWidget : public QDialog {
@@ -31,6 +30,11 @@ class PopupWidget : public QDialog {
 
  protected:
   void paintEvent(QPaintEvent* event) override;
+
+  // Tag type: derived classes can pass NoIcon{} to the base constructor to skip
+  // icon creation and insert their own center widget instead.
+  struct NoIcon {};
+  explicit PopupWidget(NoIcon, QWidget* parent = nullptr);
 
   QVBoxLayout* main_layout_;
 
@@ -58,29 +62,6 @@ class QuestionPopupWidget : public PopupWidget {
 
  private:
   QCheckBox* do_not_ask_again_checkbox_ = nullptr;
-};
-
-class ProgressPopupWidget : public PopupWidget {
-  Q_OBJECT
- public:
-  /**
-   * @brief Construct progress popup widget.
-   * @param parent Parent widget, defaults to nullptr.
-   */
-  explicit ProgressPopupWidget(QWidget* parent = nullptr);
-
-  /**
-   * @brief Set progress value and update the progress bar.
-   * The provided value is clamped to the valid range [0, 100].
-   * @param percent Progress value in percent.
-   */
-  void SetProgressPercent(int percent);
-
-  bool eventFilter(QObject* watched, QEvent* event) override;
-
- private:
-  QProgressBar* progress_bar_;
-  QLabel* progress_percent_label_;
 };
 
 #endif  // POPUP_WIDGET_H_

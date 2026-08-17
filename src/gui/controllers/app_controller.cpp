@@ -5,12 +5,14 @@
 #include <log4cxx/logmanager.h>
 #include <log4cxx/xml/domconfigurator.h>
 
+#include "../CIL/benchmark/runner.h"
 #include "../CIL/execution_config.h"
 #include "../CIL/execution_provider.h"
 #include "../CIL/unpacker.h"
 #include "../CIL/utils.h"
 #include "benchmark_controller.h"
 #include "core/gui_utils.h"
+#include "loading_widget_controller.h"
 #include "realtime_page_controller.h"
 #include "results_history_page_controller.h"
 #include "results_report_page_controller.h"
@@ -35,6 +37,7 @@ AppController::AppController(QObject* parent)
       results_history_page_controller_(nullptr),
       results_report_page_controller_(nullptr),
       settings_page_controller_(nullptr),
+      loading_widget_controller_(nullptr),
       interrupt_(false) {
   CreateControllers();
   InstallSignalHandlers();
@@ -91,7 +94,25 @@ void AppController::InitConfigs() {
   auto config_paths = unpacker_->UnpackFilesFromZIP(vendors_default_zip_path,
                                                     configs_folder_path, true);
 
-  bool has_llama2_scenario = false;
+  // Whether @p name is a sample-config file for the OS this binary was built
+  // for. Apple builds keep only their own "ios"/"macos"-prefixed set; other
+  // platforms keep everything except those Apple-prefixed configs (the EP
+  // name alone can't exclude them -- e.g. Diffusers is built on both).
+  // Case-insensitive.
+  auto is_config_for_this_platform = [](const std::string& name) {
+    const std::string lower = cil::utils::StringToLowerCase(name);
+#if defined(Q_OS_IOS)
+    return lower.starts_with("ios");
+#elif defined(Q_OS_MACOS)
+    return lower.starts_with("macos");
+#else
+    return !lower.empty() && !lower.starts_with("ios") &&
+           !lower.starts_with("macos");
+#endif
+  };
+
+  bool has_llm_scenario = false;
+  bool has_image_scenario = false;
   for (const auto& entry : config_paths) {
     auto config = std::make_shared<cil::ExecutionConfig>();
     bool json_loaded = config->ValidateAndParse(
@@ -105,19 +126,21 @@ void AppController::InitConfigs() {
         const auto& ep_config = scenario.GetExecutionProviders().front();
         std::string entry_file_name =
             std::filesystem::path(entry).stem().string();
-        if (!cil::utils::IsEpConfigSupportedOnThisPlatform(entry_file_name) ||
-            !cil::utils::IsEpSupportedOnThisPlatform("", ep_config.GetName()))
+        if (!is_config_for_this_platform(entry_file_name) ||
+            !cil::BenchmarkRunner::IsEpSupportedOnThisPlatform(
+                "", ep_config.GetFullName()))
           continue;
         base_configs_.push_back(config);
-        if (cil::utils::StringToLowerCase(scenario.GetName()) == "llama2")
-          has_llama2_scenario = true;
+        if (cil::BenchmarkRunner::IsLLMScenario(scenario.GetName()))
+          has_llm_scenario = true;
+        if (cil::BenchmarkRunner::IsImageScenario(scenario.GetName()))
+          has_image_scenario = true;
       }
     } else {
       LOG4CXX_ERROR(loggerAppController,
                     "Unable to load config file " << entry);
     }
   }
-
   std::map<std::string, int> category_order = {
       {"", 0}, {"extended", 1}, {"experimental", 2}};
   std::stable_sort(base_configs_.begin(), base_configs_.end(),
@@ -127,10 +150,17 @@ void AppController::InitConfigs() {
                    });
 
   std::string input_file_schema_path;
-  if (has_llama2_scenario && !unpacker_->UnpackAsset(Asset::kLLMInputFileSchema,
-                                                     input_file_schema_path)) {
+  if (has_llm_scenario && !unpacker_->UnpackAsset(Asset::kLLMInputFileSchema,
+                                                  input_file_schema_path)) {
     LOG4CXX_ERROR(loggerAppController,
-                  "Failed to unpack llama2 input file schema!");
+                  "Failed to unpack LLM input file schema!");
+  }
+  std::string image_input_file_schema_path;
+  if (has_image_scenario &&
+      !unpacker_->UnpackAsset(Asset::kImageInputFileSchema,
+                              image_input_file_schema_path)) {
+    LOG4CXX_ERROR(loggerAppController,
+                  "Failed to unpack image input file schema!");
   }
   std::string output_results_schema_path;
   if (!unpacker_->UnpackAsset(Asset::kOutputResultsSchema,
@@ -147,8 +177,8 @@ void AppController::InitConfigs() {
 
   benchmark_controller_->SetRunnerConfigs(
       ep_dependencies_config_path, ep_dependencies_config_schema_path,
-      input_file_schema_path, output_results_schema_path,
-      data_verification_file_schema_path);
+      input_file_schema_path, image_input_file_schema_path,
+      output_results_schema_path, data_verification_file_schema_path);
 }
 
 void AppController::InitStartPage() {
@@ -163,29 +193,39 @@ void AppController::InitStartPage() {
     const auto& scenario = config->GetScenarios().front();
     const auto& ep_config = scenario.GetExecutionProviders().front();
     QString name = QString::fromStdString(ep_config.GetName());
-    QString ep_display_name =
-        QString::fromStdString(cil::EPNameToDisplayName(ep_config.GetName()));
+    QString ep_display_name = QString::fromStdString(
+        cil::EPNameToDisplayName(ep_config.GetFullName()));
     QString file_name =
         QString::fromStdString(config->GetConfigFileName()).split('.').first();
     QString card_name = gui::utils::EPCardName(file_name, name);
+    QString scenario_kind = "LLM";
+    if (cil::BenchmarkRunner::IsImageScenario(scenario.GetName()))
+      scenario_kind = "Image gen";
+    else if (scenario.IsAgentic())
+      scenario_kind = "Agentic";
+    QStringList prompt_types;
+    for (const auto& input_type : scenario.GetInputTypes())
+      prompt_types << QString::fromStdString(input_type);
     all_eps.push_back({
         name,
         card_name,
         card_name.split(' ').back(),
         QString::fromStdString(config->GetSystemConfig().GetComment()),
-        gui::utils::ModelDisplayName(scenario.GetName()),
+        gui::utils::ModelDisplayName(scenario.GetDisplayName()),
         {},
         ep_config.GetConfig(),
         QString::fromStdString(config->GetConfigCategory()),
-        "base",
+        prompt_types.isEmpty() ? "base" : prompt_types.front(),
         ep_display_name,
+        scenario_kind,
+        prompt_types,
     });
   }
 
   start_page_controller_->LoadSystemInformation();
 
   emit SwitchToPage(PageType::kStartPage);
-  emit ShowGlobalPopup("Downloading benchmark assets.\nPlease wait.", true);
+  emit ShowLoadingWidget();
 
   benchmark_controller_->SetConfigs(base_configs_);
   benchmark_controller_->SetDataDir(
@@ -214,6 +254,7 @@ void AppController::CreateControllers() {
 
   benchmark_controller_ = new BenchmarkController(
       realtime_monitoring_page_controller_, interrupt_, this);
+  loading_widget_controller_ = new LoadingWidgetController(this);
 }
 
 void AppController::InstallSignalHandlers() {
@@ -224,6 +265,14 @@ void AppController::InstallSignalHandlers() {
           &RealtimePageController::ExecutionCancelRequested, this, [this]() {
             emit ShowGlobalPopup("Canceling. Please wait.");
             StopBenchmark(false);
+          });
+
+  connect(realtime_monitoring_page_controller_,
+          &RealtimePageController::OpenReportRequested, this,
+          [this](const QStringList& ids) {
+            results_report_page_controller_->LoadResultsTable(
+                results_history_page_controller_->GetEntriesByIds(ids));
+            emit SwitchToPage(PageType::kReportPage);
           });
 
   connect(results_history_page_controller_,
@@ -247,8 +296,23 @@ void AppController::InstallSignalHandlers() {
           &AppController::OnClearCacheRequested);
 
   connect(benchmark_controller_,
-          &BenchmarkController::EnumerationProgressChanged, this,
-          &AppController::UpdateProgressPopup);
+          &BenchmarkController::EnumerationProgressChanged,
+          loading_widget_controller_,
+          &LoadingWidgetController::UpdateEnumerationProgress,
+          Qt::QueuedConnection);
+  connect(benchmark_controller_,
+          &BenchmarkController::EnumerationSizingProgress,
+          loading_widget_controller_,
+          &LoadingWidgetController::UpdateSizingProgress, Qt::QueuedConnection);
+  connect(
+      benchmark_controller_, &BenchmarkController::EnumerationDownloadProgress,
+      loading_widget_controller_,
+      &LoadingWidgetController::UpdateDownloadProgress, Qt::QueuedConnection);
+  connect(benchmark_controller_,
+          &BenchmarkController::EnumerationPreparationPhaseStarted,
+          loading_widget_controller_,
+          &LoadingWidgetController::StartPreparationPhase,
+          Qt::QueuedConnection);
   connect(benchmark_controller_, &BenchmarkController::EnumerationFinished,
           this, &AppController::OnEnumerationFinished);
   connect(benchmark_controller_, &BenchmarkController::BenchmarkFinished, this,
@@ -288,6 +352,19 @@ void AppController::InitLogs() {
   if (log_configure__status != spi::ConfigurationStatus::Configured) {
     qDebug() << "Failed to configure the logger with default "
                 "configurations...";
+  } else {
+    // Make the configured relative file name absolute for readers like
+    // cil::utils::GetErrorLogFilePath(). setFile() only updates the option
+    const fs::path logs_base =
+        logs_parent_dir.empty() ? prev_dir : logs_parent_dir;
+    auto root_logger = Logger::getRootLogger();
+    if (auto error_appender = cast<FileAppender>(
+            root_logger->getAppender(LOG4CXX_STR("ErrorFileAppender")))) {
+      if (fs::path file(error_appender->getFile()); file.is_relative()) {
+        const auto absolute_path = (logs_base / file).lexically_normal();
+        error_appender->setFile(absolute_path.string());
+      }
+    }
   }
   OnKeepLogsChanged(settings_page_controller_->GetKeepLogs());
 
@@ -314,13 +391,19 @@ void AppController::OnEnumerationFinished() {
   start_page_controller_->LoadEPsInformation(
       schema, benchmark_controller_->GetOverriddenEps());
 
-  emit HidePopup();
+  emit HideLoadingWidget();
 
   const auto& status = benchmark_controller_->GetBenchmarkStatus();
-  if (!status.success_)
-    emit ShowGlobalPopup(
-        "Some assets preparation failed.\nRestarting the app may help\nresolve "
-        "the issue.");
+  if (!status.success_) {
+    const QString& specific =
+        benchmark_controller_->GetEnumerationErrorMessage();
+    if (!specific.isEmpty())
+      emit ShowGlobalPopup(specific);
+    else
+      emit ShowGlobalPopup(
+          "Some assets preparation failed.\nRestarting the app may help\n"
+          "resolve the issue.");
+  }
 }
 
 void AppController::OnBenchmarkFinished(bool download_deps_only) {

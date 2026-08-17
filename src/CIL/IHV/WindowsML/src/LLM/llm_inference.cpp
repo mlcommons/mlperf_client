@@ -21,8 +21,8 @@ using namespace cil::infer;
 namespace fs = std::filesystem;
 
 namespace {
-const std::unordered_set<std::string> kEPConfigSetup = {"DirectML", "OpenVINO",
-                                                        "NvTensorRtRtx"};
+const std::unordered_set<std::string> kEPConfigSetup = {
+    "DirectML", "OpenVINO", "NvTensorRtRtx", "RyzenAI"};
 }
 
 namespace cil {
@@ -303,15 +303,28 @@ void LLMInference::SetupGenaiConfigForEP(const std::string& model_path) {
     const int max_prompt_len = static_cast<int>(
       config_.search.max_total_length - config_.search.max_length);
     genai_config["search"]["max_length"] = config_.search.max_total_length;
-    
-    options["load_config"] = std::format(
-        R"({{"NPU": {{"MAX_PROMPT_LEN":"{}","MIN_RESPONSE_LEN":"{}", "NPU_TURBO":"YES", 
-        "GENERATE_HINT":"BEST_PERF", "PREFILL_HINT":"{}"}}}})",
-        max_prompt_len,
-        config_.search.max_length,
-        (config_.search.max_total_length > kMaxNpuAllocSize ? "DYNAMIC" : "STATIC"));
 
     const auto& device_type = ep_settings_.GetDeviceType();
+    const bool is_agentic = ep_settings_.GetIsAgentic().value_or(false);
+    const bool is_gpu = device_type.size() >= 3 &&
+                        device_type.substr(0, 3) == "GPU";
+
+    if (is_gpu) {
+      if (is_agentic) {
+        options["enable_causallm"] = "True";
+      }
+    } else {
+      options["load_config"] = std::format(
+          R"({{"NPU": {{"MAX_PROMPT_LEN":"{}", "MIN_RESPONSE_LEN":"{}",
+          "NPU_TURBO":"YES", "NPU_COMPILER_TYPE":"DRIVER",
+          "GENERATE_HINT":"BEST_PERF", "PREFILL_HINT":"{}",
+          "NPUW_LLM_ENABLE_PREFIX_CACHING":"{}"}}}})",
+          max_prompt_len,
+          config_.search.max_length,
+          (config_.search.max_total_length > kMaxNpuAllocSize ? "DYNAMIC"
+                                                             : "STATIC"),
+          (is_agentic ? "YES" : "NO"));
+    }
     if (device_type.substr(0, 3) == "GPU" && count_openvino_devices("GPU") > 1) {
       options["device_type"] = std::format("{}{}",
         device_type,
@@ -328,6 +341,31 @@ void LLMInference::SetupGenaiConfigForEP(const std::string& model_path) {
   const auto update_nvep_config = [&](auto& options, auto& genai_config) {
     genai_config["search"]["max_length"] = config_.search.max_total_length;
 
+    any_updated = true;
+  };
+
+  // RyzenAI: KV cache is statically sized to max_length_for_kv_cache; align
+  // search.max_length (and max_total_length) to it so OGA matches the graph.
+  const auto update_ryzenai_config = [&](auto& options, auto& genai_config) {
+    int bucket = 0;
+    if (options.contains("max_length_for_kv_cache")) {
+      const auto& v = options["max_length_for_kv_cache"];
+      if (v.is_string())
+        bucket = std::stoi(v.get<std::string>());
+      else if (v.is_number_integer())
+        bucket = v.get<int>();
+    }
+    if (bucket > 0) {
+      if (bucket != config_.search.max_total_length) {
+        logger_(LogLevel::kInfo,
+                std::format("RyzenAI: aligning max_length {} -> KV bucket {}",
+                            config_.search.max_total_length, bucket));
+        config_.search.max_total_length = bucket;
+      }
+      genai_config["search"]["max_length"] = bucket;
+    } else {
+      genai_config["search"]["max_length"] = config_.search.max_total_length;
+    }
     any_updated = true;
   };
 
@@ -361,6 +399,8 @@ void LLMInference::SetupGenaiConfigForEP(const std::string& model_path) {
               update_ov_config(option["OpenVINO"], genai_config);
             } else if (option.contains("NvTensorRtRtx")) {
               update_nvep_config(option["NvTensorRtRtx"], genai_config);
+            } else if (option.contains("RyzenAI")) {
+              update_ryzenai_config(option["RyzenAI"], genai_config);
             }
           }
         }

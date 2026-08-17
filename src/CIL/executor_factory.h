@@ -30,10 +30,12 @@ class ExecutorBase;
 class ExecutorFactory {
  public:
   /**
-   * @brief Create an executor based on the type.
+   * @brief Create an executor based on the scenario name.
    *
-   * @param type The type of the executor to create
-   *             (e.g. Llama2, Llama3, Phi3.5, Phi4).
+   * @param scenario_name The scenario name (e.g. "txt2txt" or an alias).
+   * @param model_base_name Machine-readable model identifier (e.g.
+   * "phi_4_reasoning_14b").
+   * @param display_name Human-readable model name for UI/logs.
    * @param model_path The path to the model file.
    * @param data_provider The data provider which provides the input data and
    * the other necessary data for the executor to run.
@@ -44,16 +46,22 @@ class ExecutorFactory {
    * @param iterations_warmup The number of warm-up iterations to run the
    * executor.
    * @param inference_delay The delay in seconds before calling inference.
-   * @param skip_failed_prompts Whether to skip failed prompts during benchmarking.
+   * @param skip_failed_prompts Whether to skip failed prompts during
+   * benchmarking.
+   * @param is_agentic Whether the scenario uses the agentic execution pipeline.
+   * @param tools_execution Whether tools execution is enabled for the agentic
+   * pipeline.
    * @return A shared pointer to the created executor.
    */
   static std::shared_ptr<ExecutorBase> Create(
-      const std::string& type, const std::string& model_path,
+      const std::string& scenario_name, const std::string& model_base_name,
+      const std::string& display_name, const std::string& model_path,
       std::shared_ptr<ScenarioDataProvider> data_provider,
       const std::string& library_path, const std::string& ep_name,
       const nlohmann::json& ep_config, const int iterations,
       const int iterations_warmup, const double inference_delay,
-      const bool skip_failed_prompts);
+      const bool skip_failed_prompts, const bool is_agentic,
+      const bool tools_execution);
 };
 
 }  // namespace infer

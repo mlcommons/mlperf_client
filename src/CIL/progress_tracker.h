@@ -14,7 +14,8 @@ class ProgressTracker {
   ProgressTracker(size_t expected_task_count,
                   const std::string& task_description,
                   const std::chrono::milliseconds& update_interval =
-                      std::chrono::seconds(1));
+                      std::chrono::seconds(1),
+                  bool quiet = false);
 
   ~ProgressTracker() = default;
   ProgressTracker(const ProgressTracker&) = default;
@@ -45,6 +46,8 @@ class ProgressTracker {
   const std::string& GetTaskDescription() const { return task_description_; }
 
   size_t GetExpectedTaskCount() const { return expected_task_count_; }
+
+  bool IsQuiet() const { return quiet_; }
 
   class HandlerBase {
    public:
@@ -78,6 +81,7 @@ class ProgressTracker {
   size_t expected_task_count_;
   size_t current_task_index_;
   std::chrono::milliseconds update_interval_;
+  bool quiet_;
 
   friend class HandlerBase;
 };

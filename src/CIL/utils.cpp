@@ -1,13 +1,19 @@
 #include "utils.h"
 
+#include <log4cxx/fileappender.h>
+#include <log4cxx/helpers/transcoder.h>
 #include <log4cxx/logger.h>
 #include <openssl/evp.h>
 
+#include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <ranges>
 #include <regex>
+#include <sstream>
 
 using namespace log4cxx;
 
@@ -35,10 +41,10 @@ LoggerPtr loggerUtils(Logger::getLogger("Utils"));
 
 #include <dlfcn.h>
 #include <sys/ioctl.h>
-#include <unistd.h>
 #include <sys/statvfs.h>
+#include <unistd.h>
 
-#endif // _WIN32 || _WIN64
+#endif  // _WIN32 || _WIN64
 
 #undef GetCurrentDirectory
 #undef SetCurrentDirectory
@@ -220,7 +226,8 @@ void SaveFlagToSettings(const std::string& settings_path,
   CFRelease(key);
 #elif defined(__linux__)
   // On Linux, we'll use a simple file-based approach
-  std::string config_dir = std::string(getenv("HOME")) + "/.config/" + settings_path;
+  std::string config_dir =
+      std::string(getenv("HOME")) + "/.config/" + settings_path;
   std::filesystem::create_directories(config_dir);
 
   std::ofstream file(config_dir + "/" + value_name);
@@ -289,7 +296,8 @@ bool ReadFlagFromSettings(const std::string& settings_path,
   return static_cast<bool>(read_value);
 
 #elif defined(__linux__)
-  std::string config_path = std::string(getenv("HOME")) + "/.config/" + settings_path + "/" + value_name;
+  std::string config_path = std::string(getenv("HOME")) + "/.config/" +
+                            settings_path + "/" + value_name;
   std::ifstream file(config_path);
   if (file.is_open()) {
     std::string value;
@@ -299,7 +307,6 @@ bool ReadFlagFromSettings(const std::string& settings_path,
   }
   return flagValue;
 #endif
-
 }
 
 std::string GetCurrentDateTimeString(const std::string& format) {
@@ -528,6 +535,24 @@ std::string StringToLowerCase(const std::string& input_string) {
   return lower_case_str;
 }
 
+std::string StringToTitleCase(const std::string& input_string) {
+  std::string result;
+  result.reserve(input_string.size());
+  bool capitalize_next = true;
+  for (char c : input_string) {
+    if (c == '_') {
+      result += ' ';
+      capitalize_next = true;
+    } else if (capitalize_next) {
+      result += static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+      capitalize_next = false;
+    } else {
+      result += c;
+    }
+  }
+  return result;
+}
+
 std::string StringReplaceChar(const std::string& input_string,
                               unsigned char find, unsigned char replace) {
   std::string lower_case_str;
@@ -571,40 +596,41 @@ bool IsUtf8(const std::string& str) {
 }
 
 std::string SanitizeToUtf8(const std::string& str) {
+  using std::byte;
+  static constexpr std::string_view kReplacement = "\xEF\xBF\xBD";  // U+FFFD
   std::string sanitized_str;
   sanitized_str.reserve(str.size());
 
-  for (size_t i = 0; i < str.size(); i++) {
-    uint8_t c = static_cast<uint8_t>(str[i]);
-    // get the number of bytes in the UTF-8 character
-    int bytes = 0;
-    if (c < 0x80) {
+  for (size_t i = 0; i < str.size();) {
+    auto c = static_cast<byte>(str[i]);
+    size_t bytes;
+    if ((c & byte{0x80}) == byte{0}) {
       bytes = 1;
-    } else if ((c & 0xE0) == 0xC0) {
+    } else if ((c & byte{0xE0}) == byte{0xC0}) {
       bytes = 2;
-    } else if ((c & 0xF0) == 0xE0) {
+    } else if ((c & byte{0xF0}) == byte{0xE0}) {
       bytes = 3;
-    } else if ((c & 0xF8) == 0xF0) {
+    } else if ((c & byte{0xF8}) == byte{0xF0}) {
       bytes = 4;
     } else {
-      // Invalid UTF-8 character
+      sanitized_str += kReplacement;
+      ++i;
       continue;
     }
-    // check if the next bytes are valid
-    for (int j = 1; j < bytes; j++) {
-      if (i + j >= str.size()) {
-        // Invalid UTF-8 character
-        continue;
-      }
-      c = static_cast<uint8_t>(str[i + j]);
-      if ((c & 0xC0) != 0x80) {
-        // Invalid UTF-8 character
-        continue;
-      }
+
+    const bool valid =
+        (i + bytes <= str.size()) &&
+        std::ranges::all_of(std::views::iota(size_t{1}, bytes), [&](size_t j) {
+          return (static_cast<byte>(str[i + j]) & byte{0xC0}) == byte{0x80};
+        });
+
+    if (valid) {
+      sanitized_str.append(str, i, bytes);
+      i += bytes;
+    } else {
+      sanitized_str += kReplacement;
+      ++i;
     }
-    // The character is valid
-    sanitized_str += str.substr(i, bytes);
-    i += bytes - 1;
   }
   return sanitized_str;
 }
@@ -693,6 +719,23 @@ bool SupportsVendorID(VendorID vendor_id) {
   return std::find(vendors.begin(), vendors.end(), vendor_id) != vendors.end();
 }
 
+#elif __linux__
+// TODO(sseitz): possible read pci devices or dri nodes
+//std::vector<VendorID> GetAvailableVendorIDs() {
+ //const std::filesystem::path pci_devices{"/sys/bus/pci/devices/"};
+    //for (auto const &device :
+         //std::filesystem::directory_iterator{pci_devices}) {
+      //auto vendor_path = device.path() / "vendor";
+      ////std::stringstream ss;
+          ////ss << std::hex << read_content;
+          ////ss >> vendor_id;
+    //}
+//}
+
+bool SupportsVendorID(VendorID vendor_id) {
+  return true;
+}
+
 #else
 
 std::vector<VendorID> GetAvailableVendorIDs() { return {VendorID::kApple}; }
@@ -749,74 +792,28 @@ std::string CleanAndTrimString(std::string str) {
   return str;
 }
 
-bool IsEpSupportedOnThisPlatform(const std::string_view& model_name,
-                                 const std::string_view& ep_name) {
-  if (!model_name.empty() && model_name != "llama2" && model_name != "llama3" &&
-      model_name != "phi3.5" && model_name != "phi4")
-    return false;
-
-  auto is_supported_ihv = [&](const std::string& name) {
-    return ep_name == name || ep_name == "IHV " + name;
-  };
-
-#if WITH_IHV_NATIVE_OPENVINO
-  if (is_supported_ihv("NativeOpenVINO")) return true;
-#endif
-
-#if WITH_IHV_NATIVE_QNN
-  if (is_supported_ihv("NativeQNN")) return true;
-#endif
-#if WITH_IHV_ORT_GENAI
-  if (is_supported_ihv("OrtGenAI")) return true;
-
-#endif
-#if WITH_IHV_ORT_GENAI_RYZENAI
-  if (is_supported_ihv("OrtGenAI-RyzenAI")) return true;
-#endif
-#if WITH_IHV_WIN_ML
-  if (is_supported_ihv("WindowsML")) return true;
-
-#endif
-#if WITH_IHV_GGML_METAL
-  if (is_supported_ihv("Metal")) return true;
-#endif
-#if WITH_IHV_GGML_VULKAN
-  if (is_supported_ihv("Vulkan")) return true;
-#endif
-#if WITH_IHV_GGML_CUDA
-  if (is_supported_ihv("CUDA")) return SupportsVendorID(VendorID::kNVIDIA);
-#endif
-#if WITH_IHV_GGML_ROCM
-  if (is_supported_ihv("ROCm")) return SupportsVendorID(VendorID::kAMD);
-#endif
-#if WITH_IHV_MLX
-  if (is_supported_ihv("MLX")) return true;
-#endif
-
-  return false;
-}
-
-bool IsEpConfigSupportedOnThisPlatform(
-    const std::string_view& config_file_name) {
-#if defined(__APPLE__)
-  const std::string config = StringToLowerCase(std::string(config_file_name));
-#if TARGET_OS_IOS
-  return config.starts_with("ios");
-#else
-  return config.starts_with("macos");
-#endif
-#else
-  return !config_file_name.empty();
-#endif
-}
-
-#ifdef _WIN32
 std::string GetExecutablePath() {
+#if defined(_WIN32)
   char path[MAX_PATH];
   GetModuleFileNameA(nullptr, path, MAX_PATH);
   return std::string(path);
-}
+#elif defined(__APPLE__)
+  char buffer[4096];
+  uint32_t size = sizeof(buffer);
+  if (_NSGetExecutablePath(buffer, &size) == 0) return std::string(buffer);
+  return std::string();
+#elif defined(__linux__)
+  char buffer[4096];
+  ssize_t len = readlink("/proc/self/exe", buffer, sizeof(buffer) - 1);
+  if (len != -1) {
+    buffer[len] = '\0';
+    return std::string(buffer);
+  }
+  return std::string();
+#else
+  return std::string();
 #endif
+}
 
 double BytesToGb(size_t bytes) {
   return static_cast<double>(bytes) / (1024.0 * 1024.0 * 1024.0);
@@ -847,6 +844,17 @@ std::string DoubleToFixedString(double value, int digits) {
   ss.precision(digits);
   ss << value;
   return ss.str();
+}
+
+std::string GetErrorLogFilePath() {
+  auto root = log4cxx::Logger::getRootLogger();
+  if (auto appender = log4cxx::cast<log4cxx::FileAppender>(
+          root->getAppender(LOG4CXX_STR("ErrorFileAppender")))) {
+    std::string path;
+    log4cxx::helpers::Transcoder::encode(appender->getFile(), path);
+    return std::filesystem::absolute(path).string();
+  }
+  return {};
 }
 
 }  // namespace utils

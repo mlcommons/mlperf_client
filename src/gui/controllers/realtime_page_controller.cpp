@@ -12,6 +12,15 @@
 #include "ui/widgets/logs_widget.h"
 #include "ui/widgets/system_monitoring_widget.h"
 
+#ifdef Q_OS_IOS
+#include <QDir>
+#include <QStandardPaths>
+
+#include "ios/ios_utils.h"
+#include "unpacker.h"
+#include "widgets/popup_widget.h"
+#endif
+
 namespace gui {
 namespace controllers {
 RealtimePageController::RealtimePageController(std::atomic<bool>& interrupt,
@@ -62,6 +71,10 @@ void RealtimePageController::SetView(views::RealTimeMonitoringPage* view) {
   connect(view->GetSystemMonitoringWidget(),
           &SystemMonitoringWidget::VisibilityChanged, this,
           &RealtimePageController::OnSystemMonitoringWidgetVisibilityChanged);
+  connect(view, &views::RealTimeMonitoringPage::OpenReportRequested, this,
+          &RealtimePageController::OpenReportRequested);
+  connect(view, &views::RealTimeMonitoringPage::ShareLogsRequested, this,
+          &RealtimePageController::OnShareLogsRequested);
 }
 
 void RealtimePageController::InitExecutionWithEPs(
@@ -73,7 +86,7 @@ void RealtimePageController::InitExecutionWithEPs(
     execution_progress_widget->AddEP(
         ep.name_, ep.description_,
         QString::fromStdString(ep.config_["device_type"]), ep.long_name_,
-        ep.model_name_);
+        ep.model_name_, ep.scenario_kind_ == "Agentic");
   GetView()->GetLogsWidget()->ClearLogs();
 
   progress_handler_->SetInterrupt(false);
@@ -303,6 +316,36 @@ void RealtimePageController::OnSystemMonitoringWidgetVisibilityChanged(
 void RealtimePageController::OnCancelClicked() {
   GetExecutionProgressWidget()->SetCancelingState(true);
   emit ExecutionCancelRequested();
+}
+
+void RealtimePageController::OnShareLogsRequested(const QString& logs_path) {
+#ifdef Q_OS_IOS
+  QDir log_dir(logs_path);
+  QStringList files = log_dir.entryList(QDir::Files | QDir::NoDotAndDotDot);
+
+  if (files.isEmpty()) {
+    PopupWidget::ShowMessage("No log files found to share.", view_);
+    return;
+  }
+  std::vector<std::string> files_to_zip;
+  for (const QString& file_name : files)
+    files_to_zip.push_back(log_dir.absoluteFilePath(file_name).toStdString());
+
+  QString cache_dir =
+      QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+  QDir().mkpath(cache_dir);  // make sure it exists
+  QString zip_path = cache_dir + "/logs.zip";
+
+  if (!cil::Unpacker::ZipFiles(zip_path.toStdString(), files_to_zip)) {
+    PopupWidget::ShowMessage("Failed to create log archive.", view_);
+    return;
+  }
+
+  if (!gui::ios_utils::ShareFile(QUrl::fromLocalFile(zip_path))) {
+    PopupWidget::ShowMessage("Unable to open share sheet.", view_);
+    QFile::remove(zip_path);
+  }
+#endif  // Q_OS_IOS
 }
 
 void RealtimePageController::OnCurrentTaskInfoChanged(

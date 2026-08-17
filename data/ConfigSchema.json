@@ -11,7 +11,8 @@
           "EPDependenciesConfigPath",
           "BaseDir",
           "DownloadBehavior",
-          "CacheLocalFiles"
+          "CacheLocalFiles",
+          "PythonPath"
         ]
       },
       "properties": {
@@ -39,6 +40,9 @@
         },
         "CacheLocalFiles": {
           "type": "boolean"
+        },
+        "PythonPath": {
+          "type": "string"
         }
       },
       "required": [
@@ -60,6 +64,8 @@
             "Iterations",
             "WarmUp",
             "Delay",
+            "IsAgentic",
+            "ToolsExecution",
             "ExecutionProviders"
           ]
         },
@@ -76,6 +82,13 @@
               "type": "object",
               "properties": {
                 "ModelName": {
+                  "type": "string"
+                },
+                "ModelBaseName": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9_]+$"
+                },
+                "ModelDisplayName": {
                   "type": "string"
                 },
                 "FilePath": {
@@ -137,6 +150,12 @@
             "minimum": 0,
             "maximum": 5
           },
+          "IsAgentic": {
+            "type": "boolean"
+          },
+          "ToolsExecution": {
+            "type": "boolean"
+          },
           "ExecutionProviders": {
             "type": "array",
             "items": {
@@ -148,13 +167,15 @@
                     "NativeOpenVINO",
                     "OrtGenAI",
                     "OrtGenAI-RyzenAI",
+                    "llama-cpp",
                     "Vulkan",
                     "CUDA",
                     "Metal",
                     "NativeQNN",
                     "MLX",
                     "WindowsML",
-                    "ROCm"
+                    "ROCm",
+                    "Diffusers"
                   ]
                 },
                 "Config": {
@@ -169,6 +190,8 @@
                     "propertyNames": {
                       "enum": [
                         "ModelName",
+                        "ModelBaseName",
+                        "ModelDisplayName",
                         "FilePath",
                         "DataFilePath",
                         "TokenizerPath"
@@ -341,7 +364,7 @@
                   "if": {
                     "properties": {
                       "Name": {
-                        "const": "Vulkan"
+                        "const": "llama-cpp"
                       }
                     }
                   },
@@ -350,6 +373,15 @@
                       "Config": {
                         "type": "object",
                         "properties": {
+                          "backend": {
+                            "type": "string",
+                            "enum": [
+                              "Vulkan",
+                              "Metal",
+                              "CUDA",
+                              "ROCm"
+                            ]
+                          },
                           "device_type": {
                             "type": "string",
                             "enum": [
@@ -357,11 +389,26 @@
                               "CPU"
                             ]
                           },
+                          "device_vendor": {
+                            "type": "string"
+                          },
+                          "device_id": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
                           "gpu_layers": {
                             "type": "integer",
                             "minimum": 0
+                          },
+                          "fa": {
+                            "type": "integer"
+                          },
+                          "no_mmap": {
+                            "type": "integer"
                           }
-                        }
+                        },
+                        "required": [ "backend" ],
+                        "additionalProperties": true
                       },
                       "LibraryPath": {
                         "type": "string"
@@ -376,7 +423,7 @@
                   "if": {
                     "properties": {
                       "Name": {
-                        "const": "CUDA"
+                        "const": "Diffusers"
                       }
                     }
                   },
@@ -385,88 +432,44 @@
                       "Config": {
                         "type": "object",
                         "properties": {
+                          "backend": {
+                            "type": "string",
+                            "enum": [
+                              "CUDA",
+                              "MPS",
+                              "RYZENAI"
+                            ]
+                          },
                           "device_type": {
                             "type": "string",
                             "enum": [
                               "GPU",
-                              "CPU"
+                              "NPU"
                             ]
                           },
-                          "gpu_layers": {
+                          "device_id": {
                             "type": "integer",
                             "minimum": 0
-                          }
-                        }
-                      },
-                      "LibraryPath": {
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "Config"
-                    ]
-                  }
-                },
-                {
-                  "if": {
-                    "properties": {
-                      "Name": {
-                        "const": "ROCm"
-                      }
-                    }
-                  },
-                  "then": {
-                    "properties": {
-                      "Config": {
-                        "type": "object",
-                        "properties": {
-                          "device_type": {
-                            "type": "string",
-                            "enum": [
-                              "GPU",
-                              "CPU"
-                            ]
                           },
-                          "gpu_layers": {
-                            "type": "integer",
-                            "minimum": 0
+                          "optimizations": {
+                            "type": "array",
+                            "items": {
+                              "oneOf": [
+                                { "type": "string" },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "type": { "type": "string" }
+                                  },
+                                  "required": ["type"],
+                                  "additionalProperties": true
+                                }
+                              ]
+                            }
                           }
-                        }
-                      },
-                      "LibraryPath": {
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "Config"
-                    ]
-                  }
-                },
-                {
-                  "if": {
-                    "properties": {
-                      "Name": {
-                        "const": "Metal"
-                      }
-                    }
-                  },
-                  "then": {
-                    "properties": {
-                      "Config": {
-                        "type": "object",
-                        "properties": {
-                          "device_type": {
-                            "type": "string",
-                            "enum": [
-                              "GPU",
-                              "CPU"
-                            ]
-                          },
-                          "gpu_layers": {
-                            "type": "integer",
-                            "minimum": 0
-                          }
-                        }
+                        },
+                        "required": ["backend"],
+                        "additionalProperties": true
                       },
                       "LibraryPath": {
                         "type": "string"
@@ -490,6 +493,42 @@
           "ResultsVerificationFile",
           "Iterations",
           "ExecutionProviders"
+        ],
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "Name": { "pattern": "^[Tt][Xx][Tt]2[Tt][Xx][Tt]$" }
+              },
+              "required": [ "Name" ]
+            },
+            "then": {
+              "properties": {
+                "Models": {
+                  "items": {
+                    "required": [ "ModelName", "FilePath", "ModelBaseName" ]
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "Name": { "pattern": "^[Tt][Xx][Tt]2[Ii][Mm][Gg]$" }
+              },
+              "required": [ "Name" ]
+            },
+            "then": {
+              "properties": {
+                "Models": {
+                  "items": {
+                    "required": [ "ModelName", "FilePath", "ModelBaseName" ]
+                  }
+                }
+              }
+            }
+          }
         ]
       }
     }

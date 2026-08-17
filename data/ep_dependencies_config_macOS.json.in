@@ -1,0 +1,16 @@
+{
+  "EPDependencies": [
+    {
+      "Name": "MLX",
+      "Files": [
+        { "Name": "mlx.metallib", "Path": "@MLPERF_MLX_PREFIX@/mlx.metallib" }
+      ]
+    },
+    {
+      "Name": "Diffusers",
+      "Files": [
+        @MLPERF_DIFFUSERS_FILES_JSON@
+      ]
+    }
+  ]
+}

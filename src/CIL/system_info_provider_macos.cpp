@@ -1,9 +1,7 @@
 #include "system_info_provider_macos.h"
 
-#if !MLPERF_PUBLISHING
 #include "io_report_reader.h"
 #include "smc_reader.h"
-#endif
 
 #ifdef USE_OPENCL
 #include <OpenCL/opencl.h>
@@ -51,10 +49,8 @@ static NumberType SysCtlGetNumber(const std::string& name) {
 }
 
 SystemInfoProviderMacOS::SystemInfoProviderMacOS()
-#if !MLPERF_PUBLISHING
     : smc_reader_(nullptr),
       io_report_reader_(nullptr)
-#endif
 {
   performance_info_.cpu_usage = -1;
 }
@@ -133,7 +129,35 @@ void SystemInfoProviderMacOS::FetchNpuInfo() {
 
 void SystemInfoProviderMacOS::FetchSystemMemoryInfo() {
   size_t physical_total = SysCtlGetNumber<size_t>("hw.memsize");
-  size_t physical_available = physical_total - getMemoryUsage();
+
+  vm_statistics64_data_t vmStats;
+  mach_msg_type_number_t count = HOST_VM_INFO64_COUNT;
+  mach_vm_size_t pageSize = vm_kernel_page_size;
+
+  uint64_t free_bytes = 0;
+  uint64_t inactive_bytes = 0;
+  uint64_t speculative_bytes = 0;
+
+  int ret = host_statistics64(mach_host_self(), HOST_VM_INFO64,
+                              (host_info_t)&vmStats, &count);
+  if (ret == KERN_SUCCESS) {
+    free_bytes = static_cast<uint64_t>(vmStats.free_count) * pageSize;
+    inactive_bytes = static_cast<uint64_t>(vmStats.inactive_count) * pageSize;
+    speculative_bytes =
+        static_cast<uint64_t>(vmStats.speculative_count) * pageSize;
+  } else {
+    LOG4CXX_ERROR(loggerSystemInfoProviderMacOS,
+                  "Failed to fetch memory statistics in FetchSystemMemoryInfo, ret: "
+                      << ret);
+  }
+
+  size_t physical_available =
+      free_bytes + inactive_bytes + speculative_bytes;
+  if (physical_available == 0) {
+    // Fallback if vm_statistics64 failed
+    physical_available = physical_total - getMemoryUsage();
+  }
+
   memory_info_ = MemoryInfo{physical_available, physical_total, 0};
 }
 
@@ -219,7 +243,6 @@ size_t SystemInfoProviderMacOS::getMemoryUsage() const {
 }
 
 void SystemInfoProviderMacOS::FetchNpuGpuUsages() {
-#if !MLPERF_PUBLISHING
   if (!io_report_reader_)
     io_report_reader_ = std::make_shared<IOReportReader>();
 
@@ -228,11 +251,9 @@ void SystemInfoProviderMacOS::FetchNpuGpuUsages() {
   performance_info_.gpu_info.begin()->second.usage_is_available = true;
   performance_info_.npu_info.usage = gpu_npu_usage.second;
   performance_info_.npu_info.usage_is_available = true;
-#endif
 }
 
 void SystemInfoProviderMacOS::FetchCpuGpuTemperatures() {
-#if !MLPERF_PUBLISHING
   if (!smc_reader_) {
     smc_reader_ = std::make_shared<SMCReader>();
     smc_reader_->Open();
@@ -264,6 +285,5 @@ void SystemInfoProviderMacOS::FetchCpuGpuTemperatures() {
   if (gpu_sensor_count > 0)
     gpu_info.temperature = gpu_temp_sum / gpu_sensor_count;
   gpu_info.temperature_is_available = true;
-#endif
 }
 }  // namespace cil

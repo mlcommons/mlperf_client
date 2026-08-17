@@ -1,0 +1,28 @@
+{
+  "model_config": {
+    "context_length": 15000,
+    "search": {
+      "method": "greedy",
+      "temperature": 0.6,
+      "top_k": 1,
+      "top_p": 0.9,
+      "stop_on_eos": true,
+      "max_length": 1000
+    }
+  },
+  "prompt_files": true,
+  "apply_chat_template": true,
+  "enable_thinking": false,
+  "prompts": [
+    {"system": "da_warmup.md"},
+    {"system": "da_system.md", "user": "da_user_0.md"},
+    {"agent": "da_agent_0.md"},
+    {"user": "da_user_1.md"},
+    {"agent": "da_agent_1.md"},
+    {"user": "da_user_2.md"},
+    {"agent": "da_agent_2.md"},
+    {"user": "da_user_3.md"},
+    {"agent": "da_agent_3.md"}
+  ],
+  "category": "Data Analyst Agent"
+}

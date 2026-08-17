@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Windows.h>
+
 #include "../../IHV.h"  // Include IHV API definitions
 #include "base_inference_common.h"
 #include "directml/adapter_enumeration.h"
@@ -24,7 +26,7 @@ class BaseInference : public cil::infer::BaseInferenceCommon {
  protected:
   void DetectWindowsMLDevices(
       Ort::Env& env, const std::vector<std::pair<std::wstring, std::wstring>>&
-                                  execution_provider_paths);
+                         execution_provider_paths);
   void AssignModelForDevices();
 
   DeviceListPtr device_enum_;
@@ -52,6 +54,11 @@ class BaseInference : public cil::infer::BaseInferenceCommon {
   const std::string deps_dir_;
 
   std::string plugins_location_;
+
+  /// Cookie for the per-scenario DLL search-path entry the constructor
+  /// optionally adds for the active backend (e.g. tensorrtrtx/). Released
+  /// in the destructor.
+  DLL_DIRECTORY_COOKIE ep_dll_dir_cookie_ = nullptr;
 };
 
 }  // namespace infer

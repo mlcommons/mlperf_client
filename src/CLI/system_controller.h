@@ -2,10 +2,10 @@
 #define SYSTEM_CONTROLLER_H_
 
 #include <filesystem>
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
-#include <functional>
 #include <string>
 
 namespace cil {
@@ -39,8 +39,7 @@ class SystemController {
    */
   SystemController(const std::string& json_config_path,
                    std::shared_ptr<cil::Unpacker> unpacker,
-                   const std::string& output_dir,
-                   const std::string& data_dir,
+                   const std::string& output_dir, const std::string& data_dir,
                    const bool skip_failed_prompts);
   ~SystemController();
   /**
@@ -142,6 +141,17 @@ class SystemController {
    */
   void SetCSVExportPath(const std::string& csv_path);
 
+  /*
+   * @brief Sets the PythonPath parameter in the system config.
+   *
+   * Overrides the value from the config file. Used by the --python-path
+   * command line option: an interpreter directory path, or "system" to rely
+   * on the python already installed on PATH.
+   *
+   * @param python_path The interpreter directory path or "system".
+   */
+  void SetSystemPythonPath(const std::string& python_path);
+
   enum class LogLevel { kInfo, kWarning, kError };
   using Logger = std::function<void(LogLevel, std::string)>;
 
@@ -179,6 +189,7 @@ class SystemController {
   std::string output_results_schema_path_;
   std::string data_verification_file_schema_path_;
   std::string input_file_schema_path_;
+  std::string image_input_file_schema_path_;
 
   const std::string output_dir_;
   const std::string data_dir_;

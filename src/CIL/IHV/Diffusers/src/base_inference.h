@@ -1,0 +1,35 @@
+#pragma once
+
+// IHV.h refers to size_t without including <stddef.h> itself; this header
+// pulls in IHV.h as its first include, so make size_t visible beforehand.
+#include <stddef.h>
+
+#include "../../IHV.h"
+#include "base_inference_common.h"
+#include "diffusers_config.h"
+
+namespace cil {
+namespace IHV {
+namespace infer {
+
+class BaseInference : public cil::infer::BaseInferenceCommon {
+ public:
+  BaseInference(const std::string& model_path, const std::string& model_name,
+                const std::string& ep_name, const std::string& deps_dir,
+                const DiffusersExecutionProviderSettings& ep_settings,
+                cil::Logger logger);
+
+  const API_IHV_DeviceList_t* const EnumerateDevices() override;
+
+ protected:
+  DeviceListPtr device_enum_;
+  std::string default_device_name_;
+
+  const DiffusersExecutionProviderSettings ep_settings_;
+  const std::string ep_name_;
+  const std::string deps_dir_;
+};
+
+}  // namespace infer
+}  // namespace IHV
+}  // namespace cil

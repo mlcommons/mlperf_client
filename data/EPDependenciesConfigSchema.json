@@ -1,5 +1,25 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "conditionClause": {
+      "type": "object",
+      "additionalProperties": {
+        "oneOf": [
+          { "type": "string" },
+          { "type": "array", "items": { "type": "string" } }
+        ]
+      }
+    },
+    "condition": {
+      "oneOf": [
+        { "$ref": "#/definitions/conditionClause" },
+        {
+          "type": "array",
+          "items": { "$ref": "#/definitions/conditionClause" }
+        }
+      ]
+    }
+  },
   "type": "object",
   "properties": {
     "EPDependencies": {
@@ -21,7 +41,8 @@
                 "Path": {
                     "type": "string",
                     "pattern": "^(file:\\/\\/|http:\\/\\/|https:\\/\\/)"
-                }
+                },
+                "Condition": { "$ref": "#/definitions/condition" }
               },
               "required": ["Name", "Path"],
               "additionalProperties": false
@@ -29,9 +50,20 @@
           },
           "Dependencies": {
             "type": "array",
-             "items":{
-              "type": "string"
-             }
+            "items": {
+              "oneOf": [
+                { "type": "string" },
+                {
+                  "type": "object",
+                  "properties": {
+                    "Name": { "type": "string" },
+                    "Condition": { "$ref": "#/definitions/condition" }
+                  },
+                  "required": ["Name"],
+                  "additionalProperties": false
+                }
+              ]
+            }
           }
         },
         "required": ["Name", "Files"],

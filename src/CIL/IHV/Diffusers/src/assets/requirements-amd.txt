@@ -1,0 +1,16 @@
+# Diffusers EP -- AMD / RyzenAI ONNX (Windows x64).
+#
+# torch is installed separately by install_python_deps.py (CPU build).
+# RyzenAI EP DLL: harness deps, RYZEN_AI_INSTALLATION_PATH (MSI deployment/), or RYZENAI_CUSTOM_OPS_DLL.
+# for the Python API + custom-op registration.
+onnxruntime==1.25.1
+onnx
+diffusers>=0.38.0
+transformers
+accelerate
+safetensors
+sentencepiece
+protobuf
+huggingface_hub
+Pillow
+numpy

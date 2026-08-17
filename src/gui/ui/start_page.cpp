@@ -161,10 +161,14 @@ void StartPage::AddEpInformationCard(const nlohmann::json& schema,
   QString category = ep_config.config_category_.isEmpty()
                          ? "base"
                          : ep_config.config_category_;
+  QString scenario_kind = ep_config.scenario_kind_.isEmpty()
+                              ? QStringLiteral("LLM")
+                              : ep_config.scenario_kind_;
   auto ep_widget = new EPExpandableWidget(
       ep_config.model_name_ + " (" + ep_config.long_name_ + ")",
-      ep_config.description_, ep_config.description_, category,
-      ep_config.devices_, fields, ep_config.config_, ui_.m_scroll_area_widget);
+      ep_config.description_, ep_config.description_, category, scenario_kind,
+      ep_config.prompt_types_, ep_config.devices_, fields, ep_config.config_,
+      ui_.m_scroll_area_widget);
   ep_widget->SetDeletable(deletable);
   connect(ep_widget, &EPExpandableWidget::AddButtonClicked, this,
           &StartPage::OnEPAddButtonClicked);

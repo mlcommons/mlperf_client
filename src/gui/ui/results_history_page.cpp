@@ -113,11 +113,11 @@ void ResultsHistoryPage::OnRowsInserted(const QModelIndex &parent, int first,
             index.data(Qt::UserRole + 8).toString() + ")",
         index.data(Qt::UserRole + 3).toDateTime(),  // date and time
         index.data(Qt::UserRole + 4).toBool(),      // success
-        index.data(Qt::UserRole + 5).toDouble(),    // TTFT
-        index.data(Qt::UserRole + 6).toDouble(),    // TPS
-        index.data(Qt::UserRole + 7).toString(), system_details,
-        index.data(Qt::UserRole + 15).toString(),
-        this);  // error message
+        index.data(Qt::UserRole + 5).value<gui::MainScores>(),  // main scores
+        index.data(Qt::UserRole + 7).toString(),    // error message
+        system_details,
+        index.data(Qt::UserRole + 15).toString(),   // config file comment
+        this);
 
     ui_.history_list_view_->setIndexWidget(index, widget);
     if (ui_.history_list_view_->gridSize().height() < widget->height()) {

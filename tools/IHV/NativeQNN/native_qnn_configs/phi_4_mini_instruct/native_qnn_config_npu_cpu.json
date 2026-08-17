@@ -1,0 +1,111 @@
+{
+  "npu_bin_pattern": "phi4_mini_npu_*.bin",
+  "dialog": {
+    "version": 1,
+    "type": "kv-share",
+    "stop-sequence": [""],
+    "engine": [
+      {
+        "version": 1,
+        "n-threads": 4,
+        "role": "primary",
+        "backend": {
+          "version": 1,
+          "type": "QnnHtp",
+          "QnnHtp": {
+            "version": 1,
+            "spill-fill-bufsize": 0,
+            "use-mmap": false,
+            "mmap-budget": 0,
+            "poll": true,
+            "cpu-mask": "0xe0",
+            "kv-dim": 128,
+            "enable-graph-switching": false
+          },
+          "extensions": "${MODEL_FOLDER}/htp_backend_ext_config_npu_cpu.json"
+        },
+        "model": {
+          "version": 1,
+          "type": "binary",
+          "binary": {
+            "version": 1,
+            "ctx-bins": "${NPU_BINS}"
+          },
+          "positional-encoding": {
+            "type": "rope",
+            "rope-dim": 48,
+            "rope-theta": 100000,
+            "rope-scaling": {
+              "rope-type": "longrope",
+              "factor": 32,
+              "original-max-position-embeddings": 4096,
+              "long-factor": [
+                1.0, 1.118320672, 1.250641126, 1.398617824, 1.564103225,
+                1.74916897, 1.956131817, 2.187582649, 2.446418898, 2.735880826,
+                3.059592084, 3.421605075, 3.826451687, 4.279200023, 4.785517845,
+                5.351743533, 5.984965424, 6.693110555, 7.485043894, 8.370679318,
+                9.36110372, 10.4687158, 11.70738129, 13.09260651, 14.64173252,
+                16.37415215, 18.31155283, 20.47818807, 22.90118105, 25.61086418,
+                28.64115884, 32.03, 32.1, 32.13, 32.23,
+                32.6, 32.61, 32.64, 32.66, 32.7,
+                32.71, 32.93, 32.97, 33.28, 33.49,
+                33.5, 44.16, 47.77
+              ],
+              "short-factor": [
+                1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+                1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+                1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+                1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0
+              ]
+            }
+          }
+        }
+      },
+      {
+        "version": 1,
+        "n-threads": 12,
+        "role": "secondary",
+        "backend": {
+          "version": 1,
+          "type": "QnnGenAiTransformer",
+          "QnnGenAiTransformer": {
+            "version": 1,
+            "enable-in-memory-kv-share": true,
+            "kv-quantization": true
+          }
+        },
+        "model": {
+          "version": 1,
+          "type": "library",
+          "library": {
+            "version": 1,
+            "model-bin": "${MODEL_PATH}"
+          }
+        }
+      }
+    ],
+    "context": {
+      "version": 1,
+      "n-vocab": 200064,
+      "bos-token": 199999,
+      "eos-token": [199999, 200020],
+      "pad-token": 199999
+    },
+    "sampler": {
+      "version": 1,
+      "seed": 42,
+      "greedy": false,
+      "token-penalty": {
+        "frequency-penalty": 0.8,
+        "penalize-last-n": 64,
+        "presence-penalty": 0.7,
+        "repetition-penalty": 2.3,
+        "version": 1
+      }
+    },
+    "tokenizer": {
+      "version": 1,
+      "path": "${MODEL_FOLDER}/tokenizer.json"
+    }
+  }
+}

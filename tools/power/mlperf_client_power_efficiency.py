@@ -16,19 +16,34 @@ except ImportError as e:
 logger = logging.getLogger(__name__)
 logger.setLevel(level=logging.INFO)
 
-EXECUTOR_LOG_NAME = {
-    "Phi3": "phi3_5_executor.log",
-    "Phi4": "phi4_executor.log",
-    "Llama2": "llama2_executor.log",
-    "Llama3": "llama3_executor.log",
-}
+def executor_log_name_from_config(config_path: str) -> str | None:
+    """Derive the executor log filename from the config's scenario Name.
+
+    Mirrors the C++ ExecutorLogger naming: the log file is
+    "<name>_executor.log" where <name> is the scenario Name lowercased with
+    '.' replaced by '_'. Works for any model (phi4mini, phi4reason, qwen3,
+    flux2klein, ...) without a hardcoded map.
+    """
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+    except (OSError, ValueError):
+        return None
+    scenarios = cfg.get("Scenarios", [])
+    if not scenarios:
+        return None
+    name = scenarios[0].get("Name", "")
+    if not name:
+        return None
+    alias = name.replace(".", "_").lower()
+    return f"{alias}_executor.log"
 
 CATEGORIES = [
     "Content Generation",
     "Creative Writing",
-    "Summarization, Light",
-    "Summarization, Moderate",
-    "Code Analysis"
+    "Structured Text",
+    "Code Analysis",
+    "Summarization, Intermediate"
 ]
 
 def format_results(stats: PowerEfficiencyStats, results_json: dict):
@@ -126,12 +141,9 @@ def main():
     
     loadgen_log_file = "executor.log"
     if args.config:
-        config_lower = args.config.lower()
-        # Find matching key based on substring
-        for key in EXECUTOR_LOG_NAME:
-            if key.lower() in config_lower:
-                loadgen_log_file = EXECUTOR_LOG_NAME[key]
-                break
+        derived = executor_log_name_from_config(args.config)
+        if derived:
+            loadgen_log_file = derived
 
     if loadgen_log_file:
         logger.debug(f"Selected log file: {loadgen_log_file}")

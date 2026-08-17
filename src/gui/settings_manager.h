@@ -63,6 +63,12 @@ class SettingsManager {
     return value("ask_before_download", kAskBeforeDownloadDefault).toBool();
   }
 
+  // Python interpreter for the agentic `execute` tool: empty (config
+  // PythonPath, else bundled), "system" (leave PATH untouched), or an
+  // interpreter directory path (overrides config PythonPath).
+  void SetPythonPath(const QString& path) { SetValue("python_path", path); }
+  QString GetPythonPath() const { return value("python_path", "").toString(); }
+
  private:
   SettingsManager() : m_settings("MLPerf", "MLPerf GUI") {}
   SettingsManager(const SettingsManager&) = delete;

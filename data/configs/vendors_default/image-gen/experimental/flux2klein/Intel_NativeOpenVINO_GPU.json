@@ -1,0 +1,37 @@
+{
+  "SystemConfig": {
+    "Comment": "Native OpenVINO, GPU - FLUX.2-klein-4B INT8",
+    "TempPath": "",
+    "EPDependenciesConfigPath": ""
+  },
+  "Scenarios": [
+    {
+      "Name": "flux2klein",
+      "Models": [
+        {
+          "ModelName": "ov_flux.2-klein-4b_int8",
+          "ModelBaseName": "flux_2_klein_4b",
+          "FilePath": "https://client.mlcommons-storage.org/deps/2.0/scenario_files/models/flux2/klein_4b/NativeOpenVINO/GPU/model_index.json",
+          "DataFilePath": "https://client.mlcommons-storage.org/deps/2.0/scenario_files/models/flux2/klein_4b/NativeOpenVINO/GPU/flux_2_klein_data.zip"
+        }
+      ],
+      "InputFilePath": [
+        "https://client.mlcommons-storage.org/deps/2.0/scenario_files/image/prompts/flux2/klein_4b/multi_seed_prompts.json"
+      ],
+      "AssetsPath": [],
+      "ResultsVerificationFile": "",
+      "DataVerificationFile": "",
+      "Iterations": 4,
+      "WarmUp": 1,
+      "Delay": 0,
+      "ExecutionProviders": [
+        {
+          "Name": "NativeOpenVINO",
+          "Config": {
+            "device_type": "GPU"
+          }
+        }
+      ]
+    }
+  ]
+}

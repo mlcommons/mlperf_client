@@ -1,4 +1,3 @@
-#pragma once
 #include "windowsml.h"
 
 #include "LLM/llm_inference.h"
@@ -7,12 +6,13 @@ namespace cil {
 namespace IHV {
 
 cil::IHV::WindowsML::WindowsML(const API_IHV_Setup_t& api) {
-  const std::string model_name = api.model_name;
   const std::string ep_name = api.ep_name;
-  const std::string deps_dir = api.deps_dir;
+  const std::string scenario_name = api.scenario_name;
   const std::string model_path = api.model_path;
-
+  const std::string deps_dir = api.deps_dir;
   std::string ep_settings_str = api.ep_settings;
+  const std::string model_name = api.model_base_name;
+
   WindowsMLExecutionProviderSettings ep_settings(
       nlohmann::json::parse(ep_settings_str));
 
@@ -23,23 +23,18 @@ cil::IHV::WindowsML::WindowsML(const API_IHV_Setup_t& api) {
                message.c_str());
   };
 
-  if (!model_name.compare("llama2") || !model_name.compare("llama3") ||
-      !model_name.compare("phi3.5") || !model_name.compare("phi4")) {
-    inference_ = std::make_shared<infer::LLMInference>(
-        model_path, model_name, ep_name, deps_dir, ep_settings, logger);
+  bool is_canonical_scenario = false;
+  IHV_VALIDATE_SCENARIO(api, scenario_name, is_canonical_scenario);
 
-    auto error_message = inference_->GetErrorMessage();
-    if (!error_message.empty()) {
-      api.logger(api.context, API_IHV_LogLevel::API_IHV_ERROR,
-                 error_message.c_str());
-      inference_.reset();
-    }
-    
-    return;
+  inference_ = std::make_shared<infer::LLMInference>(
+      model_path, model_name, ep_name, deps_dir, ep_settings, logger);
+
+  if (auto error_message = inference_->GetErrorMessage();
+      !error_message.empty()) {
+    api.logger(api.context, API_IHV_LogLevel::API_IHV_ERROR,
+               error_message.c_str());
+    inference_.reset();
   }
-
-  api.logger(api.context, API_IHV_LogLevel::API_IHV_FATAL,
-             std::format("Model {} is not supported", model_name).c_str());
 }
 
 DEFINE_IHV_CLASS_ENUMERATE_DEVICES_IMPL(cil::IHV::WindowsML)
@@ -54,10 +49,10 @@ bool cil::IHV::WindowsML::Init(const API_IHV_Init_t& api) {
   if (auto llama2_inference =
           std::dynamic_pointer_cast<infer::LLMInference>(inference_)) {
     const std::optional<API_IHV_DeviceID_t> device_id =
-      api.device_id != nullptr ?
-      std::optional<API_IHV_DeviceID_t>{*api.device_id} : std::nullopt;
-    llama2_inference->Init(nlohmann::json::parse(api.model_config),
-                           device_id);
+        api.device_id != nullptr
+            ? std::optional<API_IHV_DeviceID_t>{*api.device_id}
+            : std::nullopt;
+    llama2_inference->Init(nlohmann::json::parse(api.model_config), device_id);
 
   } else {
     inference_->Init();

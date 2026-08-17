@@ -1,0 +1,24 @@
+{
+  "Name": "flux2klein_nvfp4_cuda",
+  "Vendor": "NVIDIA",
+  "Model": {
+    "Name": "FLUX.2-klein-4B",
+    "BaseName": "flux_2_klein_4b",
+    "FilePath": "black-forest-labs/FLUX.2-klein-4B"
+  },
+  "Device": {
+    "backend": "CUDA",
+    "device_type": "GPU",
+    "device_id": 0,
+    "gpu_mode": "direct",
+    "quantization": "nvfp4",
+    "optimizations": [
+      {"type": "nvfp4"},
+      {"type": "tensorrt_rtx"}
+    ]
+  },
+  "InputFilePath": "../../../../../../data/prompts/flux_2_klein_4b/test/flux_2_klein_prompts.json",
+  "Iterations": 4,
+  "WarmUp": 1,
+  "SaveImages": true
+}

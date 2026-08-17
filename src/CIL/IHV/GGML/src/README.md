@@ -19,6 +19,7 @@ cmake --build build --config Release
 ### 1.1.2 For different backends and build options
 
 - Check out [Here](https://github.com/ggml-org/llama.cpp/blob/master/docs/build.md)
+- The CUDA backend is built in CI with **CUDA Toolkit 13.3.1**.
 
 ## 1.2 Prepare GGUF model
 
@@ -127,8 +128,9 @@ build/bin/llama-quantize "./models/Llama-2-7b-F16.gguf" Q4_0
       "WarmUp": 1,
       "ExecutionProviders": [
         {
-          "Name": "Metal",
+          "Name": "llama-cpp",
           "Config": {
+            "backend": "Metal",
             "device_type": "GPU",
             "gpu_layers": 999
           }

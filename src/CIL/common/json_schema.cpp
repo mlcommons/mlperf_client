@@ -5,6 +5,22 @@
 #include <nlohmann/json-schema.hpp>
 #include <regex>
 
+std::string cil::ValidateJSONSchema(const nlohmann::json& schema_json,
+                                    const nlohmann::json& json_data) {
+  nlohmann::json_schema::json_validator validator;
+  try {
+    validator.set_root_schema(schema_json);
+  } catch (const std::exception& e) {
+    return "Setting schema failed: " + std::string(e.what());
+  }
+  try {
+    validator.validate(json_data);
+  } catch (const std::exception& e) {
+    return "JSON data is invalid: " + std::string(e.what());
+  }
+  return std::string();
+}
+
 std::string cil::ValidateJSONSchema(const std::string& schema_path,
                                     const nlohmann::json& json_data) {
   nlohmann::json schema_json;

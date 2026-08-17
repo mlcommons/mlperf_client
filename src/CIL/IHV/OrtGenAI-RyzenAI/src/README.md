@@ -1,8 +1,8 @@
 # MLPerf Client Benchmark
 
 ## Runtime Requirements
-- Install the latest AMD NPU driver: https://ryzenai.docs.amd.com/en/latest/inst.html#install-npu-drivers
-- Install the latest AMD GPU driver: https://www.amd.com/en/support/download/drivers.html
+- Install the latest [AMD NPU driver](https://download.amd.com/opendownload/RyzenAI/1.8.0b0/NPU_RAI_376_WHQL.zip)
+- Install the latest [AMD GPU driver](https://www.amd.com/en/support/download/drivers.html)
 
 ## Best Performance Setup
 To run LLMs in best performance mode, follow these steps:
@@ -17,122 +17,63 @@ xrt-smi configure --pmode turbo
 ## Run benchmark
 Configure system for best performance and launch the benchmark
 ```
-mlperf-windows.exe -c phi3.5/AMD_ORTGenAI-RyzenAI_NPU.json
+mlperf-windows.exe -c phi4/AMD_ORTGenAI-RyzenAI_NPU.json
 ```
-
-# MLPerf Client v1.6 Runtime Assets
-The following files are required from Ryzen AI 1.7. Filenames and `sha256` checksums are listed.
-```
-b6499663171916a0e298df529541d52bebd029023823bafed75c2531daf97b7b  dyn_bins.dll
-05d33d6f60904cc41d697f079c1cb44a552fe044053ba8efd65531830df80197  dyn_dispatch_core.dll
-ba9e5ecc050f3b7a1bdb18e18aa5dc225d1267745f6330716c9c2388c16ea789  onnxruntime-genai.dll
-4d431431f571d585f9f30bfc43317654349296e971405aad91d8104a37cfdc9e  onnxruntime.dll
-c91e871c516eb4e5193df92970cb9ed92782fcfaac66469d43f3006a31c0b88a  onnxruntime_providers_ryzenai.dll
-0f60f69b93477a851dfcea652eb2e411d253e900791f74af023f75898fc6b96f  onnxruntime_providers_shared.dll
-c7f1a1a61550326b89b7f8730711e6fef7715ed9ad2fd8b8b091e4dc72113b04  ryzen_mm.dll
-264036aea88b5d5327f03b5d1c766a0a60572130baf53b081b150218df840402  zlib.dll
-```
-- Install Ryzen AI 1.7 [RAI-1.7 Installer](https://account.amd.com/en/forms/downloads/ryzenai-eula-public-xef.html?filename=ryzen-ai-lt-1.7.0.exe)
-- Download and extract this patch [RAI-1.7.0.p1](https://download.amd.com/opendownload/RyzenAI/rai-deployment-dlls-1.7.0.p1.zip) in `C:/Program Files/RyzenAI/1.7.0/deployment`. 
 
 # MLPerf Client Model Creation Procedure
 
-## MLPerf Client v1.6 Model Recipes
+## MLPerf Client v1.8 Model Recipes
 
-### NPU Model Recipes and Llama 3.1 8B Hybrid Recipe
-First install prerequisites
-```
-# Model generate Wheel
-pip install model_generate-1.5.0-py3-none-any.whl
-pip install sentencepiece
-pip install torch
-pip install numpy==1.26.4
-pip install onnx==1.18.0
-pip install onnx-ir
-```
+The following source quantized models were used:
+- [llama-3.1-8B](https://huggingface.co/onnx-community/Meta-Llama-3.1-8B-Instruct-ONNX-DirectML-GenAI-INT4)
+- [qwen3-8B](https://huggingface.co/amd/Qwen3-8B-awq-quant-onnx)
+- [phi-4-mini](https://huggingface.co/amd/phi-4-mini-instruct-oga-dml)
 
-Generate model for NPU (Phi3.5 or Llama 3.1)
-```
-model_generate --npu <output_fusion_model> .\<quark_model_path> --optimize decode
-```
+(Instructions on how these models are quantized are in our public [Ryzen AI docs](https://ryzenai.docs.amd.com/en/latest/oga_model_prepare.html)).
 
-Generate model for Hybrid (Llama 3.1)
-```
-model_generate --hybrid <output_hybrid_v2_model> .\<quark_or_dml_model path> --mode bfp16
-```
+Then, the onnx_utils Python utility installed with Ryzen AI will be used to process these source ONNX models and generate ONNX models for AMD NPU or AMD Hybrid NPU-GPU execution.
 
-### Phi 3.5 Hybrid Recipe -- Prefill NPU Fusion + Token GPU Eager Model Perpartion
+### NPU Model Recipes
 
-Download these two `.whl` files
-- Download https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/recipes/OrtGenAI-RyzenAI/ryzenai_dynamic_dispatch-1.1.0.dev1-cp310-cp310-win_amd64.whl
-- Download https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/recipes/OrtGenAI-RyzenAI/ryzenai_onnx_utils-0.9.0.dev1-py3-none-any.whl
+llama3.1-8B
 
-**Use Powershell for the following procedure.**
+- `onnx_utils -v optimize --input-model "llama3/model.onnx" --output-model "llama3.1-8B-full/full.onnx" --force llm --prefill npu_fusion --token npu_fusion --model-type llama3-8b --max-seq-len 16384 --attributes enable_flashmha=true enable_flatmlp=true enable_flat_kv=true`
 
-Start with Quark-quantized DML FP16 ONNX target model and clone locally:
-- [Phi 3.5 Mini Instruct](https://huggingface.co/amd/Phi-3.5-mini-instruct-awq-g128-int4-asym-fp16-onnx-dml)
+qwen3-8B
 
-(Instructions on how these models are quantized are in our public Ryzen AI docs: https://ryzenai.docs.amd.com/en/latest/oga_model_prepare.html)
+- `onnx_utils -v optimize --input-model "qwen3-8B/model.onnx" --output-model "qwen3-8b-full/full.onnx" --force llm --prefill npu_fusion --token npu_fusion --model-type qwen3-8b --max-seq-len 16384 --attributes enable_flashmha=true enable_flatmlp=true enable_flat_kv=true`
 
-Clone model from HuggingFace
-```shell
-git clone https://huggingface.co/amd/Phi-3.5-mini-instruct-awq-g128-int4-asym-fp16-onnx-dml
-cd Phi-3.5-mini-instruct-awq-g128-int4-asym-fp16-onnx-dml
-```
+phi4-mini-instruct
 
-Create conda environment
-```shell
-conda create -n "model-creation" python=3.10
-conda activate model-creation
-```
+- `onnx_utils -v optimize --input-model "phi4/model.onnx" --output-model "phi4-mini-full/full.onnx" --force llm --prefill npu_fusion --token npu_fusion --model-type phi-4 --max-seq-len 16384 --attributes enable_flashmha=true enable_flatmlp=true enable_flat_kv=true`
 
-Install dependencies
-```shell
-pip install ryzenai_dynamic_dispatch-1.1.0.dev1-cp310-cp310-win_amd64.whl
-pip install ryzenai_onnx_utils-0.9.0.dev1-py3-none-any.whl
-pip install onnx==1.17.0
-pip install onnxruntime
-conda install libprotobuf=6.31.1=h8944e3b_0 spdlog==1.15.0
-```
 
-Set model shape
-```shell
-onnx_utils preprocess ./model.onnx ./model-4096-prompt-dynamic.onnx # ignore "No shape inference script found for GreaterOrEqual: /model/pos_ids_reformat/GreaterOrEqual"
-```
+### Hybrid Model Recipes
 
-- When prompted `Enter fixed value(s) for graphs:` type `1`
-- When prompted `Enter fixed value(s) for batch_size:` type `1`
-- When prompted `Enter fixed value(s) for sequence_length:` press `enter`
-- When prompted `Enter fixed value(s) for total_sequence_length:` type `4096`
-- When prompted  Enter fixed value(s) for past_sequence_length:` type `4096`
+llama-3.1-8B 
 
-Output should look like this
-```shell
- Enter fixed value(s) for graphs: 1
- Enter fixed value(s) for batch_size: 1
- Enter fixed value(s) for sequence_length: [just press enter]
- Enter fixed value(s) for total_sequence_length: 4096
- Enter fixed value(s) for past_sequence_length: 4096
-```
+- `onnx_utils -v optimize --input-model llama3/model.onnx  --output-model llama3.1-8B-hybrid/eager.onnx --force llm --prefill npu_eager --token gpu_eager --model-type llama3-8b --attributes enable_chunk_flash_mha=true`
 
-Partition reference model
-```shell
-onnx_utils partition ./model.onnx ./tmp hybrid_llm_experimental.yaml -v --force  --model-name reference --save-as-external --attributes npu_jit=true
-```
+qwen3-8B
 
-Partition prefill model
-```shell
-onnx_utils partition "./model-4096-prompt-dynamic.onnx" ./tmp hybrid_llm_prefill_fusion.yaml -v --force  --model-name prefill_fusion --save-as-external --attributes convert_kv_cache=false
-```
+- `onnx_utils -v optimize --input-model Qwen3-8B-awq-quant-onnx/model.onnx  --output-model qwen-3b-hybrid/eager.onnx --force llm --prefill npu_eager --token gpu_eager --model-type qwen3-8b --attributes enable_chunk_flash_mha=true`
 
-Prepare final model
-```shell
-cd tmp
-onnx_utils postprocess combine_llm --input-path "./reference.onnx" "./prefill_fusion.onnx" "./reference.onnx" --output-path ./model-amd.onnx
-```
+phi-4-mini-instruct
+
+- `onnx_utils -v optimize --input-model phi4/model.onnx  --output-model phi-4-mini-hybrid/eager.onnx --force llm --prefill npu_eager --token gpu_eager --model-type phi-4 --max-seq-len 8192 --attributes enable_chunk_flash_mha=true`
+
+#### Notes
+
+By default, the Hybrid models are optimized for lower memory. For max performance (with memory increase) set this option in `provider_options` in genai_config.json: `"hybrid_opt_npu_read_ahead": "-1"`
+
+Hybrid models are sensitive to warmup prompt sizes. If a small warmup prompt is used before large active prompts, performance will be slightly lower. Set `"hybrid_opt_init_prompt_size": "<value>"` in `provider_options` in genai_config.json to control this. Use a `<value>` of `4096` for Llama-3.1-8B and Qwen3-8B and use `8192` for Phi-4-mini-instruct.
+
+For reference, the Ryzen AI runtime used by the MLPerf client comes from [Ryzen AI 1.8-Beta](https://ryzenai.docs.amd.com/en/latest/app_development.html?foo=bar#application-packaging-requirements) via the [installer](https://download.amd.com/opendownload/RyzenAI/1.8.0b0/ryzen-ai-lt-1.8.0-beta.exe)
 
 # Troubleshooting
 
 Errors like `google.protobuf.message.EncodeError: Failed to serialize proto` are indicative of out of memory. Try freeing up memory before trying again.
 
-For more information, visit our public Ryzen AI docs: https://ryzenai.docs.amd.com/en/latest/hybrid_oga.html
+By default, Microsoft Windows allocates 50% of system memory to AMD NPU/GPU: if the system has 32GB, only 16GB is made available to the NPU/GPU. To increase this allocation, follow the [regedit instructions](https://learn.microsoft.com/en-us/windows-hardware/drivers/display/dxgkrnl-configuration) and edit `MemoryManager\SystemPartitionCommitLimitPercentage`.
+
+For more information, visit our public [Ryzen AI docs](https://ryzenai.docs.amd.com/en/latest/hybrid_oga.html). 

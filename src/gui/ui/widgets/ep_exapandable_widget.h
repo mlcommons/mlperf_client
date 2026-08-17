@@ -45,6 +45,8 @@ class EPExpandableHeaderWidget : public QWidget {
                                     const QString &short_description,
                                     const QString &help_text,
                                     const QString &category,
+                                    const QString &scenario_kind,
+                                    const QStringList &prompt_types,
                                     QWidget *parent = nullptr);
 
   void SetDeletable(bool b);
@@ -71,7 +73,8 @@ class EPExpandableHeaderWidget : public QWidget {
   QPushButton *m_delete_button;
 
   void SetupUi(const QString &ep_name, const QString &short_description,
-               const QString &help_text, const QString &category);
+               const QString &help_text, const QString &category,
+               const QString &scenario_kind, const QStringList &prompt_types);
   void SetupConnections();
 
  private slots:
@@ -89,6 +92,8 @@ class EPExpandableWidget : public ExpandableWidget {
   explicit EPExpandableWidget(const QString &ep_name,
                               const QString &short_description,
                               const QString &help_text, const QString &category,
+                              const QString &scenario_kind,
+                              const QStringList &prompt_types,
                               const QStringList &devices,
                               const nlohmann::json &fields,
                               const nlohmann::json &values, QWidget *parent);
@@ -116,6 +121,7 @@ class EPExpandableWidget : public ExpandableWidget {
 
   void SetupUi(const QString &ep_name, const QString &short_description,
                const QString &help_text, const QString &category,
+               const QString &scenario_kind, const QStringList &prompt_types,
                const QStringList &devices, const nlohmann::json &fields,
                const nlohmann::json &values);
   void SetupConnections();

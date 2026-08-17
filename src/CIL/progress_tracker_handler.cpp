@@ -64,6 +64,7 @@ void ProgressTrackerHandler::StartTracking(cil::ProgressTracker &tracker) {
   console_width_ = cil::utils::GetConsoleWidth();
   // there is a console min width restriction for interactive console mode
   interactive_console_mode_ =
+      !tracker.IsQuiet() &&
       isConsoleAppenderAttached(loggerProgressTrackerHandler) &&
       console_width_ >= 80;
 #if defined(__APPLE__)
@@ -124,6 +125,16 @@ void ProgressTrackerHandler::DisplayCurrentTaskAndOverallProgress(
 
   cil::ProgressableTask::Status task_status = current_task->GetStatus();
   bool task_finished = task_status > kRunning;
+
+  if (tracker.IsQuiet()) {
+    // No UI to throttle — advance past every consecutive finished task,
+    // not just one per poll tick.
+    while (current_task_index_ < tasks.size() &&
+           tasks[current_task_index_]->GetStatus() > kRunning) {
+      ++current_task_index_;
+    }
+    return;
+  }
   int progress = current_task->GetProgress();
   auto start_time = current_task->GetStartTime();
   auto elapsed_time = cil::utils::FormatDuration(

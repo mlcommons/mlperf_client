@@ -44,6 +44,10 @@ SystemInformationWidget::SystemInformationWidget(QWidget* parent)
 #endif
 }
 
+int SystemInformationWidget::GetContentPreferredHeight() const {
+  return information_widgets_layout_->sizeHint().height();
+}
+
 void SystemInformationWidget::AddSystemInformationCard(
     const QString& image_path, const QString& header_text,
     const QList<QPair<QString, QString>>& header_key_values) {

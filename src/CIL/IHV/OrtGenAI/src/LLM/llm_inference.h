@@ -3,7 +3,7 @@
 #include <optional>
 
 #include "../base_inference.h"
-#include "llm/llama_config.h"
+#include "llm/llm_config.h"
 #include "ort_genai_c.h"
 
 namespace cil {
@@ -29,7 +29,7 @@ class LLMInference : public BaseInference {
  private:
   void SetupGenaiConfigForDirectML();
 
-  cil::infer::LlamaConfig config_;
+  cil::infer::LlmConfig config_;
   bool initialized_ = false;
 
   // Filled with tokens after Run call

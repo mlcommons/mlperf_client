@@ -1,0 +1,51 @@
+{
+  "SystemConfig": {
+    "Comment": "Phi 4 Mini Instruct, Native QNN, NPU CPU",
+    "TempPath": "",
+    "EPDependenciesConfigPath": ""
+  },
+  "Scenarios": [
+    {
+      "Name": "phi4mini",
+      "Models": [
+        {
+          "ModelName": "Phi4-mini phi-4-mini-instruct-qti",
+          "FilePath": "https://client.mlcommons-storage.org/deps/2.0/scenario_files/models/phi4/mini-instruct/NativeQNN/Hybrid/Phi-4-mini-instruct-qti/phi4_mini_cpu.bin",
+          "DataFilePath": "https://client.mlcommons-storage.org/deps/2.0/scenario_files/models/phi4/mini-instruct/NativeQNN/Hybrid/Phi-4-mini-instruct-qti/phi4mini_npu_hybrid.zip",
+          "TokenizerPath": "https://client.mlcommons-storage.org/deps/2.0/scenario_files/models/phi4/mini-instruct/NativeQNN/tokenizer.zip",
+          "NativeQNNConfigPath": "https://client.mlcommons-storage.org/deps/2.0/scenario_files/models/phi4/mini-instruct/NativeQNN/Hybrid/Phi-4-mini-instruct-qti/native_qnn_config_npu_cpu.json",
+          "HtpBackendExtConfigPath": "https://client.mlcommons-storage.org/deps/2.0/scenario_files/models/phi4/mini-instruct/NativeQNN/Hybrid/Phi-4-mini-instruct-qti/htp_backend_ext_config_npu_cpu.json"
+        }
+      ],
+      "InputFilePath": {
+        "base": [
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/phi4/mini-instruct/content_generation/greedy-prompt_cot.39329.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/phi4/mini-instruct/content_generation/greedy-prompt_t0.677207.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/phi4/mini-instruct/creative_writing/greedy-prompt_niv.123362.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/phi4/mini-instruct/creative_writing/greedy-prompt_niv.77134.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/phi4/mini-instruct/structured_text/data_csv2json.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/phi4/mini-instruct/structured_text/events_ics2xml.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/phi4/mini-instruct/code_analysis/command_parser_cpp_2k.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/phi4/mini-instruct/code_analysis/performance_counter_group_cpp_2k.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/phi4/mini-instruct/intermediate4k/booksum_4k.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/phi4/mini-instruct/intermediate4k/downloader_cpp_4k.json"
+        ],
+        "extended": []
+      },
+      "AssetsPath": [],
+      "ResultsVerificationFile": "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/generation-greedy-results.json",
+      "DataVerificationFile": "",
+      "Iterations": 3,
+      "WarmUp": 1,
+      "Delay": 5,
+      "ExecutionProviders": [
+        {
+          "Name": "NativeQNN",
+          "Config": {
+            "device_type": "NPU_CPU"
+          }
+        }
+      ]
+    }
+  ]
+}

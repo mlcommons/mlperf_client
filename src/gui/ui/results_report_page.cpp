@@ -1,10 +1,13 @@
 #include "results_report_page.h"
 
 #include <QDateTime>
+#include <QVBoxLayout>
+#include <QWidget>
 #ifdef Q_OS_IOS
 #include <QScroller>
 #endif
 
+#include "widgets/report_io_views.h"
 #include "widgets/result_table_widget.h"
 
 namespace gui {
@@ -57,6 +60,51 @@ void ResultsReportPage::AddResultsTableRow(const QStringList& row_data,
                                            bool bold) {
   if (!table_) return;
   table_->AddBoldRow(row_data, bold);
+}
+
+custom_widgets::CategoryTitleToggle* ResultsReportPage::AddCategoryTitleRow(
+    const QString& category) {
+  if (!table_) return nullptr;
+  auto* toggle = new custom_widgets::CategoryTitleToggle(category);
+  table_->AppendCustomTitleRow(toggle);
+  return toggle;
+}
+
+void ResultsReportPage::AddCategoryIORow(
+    const QString& category, const std::vector<cil::BenchmarkResult>& results,
+    custom_widgets::CategoryTitleToggle* toggle) {
+  if (!table_) return;
+
+  QList<custom_widgets::IOView*> views;
+  // Merged layout: all entries share the same prompts → shared prompt
+  // blocks span the full row width, only outputs differ per column.
+  if (custom_widgets::ResultsShareInputs(results, category)) {
+    auto* merged = new custom_widgets::MergedIOView(results, category);
+    merged->setVisible(false);
+    table_->AppendSpanningCustomRow(merged);
+    views.append(merged);
+  } else {
+    // Per-entry layout: each column renders its own prompt/output stack.
+    QList<QWidget*> cells;
+    cells.append(nullptr);  // column 0 stays empty; toggle lives in title row.
+    for (const auto& r : results) {
+      auto* view = new custom_widgets::PerResultIOView(r, category);
+      view->setVisible(false);
+      views.append(view);
+      cells.append(view);
+    }
+    table_->AppendCustomRow(cells);
+  }
+
+  if (toggle) {
+    QObject::connect(toggle, &QPushButton::toggled, this,
+                     [views](bool checked) {
+                       for (auto* view : views) {
+                         if (checked) view->EnsureBuilt();
+                         view->setVisible(checked);
+                       }
+                     });
+  }
 }
 
 }  // namespace views

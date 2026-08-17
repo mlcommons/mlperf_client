@@ -4,7 +4,6 @@
 #include <log4cxx/logger.h>
 
 #include <exception>
-#include <format>
 #include <fstream>
 #include <iostream>
 #include <regex>
@@ -20,12 +19,13 @@ namespace cil {
 Storage::Storage(const std::string& storage_path,
                  const std::shared_ptr<URLCacheManager>& url_cache_manager,
                  bool force_download, bool check_version,
-                 bool collect_remote_sizes_only)
+                 bool collect_file_sizes_only, bool include_local_file_sizes)
     : storage_path_(storage_path),
-      url_cache_manager_(url_cache_manager),
       force_download_(force_download),
+      collect_file_sizes_only_(collect_file_sizes_only),
+      include_local_file_sizes_(include_local_file_sizes),
       check_version_(check_version),
-      collect_remote_sizes_only_(collect_remote_sizes_only) {}
+      url_cache_manager_(url_cache_manager) {}
 
 Storage::~Storage() = default;
 
@@ -43,7 +43,8 @@ const std::string Storage::GetStoragePath() const {
 bool Storage::FindFile(const std::string& file_name,
                        const DownloadProgressCallback& download_callback,
                        std::string& file_path) {
-  return FindFile(file_name, "", download_callback, file_path);
+  std::string error_message;
+  return FindFile(file_name, "", download_callback, file_path, error_message);
 }
 
 /**
@@ -67,13 +68,20 @@ std::string Storage::ExtractFilenameFromURI(const std::string& uri) const {
   } else if (uri.rfind("https://", 0) == 0 || uri.rfind("http://", 0) == 0) {
     p = std::filesystem::path(uri);
   }
-  // Extract and return the filename part
-  return p.filename().string();
+  std::string name = p.filename().string();
+  if (name.empty() && !p.empty()) name = p.parent_path().filename().string();
+  return name;
+}
+
+bool Storage::IsLocalDirectory(const std::string& uri) {
+  if (uri.rfind("file://", 0) != 0) return false;
+  auto local = std::filesystem::path(uri.substr(7));
+  return std::filesystem::is_directory(local);
 }
 
 bool Storage::FindFile(const std::string& file_name, const std::string& sub_dir,
                        const DownloadProgressCallback& download_callback,
-                       std::string& file_path) {
+                       std::string& file_path, std::string& error_message) {
   std::filesystem::path subdir_path = storage_path_ / sub_dir;
   if (!std::filesystem::exists(subdir_path)) {
     if (!utils::CreateDirectory(subdir_path.string())) {
@@ -87,7 +95,8 @@ bool Storage::FindFile(const std::string& file_name, const std::string& sub_dir,
     url_path = file_name;
   }
   std::filesystem::path fs_path = subdir_path / actual_file_name;
-  return FindFileWithUrl(fs_path, download_callback, file_path, url_path);
+  return FindFileWithUrl(fs_path, download_callback, file_path, url_path,
+                         error_message);
 }
 
 /**
@@ -108,8 +117,8 @@ std::string Storage::CheckIfLocalFileExists(const std::string& file_name,
                                             bool ignore_cache,
                                             bool cache_local_files) {
   if (!cache_local_files && file_name.rfind("file://", 0) == 0) {
-    auto file_path = std::filesystem::path(file_name.substr(7));
-    if (fs::exists(file_path)) {
+    if (auto file_path = std::filesystem::path(file_name.substr(7));
+        fs::exists(file_path)) {
       return file_path.string();
     }
   }
@@ -151,7 +160,8 @@ std::string Storage::CheckIfLocalFileExists(const std::string& file_name,
 bool Storage::FindFileWithUrl(const std::filesystem::path& fs_path,
                               const DownloadProgressCallback& download_callback,
                               std::string& file_path,
-                              std::string url_for_download) {
+                              const std::string& url_for_download,
+                              std::string& error_message) {
   const auto fs_path_as_string = fs_path.string();
 
   const bool fs_path_exists = std::filesystem::exists(fs_path);
@@ -164,6 +174,12 @@ bool Storage::FindFileWithUrl(const std::filesystem::path& fs_path,
                                        check_version_);
 
   bool result = fs_path_exists && url_in_cache && !force_download_;
+
+  // Mark "no bytes to fetch" for this URL so subsequent Storage calls and the
+  // main-pass task-creation filter can skip it without re-validating.
+  if (result && url_cache_manager_)
+    URLCacheManager::SetCachedSize(url_for_download, 0);
+
   if (!result) {
     std::string file_url;
     if (!url_for_download.empty()) {
@@ -193,11 +209,22 @@ bool Storage::FindFileWithUrl(const std::filesystem::path& fs_path,
     std::regex github_regex(R"((?:https?://)?github\.com/(.*)/blob/(.*))");
     std::smatch match;
     auto downloadFileFn = [&](const std::string& url) {
+      // Reuse a prior HEAD result for the same URL (shared IHV deps
+      // typically appear across many EP configs).
+      if (collect_file_sizes_only_) {
+        if (auto cached = URLCacheManager::GetCachedSize(file_url)) {
+          file_sizes_[file_url] = {*cached, fs_path.string()};
+          return true;
+        }
+      }
       uint64_t file_size = 0;
-      auto res = downloader_->operator()(url, collect_remote_sizes_only_,
-                                         file_size, download_callback);
-      if (res && collect_remote_sizes_only_)
-        remote_file_sizes_[file_url] = file_size;
+      auto res = downloader_->operator()(url, collect_file_sizes_only_,
+                                         include_local_file_sizes_, file_size,
+                                         download_callback, error_message);
+      if (res && collect_file_sizes_only_) {
+        file_sizes_[file_url] = {file_size, fs_path.string()};
+        URLCacheManager::SetCachedSize(file_url, file_size);
+      }
       return res;
     };
     if (std::regex_search(file_url, match, github_regex)) {
@@ -228,7 +255,7 @@ bool Storage::FindFileWithUrl(const std::filesystem::path& fs_path,
     }
   }
 
-  if (result && !collect_remote_sizes_only_) {
+  if (result && !collect_file_sizes_only_) {
     file_path = fs_path.string();
     if (url_cache_manager_)
       url_cache_manager_->AddUrlToCache(url_for_download, file_path,

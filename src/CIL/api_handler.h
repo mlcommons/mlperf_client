@@ -1,6 +1,8 @@
 #pragma once
 
+#include <cstdint>
 #include <functional>
+#include <memory>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <string>
@@ -49,9 +51,10 @@ class API_Handler {
 
   bool IsLoaded() const;
 
-  bool Setup(const std::string& ep_name, const std::string& model_name,
-             const std::string& model_path, const std::string& deps_dir,
-             const nlohmann::json& ep_settings, std::string& device_type_out);
+  bool Setup(const std::string& ep_name, const std::string& scenario_name,
+             const std::string& model_base_name, const std::string& model_path,
+             const std::string& deps_dir, const nlohmann::json& ep_settings,
+             std::string& device_type_out);
   // Enumerate available devices
   bool EnumerateDevices(DeviceListPtr& device_list);
   // Load model on specified device (or default if not provided)
@@ -80,7 +83,7 @@ class API_Handler {
 
   static DeviceList EnumerateDevices(
       const std::string& library_path, const std::string& ep_name,
-      const std::string& model_name, const nlohmann::json& ep_settings,
+      const std::string& scenario_name, const nlohmann::json& ep_settings,
       std::string& error, std::string& log
 #if IHV_SUBPROCESS
       ,
@@ -91,6 +94,32 @@ class API_Handler {
   std::string GetIHVErrors() const { return ihv_errors_; }
   void ClearErrorMessage() { ihv_errors_.clear(); }
 
+#if IHV_SUBPROCESS
+  // Constructed inside the IHV subprocess for inference calls that use an IHV
+  // callback. Supplies the callback handed to the IHV library and serializes
+  // collected data (e.g. timestamped tokens) for the parent process. Scenario
+  // modules implement a concrete adapter and register it against the IHV
+  // callback type it handles, so api_handler stays decoupled from scenario
+  // code.
+  class CallbackAdapter {
+   public:
+    using Factory = std::function<std::unique_ptr<CallbackAdapter>()>;
+
+    static void Register(API_IHV_Callback_Type callback_type, Factory factory);
+    static std::unique_ptr<CallbackAdapter> Create(
+        API_IHV_Callback_Type callback_type);
+
+    virtual ~CallbackAdapter() = default;
+    virtual API_IHV_Callback_t GetCallback() = 0;
+    virtual void Start() = 0;
+    virtual void Finish() = 0;
+    virtual nlohmann::json Serialize() const = 0;
+  };
+
+  // Data serialized by the subprocess callback adapter after the last Infer().
+  const nlohmann::json& GetCallbackAdapterData() const;
+#endif
+
  private:
   static void Log(void* context, API_IHV_LogLevel level, const char* message);
 
@@ -100,6 +129,7 @@ class API_Handler {
 
   Logger logger_;
 
+  API_IHV_GetAPIVersion_func get_api_version_ = nullptr;
   API_IHV_Setup_func setup_ = nullptr;
   API_IHV_EnumerateDevices_func enumerate_devices_ = nullptr;
   API_IHV_Init_func init_ = nullptr;
@@ -125,6 +155,8 @@ class API_Handler {
 
   const bool use_subprocess_;
   std::unique_ptr<Server> subprocess_server_;
+
+  nlohmann::json callback_adapter_data_;
 #endif
 };
 

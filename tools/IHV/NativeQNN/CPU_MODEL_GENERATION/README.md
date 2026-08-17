@@ -1,19 +1,35 @@
-# Qualcomm's GenAI Conversion Package 
+# CPU_MODEL_GEN_NEW — Linux CPU bin generator (minimal)
 
-## Requirements for Running
+Single-script Linux equivalent of `cpu_model_generation/`. One `run.sh` does everything end-to-end.
 
-<!-- markdown-link-check-disable-next-line -->
-* [QAIRT SDK](https://softwarecenter.qualcomm.com/api/download/software/sdks/Qualcomm_AI_Runtime_Community/All/2.43.1.260218/v2.43.1.260218.zip) (Version 2.43.1.260218)
-* Python Version Requirement 3.10
-* Windows machine capable of running powershell with latest python installed
-* QAIRT SDK Location:\
-**⚠️ Important:** The QAIRT SDK should be present in the same folder as the script or Specify its location using the **-qairt** parameter when running the script
+## Prerequisites
 
-## Steps to run the script
+- Linux x86_64
+- `python3.10` on PATH (override with `PYTHON_BIN=...`)
+- `git`, `git-lfs`, `curl`, `unzip`
 
-```shell
-.\run_conversion.ps1 -qairt "C:\path\to\qairt_sdk" -model model_name
+## Usage
+
+```bash
+./run.sh phi4-mini      # default
+./run.sh phi4
+./run.sh llama3
 ```
-model_name can be any of them "llama3", "phi3.5" or "phi4" based on what you want to generate.
-Replace "C:\path\to\qairt_sdk" with the actual path to your QAIRT SDK installation. If not provided, the script assumes QAIRT is located in the same directory as the script.
-* Output Binary of CPU will be generated in current folder with name **"phi4_cpu.bin"**, **"llama3_cpu.bin"** or **"phi3_5_cpu.bin"**
+
+## What it does
+
+1. Downloads the QAIRT SDK (`v2.46.0.260424`) into `./qairt/` if missing
+2. Creates a Python 3.10 venv in `./venv/` and installs `requests tqdm numpy sentencepiece cmake`
+3. Sources `qairt/<version>/bin/envsetup.sh`
+4. Runs `qairt/<version>/bin/check-linux-dependency.sh`
+5. Runs `qairt/<version>/bin/check-python-dependency`
+6. `git lfs clone` of the HuggingFace model repo
+7. Runs `qnn-genai-transformer-composer --quantize Z8` with the matching `*_config_file.json`
+
+Output: `./<model>_cpu.bin` in this directory.
+
+## Overrides
+
+- `QAIRT_VERSION=2.46.0.260424`
+- `QAIRT_URL=<custom zip URL>`
+- `PYTHON_BIN=python3.10`

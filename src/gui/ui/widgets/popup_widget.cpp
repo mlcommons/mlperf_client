@@ -1,19 +1,16 @@
 #include "popup_widget.h"
 
 #include <QCheckBox>
-#include <QEvent>
 #include <QLabel>
 #include <QLayout>
 #include <QPainter>
-#include <QProgressBar>
 #include <QPushButton>
-#include <algorithm>
 
 static constexpr int POPUP_WIDGET_WIDTH = 400;
 static constexpr int POPUP_WIDGET_HEIGHT = 190;
 static constexpr int POPUP_WIDGET_RADIUS = 10;
 
-PopupWidget::PopupWidget(QWidget* parent) : QDialog(parent) {
+PopupWidget::PopupWidget(NoIcon, QWidget* parent) : QDialog(parent) {
   setFixedSize(POPUP_WIDGET_WIDTH, POPUP_WIDGET_HEIGHT);
   setWindowFlag(Qt::FramelessWindowHint, true);
   setModal(true);
@@ -25,10 +22,6 @@ PopupWidget::PopupWidget(QWidget* parent) : QDialog(parent) {
   close_button_->setFixedSize(24, 24);
   connect(close_button_, &QPushButton::clicked, this, &QDialog::reject);
 
-  auto* icon_label = new QLabel(this);
-  icon_label->setPixmap(
-      QIcon(":/icons/resources/icons/popup_info_icon.png").pixmap(56, 56));
-
   message_label_ = new QLabel(this);
   message_label_->setProperty("class", "header_H3");
   message_label_->setAlignment(Qt::AlignCenter);
@@ -37,11 +30,17 @@ PopupWidget::PopupWidget(QWidget* parent) : QDialog(parent) {
   main_layout_->setContentsMargins(9, 9, 9, 9);
   main_layout_->setSpacing(0);
   main_layout_->addWidget(close_button_, 0, Qt::AlignRight);
-  main_layout_->addWidget(icon_label, 0, Qt::AlignCenter);
   main_layout_->addStretch();
   main_layout_->addWidget(message_label_, 0, Qt::AlignCenter);
   main_layout_->addSpacing(8);
   main_layout_->addStretch();
+}
+
+PopupWidget::PopupWidget(QWidget* parent) : PopupWidget(NoIcon{}, parent) {
+  auto* icon_label = new QLabel(this);
+  icon_label->setPixmap(
+      QIcon(":/icons/resources/icons/popup_info_icon.png").pixmap(56, 56));
+  main_layout_->insertWidget(1, icon_label, 0, Qt::AlignCenter);
 }
 
 void PopupWidget::SetMessage(const QString& message) {
@@ -107,46 +106,4 @@ QuestionPopupWidget::QuestionPopupWidget(QWidget* parent,
 
 bool QuestionPopupWidget::DoNotAskAgainChecked() const {
   return do_not_ask_again_checkbox_ && do_not_ask_again_checkbox_->isChecked();
-}
-
-ProgressPopupWidget::ProgressPopupWidget(QWidget* parent) : PopupWidget() {
-  // Reparent dialog to clear window-system properties per Qt documentation
-  setParent(parent);
-  progress_bar_ = new QProgressBar(this);
-  progress_bar_->setRange(0, 100);
-  progress_bar_->setValue(0);
-  progress_bar_->setTextVisible(false);
-
-  progress_percent_label_ = new QLabel("0%", this);
-  progress_percent_label_->setProperty("class", "large_strong_label");
-
-  auto* progress_layout = new QHBoxLayout();
-  progress_layout->setContentsMargins(0, 0, 0, 0);
-  progress_layout->setSpacing(8);
-  progress_layout->addWidget(progress_bar_, 1);
-  progress_layout->addWidget(progress_percent_label_);
-
-  main_layout_->addLayout(progress_layout);
-  main_layout_->addStretch();
-
-  if (parent) {
-    move((parentWidget()->width() - width()) / 2,
-         (parentWidget()->height() - height()) / 2);
-    parent->installEventFilter(this);
-  }
-}
-
-void ProgressPopupWidget::SetProgressPercent(int percent) {
-  percent = std::clamp(percent, 0, 100);
-  progress_bar_->setValue(percent);
-  progress_percent_label_->setText(QString("%1%").arg(percent));
-}
-
-bool ProgressPopupWidget::eventFilter(QObject* watched, QEvent* event) {
-  auto parent = parentWidget();
-  if (watched == parent &&
-      (event->type() == QEvent::Resize || event->type() == QEvent::Move)) {
-    move((parent->width() - width()) / 2, (parent->height() - height()) / 2);
-  }
-  return PopupWidget::eventFilter(watched, event);
 }

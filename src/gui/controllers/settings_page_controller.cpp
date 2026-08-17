@@ -8,6 +8,13 @@
 
 namespace gui {
 namespace controllers {
+
+namespace {
+// Combo box items for the Python path keywords.
+const QString kPythonDefaultItem = "Default";
+const QString kPythonSystemItem = "System";
+}  // namespace
+
 SettingsPageController::SettingsPageController(const QString& data_default_path,
                                                const QString& logs_default_path,
                                                QObject* parent)
@@ -46,10 +53,23 @@ void SettingsPageController::SetView(views::SettingsPage* view) {
   SetDataCurrentPath(settings.GetDataPath());
   SetLogsCurrentPath(settings.GetLogsPath());
 
+  // The stored value is canonical (empty = default, "system", or a path);
+  // the combo box shows "Default"/"System" for the keywords.
+  QStringList python_paths = {kPythonDefaultItem, kPythonSystemItem};
+  view->SetPythonPaths(python_paths);
+  if (const QString python_path = settings.GetPythonPath();
+      python_path == "system") {
+    view->SetPythonCurrentPath(kPythonSystemItem);
+  } else {
+    view->SetPythonCurrentPath(python_path);  // empty keeps "Default"
+  }
+
   connect(view, &views::SettingsPage::DataPathChanged, this,
           &SettingsPageController::OnDataPathChanged);
   connect(view, &views::SettingsPage::LogsPathChanged, this,
           &SettingsPageController::OnLogsPathChanged);
+  connect(view, &views::SettingsPage::PythonPathChanged, this,
+          &SettingsPageController::OnPythonPathChanged);
   connect(view, &views::SettingsPage::KeepLogsChanged, this,
           &SettingsPageController::OnKeepLogsChanged);
   connect(view, &views::SettingsPage::AskBeforeDownloadChanged, this,
@@ -109,6 +129,16 @@ void SettingsPageController::OnLogsPathChanged(const QString& path) {
   emit LogsPathChanged(path);
 }
 
+void SettingsPageController::OnPythonPathChanged(const QString& path) {
+  QString stored_value = path;
+  if (path == kPythonDefaultItem) {
+    stored_value = "";
+  } else if (path == kPythonSystemItem) {
+    stored_value = "system";
+  }
+  SettingsManager::getInstance().SetPythonPath(stored_value);
+}
+
 void SettingsPageController::OnKeepLogsChanged(bool checked) {
   SettingsManager::getInstance().SetKeepLogs(checked);
   emit KeepLogsChanged(checked);
@@ -129,6 +159,9 @@ void SettingsPageController::OnResetToDefaultsRequested() {
 
     settings_page->SetLogsCurrentPath(logs_default_path_);
     OnLogsPathChanged(logs_default_path_);
+
+    settings_page->SetPythonCurrentPath(kPythonDefaultItem);
+    OnPythonPathChanged(kPythonDefaultItem);
   }
 }
 

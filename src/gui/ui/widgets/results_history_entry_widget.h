@@ -13,8 +13,7 @@ class ResultsHistoryEntryWidget : public QWidget {
 
  public:
   ResultsHistoryEntryWidget(const QString &name, const QDateTime &dateTime,
-                            bool passed, double time_to_first_token,
-                            double token_generation_rate,
+                            bool passed, const gui::MainScores &scores,
                             const QString &error_message,
                             const gui::SystemInfoDetails &sys_info,
                             const QString &config_file_comment,

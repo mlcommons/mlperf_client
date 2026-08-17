@@ -129,7 +129,6 @@ target_link_libraries(${PROJECT_NAME}
 
 list(APPEND QNN_EXTRA_DEPS "Genie")
 list(APPEND QNN_EXTRA_DEPS "QnnGenAiTransformer")
-list(APPEND QNN_EXTRA_DEPS "QnnGenAiTransformerCpuOpPkg")
 list(APPEND QNN_EXTRA_DEPS "QnnGenAiTransformerModel")
 list(APPEND QNN_EXTRA_DEPS "QnnSystem")
 

@@ -66,6 +66,48 @@ if(IOS)
     )
 endif()
 
+# Detect SPIRV-Headers for Vulkan builds (mirrors the check in llama.cpp ci/run.sh)
+set(SPIRV_HEADERS_DIR_ARG)
+if(MLPERF_IHV_GGML_VULKAN)
+    set(SPIRV_HEADERS_CANDIDATES "/usr/local/lib/cmake/vulkan/SPIRV-Headers")
+    if(WIN32 AND DEFINED ENV{VULKAN_SDK})
+        file(TO_CMAKE_PATH "$ENV{VULKAN_SDK}" _vk_sdk)
+        list(APPEND SPIRV_HEADERS_CANDIDATES
+            "${_vk_sdk}/Lib/cmake"
+            "${_vk_sdk}/Lib/cmake/SPIRV-Headers"
+            "${_vk_sdk}/share/cmake/SPIRV-Headers")
+    endif()
+    foreach(_dir IN LISTS SPIRV_HEADERS_CANDIDATES)
+        if(EXISTS "${_dir}/SPIRV-HeadersConfig.cmake")
+            set(SPIRV_HEADERS_DIR_ARG "-DSPIRV-Headers_DIR=${_dir}")
+            break()
+        endif()
+    endforeach()
+endif()
+
+set(GGML_PLATFORM_ARGS "")
+if(WIN32 AND CMAKE_GENERATOR_PLATFORM)
+    set(GGML_PLATFORM_ARGS "-A" "${CMAKE_GENERATOR_PLATFORM}")
+endif()
+
+# Forward the resolved CUDA compiler so the EP sub-builds use the same toolkit
+# the top-level detected (and not a stray nvcc earlier on PATH).
+set(GGML_CUDA_COMPILER_ARG "")
+if(MLPERF_IHV_GGML_CUDA AND CUDAToolkit_NVCC_EXECUTABLE)
+    set(GGML_CUDA_COMPILER_ARG "-DCMAKE_CUDA_COMPILER=${CUDAToolkit_NVCC_EXECUTABLE}")
+endif()
+
+# CUDA architectures for the llama.cpp CUDA EP. Use a pipe-separated list so
+# the value survives nested ExternalProject command generation.
+set(MLPERF_GGML_CUDA_ARCHS "75-virtual|80-virtual|86-real|89-real|120a-real|121a-real"
+    CACHE STRING "GGML CUDA architectures ('|'-separated; 'native' = local GPU)")
+
+# Forward the cross toolchain so the GGML EP sub-build targets the cross arch.
+set(GGML_TOOLCHAIN_ARG "")
+if(CMAKE_TOOLCHAIN_FILE)
+    set(GGML_TOOLCHAIN_ARG "-DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}")
+endif()
+
 ExternalProject_Add(ihv_ggml
     SOURCE_DIR ${IHV_GGML_SOURCE_DIR}
     BINARY_DIR ${IHV_GGML_BINARY_DIR}
@@ -75,29 +117,42 @@ ExternalProject_Add(ihv_ggml
     CONFIGURE_COMMAND ${CMAKE_COMMAND} -E echo "Configuring IHV GGML for ${CMAKE_BUILD_TYPE}"
     COMMAND ${CMAKE_COMMAND} -B ${IHV_GGML_BINARY_DIR} -S ${IHV_GGML_SOURCE_DIR}
         -G "${CMAKE_GENERATOR}"
+        ${GGML_PLATFORM_ARGS}
+        ${GGML_TOOLCHAIN_ARG}
         -DCMAKE_INSTALL_PREFIX=${IHV_GGML_INSTALL_DIR}
         -DCMAKE_CXX_STANDARD=20
         -DENV_PATH=${ENV_PATH}
         -DGGML_METAL=${MLPERF_IHV_GGML_METAL}
         -DGGML_VULKAN=${MLPERF_IHV_GGML_VULKAN}
         -DGGML_CUDA=${MLPERF_IHV_GGML_CUDA}
+        -DMLPERF_GGML_CUDA_ARCHS=${MLPERF_GGML_CUDA_ARCHS}
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
         -DGGML_ROCM=${MLPERF_IHV_GGML_ROCM}
         -DIOS=${IOS}
+        ${GGML_CUDA_COMPILER_ARG}
         ${GIT_EXECUTABLE_ARG}
         ${HIP_DIR_ARG}
         ${HIPBLAS_DIR_ARG}
         ${HIPBLAS_COMMON_DIR_ARG}
         ${ROCBLAS_DIR_ARG}
         ${GGML_VERSION_INFO}
+        ${SPIRV_HEADERS_DIR_ARG}
         ${IOS_ARGS}
 
     BUILD_COMMAND ${CMAKE_COMMAND} -E echo "Starting IHV GGML build for ${CMAKE_BUILD_TYPE}..."
-    COMMAND ${CMAKE_COMMAND} --build ${IHV_GGML_BINARY_DIR} --config $<CONFIG> 
+    COMMAND ${CMAKE_COMMAND} --build ${IHV_GGML_BINARY_DIR} --config $<CONFIG> --parallel
 
     INSTALL_COMMAND ${CMAKE_COMMAND} --install ${IHV_GGML_BINARY_DIR} --config $<CONFIG> --prefix ${IHV_GGML_INSTALL_DIR}/$<CONFIG> 
     LOG_CONFIGURE ON
     LOG_BUILD ON
     LOG_INSTALL ON
+    #BUILD_BYPRODUCTS 
+    INSTALL_BYPRODUCTS
+        # Those targets are not always built, but there is no harm in declaring too much sideproducts
+        ${CMAKE_BINARY_DIR}/IHV/GGML/bin/${CMAKE_BUILD_TYPE}/${CMAKE_SHARED_LIBRARY_PREFIX}IHV_GGML_EPs${CMAKE_SHARED_LIBRARY_SUFFIX}
+        ${CMAKE_BINARY_DIR}/IHV/GGML/CUDA/bin/${CMAKE_BUILD_TYPE}/${CMAKE_SHARED_LIBRARY_PREFIX}llama_cpp_CUDA${CMAKE_SHARED_LIBRARY_SUFFIX}
+        ${CMAKE_BINARY_DIR}/IHV/GGML/Vulkan/bin/${CMAKE_BUILD_TYPE}/${CMAKE_SHARED_LIBRARY_PREFIX}llama_cpp_Vulkan${CMAKE_SHARED_LIBRARY_SUFFIX}
 )
 
 

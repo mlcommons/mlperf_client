@@ -65,8 +65,23 @@ void RealTimeMonitoringPage::ShowStatus(const QString &action_type,
                                         const BenchmarkStatus &status) {
   BenchmarkStatusWidget *widget =
       new BenchmarkStatusWidget(action_type, status, this);
-  if (widget->exec())
-    QDesktopServices::openUrl(QUrl::fromLocalFile(status.logs_path_));
+  if (widget->exec() == QDialog::Accepted)
+    if (widget->OpenLogsRequested()) {
+#ifdef Q_OS_IOS
+      emit ShareLogsRequested(status.logs_path_);
+#else
+      QDesktopServices::openUrl(QUrl::fromLocalFile(status.logs_path_));
+#endif
+    } else if (widget->OpenReportRequested()) {
+      QStringList ids_for_report;
+      for (const auto &s : status.eps_benchmark_status_)
+        if (s.success_ && !s.benchmark_start_time_.isEmpty())
+          ids_for_report.push_back(s.benchmark_start_time_);
+
+      if (!ids_for_report.empty()) emit OpenReportRequested(ids_for_report);
+    }
+
+  widget->deleteLater();
 }
 
 ExecutionProgressWidget *RealTimeMonitoringPage::GetExecutionProgressWidget()

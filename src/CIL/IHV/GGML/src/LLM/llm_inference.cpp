@@ -102,7 +102,7 @@ void LLMInference::Init(const nlohmann::json& model_config) {
   }
 
   int total_layers = llama_model_n_layer(model_);
-  llama_free_model(model_);
+  llama_model_free(model_);
   model_ = nullptr;
 
   // Perform binary search to find the maximum number of GPU layers that fit in
@@ -112,7 +112,7 @@ void LLMInference::Init(const nlohmann::json& model_config) {
     int mid = (low + high) / 2;
     if (LoadModelAndContext(mid, device_id)) {
       llama_free(context_);
-      llama_free_model(model_);
+      llama_model_free(model_);
       context_ = nullptr;
       model_ = nullptr;
       best = mid;
@@ -179,11 +179,11 @@ bool LLMInference::LoadModelAndContext(int gpu_layers, int device_id) {
   model_params.devices = device_list;
   model_params.n_gpu_layers = gpu_layers;
   model_params.split_mode = LLAMA_SPLIT_MODE_NONE;
-  model_ = llama_load_model_from_file(model_path_.c_str(), model_params);
+  model_ = llama_model_load_from_file(model_path_.c_str(), model_params);
   if (!model_) return false;
 
   llama_context_params ctx_params = llama_context_default_params();
-  ctx_params.n_ctx = config_.model.context_length;
+  ctx_params.n_ctx = config_.context_length;
   ctx_params.n_batch =
       config_.search.max_total_length - config_.search.max_length;
 
@@ -192,9 +192,9 @@ bool LLMInference::LoadModelAndContext(int gpu_layers, int device_id) {
                                    : LLAMA_FLASH_ATTN_TYPE_DISABLED;
   if (ep_settings_.GetFa().value_or(false))
     logger_(LogLevel::kInfo, "Using Flash attention!");
-  context_ = llama_new_context_with_model(model_, ctx_params);
+  context_ = llama_init_from_model(model_, ctx_params);
   if (!context_) {
-    llama_free_model(model_);
+    llama_model_free(model_);
     model_ = nullptr;
     return false;
   }
@@ -347,7 +347,7 @@ void LLMInference::Deinit() {
     context_ = nullptr;
   }
   if (model_) {
-    llama_free_model(model_);
+    llama_model_free(model_);
     model_ = nullptr;
   }
   llama_backend_free();

@@ -95,6 +95,7 @@ class RealtimePageController : public AbstractController {
 
  signals:
   void ExecutionCancelRequested();
+  void OpenReportRequested(const QStringList& ids);
 
  private slots:
   /**
@@ -118,6 +119,13 @@ class RealtimePageController : public AbstractController {
    * @brief Respond to user cancel action.
    */
   void OnCancelClicked();
+
+  /**
+   * @brief Archive and share log files using the native system sheet.
+   * Only implemented for iOS.
+   * @param logs_path The directory path containing the log files.
+   */
+  void OnShareLogsRequested(const QString& logs_path);
 
   /**
    * @brief Update UI with current task info.

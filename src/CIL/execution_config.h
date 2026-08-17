@@ -22,6 +22,7 @@ class SystemConfig {
     return ep_dependencies_config_path_;
   }
   const std::string& GetBaseDir() const { return base_dir_; }
+  const std::string& GetPythonPath() const { return python_path_; }
 
   bool IsTempPathCorrect() const { return is_temp_path_correct_; }
   bool IsBaseDirCorrect() const { return is_base_dir_correct_; }
@@ -33,6 +34,7 @@ class SystemConfig {
     j["Comment"] = comment_;
     j["TempPath"] = temp_path_;
     j["EPDependenciesConfigPath"] = ep_dependencies_config_path_;
+    j["PythonPath"] = python_path_;
     return j;
   }
   const std::string& GetDownloadBehavior() const { return download_behavior_; }
@@ -43,6 +45,9 @@ class SystemConfig {
   void SetCacheLocalFiles(bool cache_local_files) {
     cache_local_files_ = cache_local_files;
   }
+  void SetPythonPath(const std::string& python_path) {
+    python_path_ = python_path;
+  }
 
  private:
   std::string comment_;
@@ -51,6 +56,7 @@ class SystemConfig {
   std::string ep_dependencies_config_path_;
   bool is_base_dir_correct_ = false;
   std::string base_dir_;
+  std::string python_path_;
   std::string download_behavior_ = "normal";
   bool cache_local_files_ = true;
 };
@@ -65,9 +71,15 @@ class ScenarioConfig {
   ScenarioConfig(const nlohmann::json& j) { FromJson(j); }
   ~ScenarioConfig() = default;
 
+  // Canonical name (e.g. "txt2txt"); used for code paths and IHV dispatch.
   const std::string& GetName() const { return name_; }
+  // Name as written in the config; preserves the alias for user-facing output.
+  const std::string& GetDisplayName() const {
+    return display_name_.empty() ? name_ : display_name_;
+  }
   const std::vector<ModelConfig>& GetModels() const { return models_; }
   std::vector<std::string> GetInputs() const;
+  std::vector<std::string> GetInputTypes() const;
   const std::vector<std::string>& GetAssets() const { return assets_; }
   const std::string& GetResultsFile() const { return results_file_; }
   const std::string& GetDataVerificationFile() const {
@@ -76,6 +88,12 @@ class ScenarioConfig {
   int GetIterations() const { return iterations_; }
   int GetIterationsWarmUp() const { return iterations_warmup_; }
   double GetInferenceDelay() const { return inference_delay_; }
+  bool IsAgentic() const { return is_agentic_; }
+  void SetIsAgentic(bool is_agentic) { is_agentic_ = is_agentic; }
+  bool GetToolsExecution() const { return tools_execution_; }
+  void SetToolsExecution(bool tools_execution) {
+    tools_execution_ = tools_execution;
+  }
   const std::vector<ExecutionProviderConfig>& GetExecutionProviders() const {
     return execution_providers_;
   }
@@ -157,6 +175,7 @@ class ScenarioConfig {
 
  private:
   std::string name_;
+  std::string display_name_;
   std::vector<ModelConfig> models_;
   std::vector<std::pair<std::string, std::string>> inputs_;
   std::vector<std::string> assets_;
@@ -165,6 +184,8 @@ class ScenarioConfig {
   int iterations_;
   int iterations_warmup_;
   double inference_delay_;
+  bool is_agentic_ = false;
+  bool tools_execution_ = true;
   std::string allowed_input_type_;
   std::vector<ExecutionProviderConfig> execution_providers_;
 };

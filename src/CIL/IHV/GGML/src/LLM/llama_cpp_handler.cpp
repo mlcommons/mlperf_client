@@ -9,9 +9,10 @@ namespace cil {
 namespace IHV {
 
 cil::IHV::LlamaCppHandler::LlamaCppHandler(const API_IHV_Setup_t& api) {
-  std::string model_name = api.model_name;
+  const std::string scenario_name = api.scenario_name;
   std::string model_path = api.model_path;
   std::string ep_settings_str = api.ep_settings;
+  const std::string model_name = api.model_base_name;
   nlohmann::json ep_settings = nlohmann::json::parse(ep_settings_str);
 
   auto logger = [=](cil::LogLevel level, std::string message) {
@@ -19,21 +20,17 @@ cil::IHV::LlamaCppHandler::LlamaCppHandler(const API_IHV_Setup_t& api) {
                message.c_str());
   };
 
-  if (model_name == "llama2" || model_name == "llama3" || model_name == "phi3.5" ||
-      model_name == "phi4") {
-    inference_ = std::make_shared<infer::LLMInference>(model_path, model_name,
-                                                          ep_settings, logger);
+  bool is_canonical_scenario = false;
+  IHV_VALIDATE_SCENARIO(api, scenario_name, is_canonical_scenario);
 
-    auto error_message = inference_->GetErrorMessage();
-    if (!error_message.empty()) {
-      api.logger(api.context, API_IHV_LogLevel::API_IHV_ERROR,
-                 error_message.c_str());
-      inference_.reset();
-      return;
-    }
-  } else {
-    auto error = "Model " + model_name + " is not supported";
-    api.logger(api.context, API_IHV_LogLevel::API_IHV_FATAL, error.c_str());
+  inference_ = std::make_shared<infer::LLMInference>(model_path, model_name,
+                                                     ep_settings, logger);
+
+  if (auto error_message = inference_->GetErrorMessage();
+      !error_message.empty()) {
+    api.logger(api.context, API_IHV_LogLevel::API_IHV_ERROR,
+               error_message.c_str());
+    inference_.reset();
     return;
   }
 
@@ -173,10 +170,11 @@ bool cil::IHV::LlamaCppHandler::Deinit(const API_IHV_Deinit_t& api) {
 const API_IHV_Struct_t* API_IHV_Setup(const API_IHV_Setup_t* api) {
   std::string ep_name = api->ep_name;
 
-  if (ep_name != "Metal" && ep_name != "IHV Metal" && 
-      ep_name != "Vulkan" && ep_name != "IHV Vulkan" &&
-      ep_name != "CUDA"  && ep_name != "IHV CUDA" &&
-      ep_name != "ROCm" && ep_name != "IHV ROCm") {
+  if (ep_name != "llama-cpp" && ep_name != "LlamaCpp" &&
+      ep_name != "IHV LlamaCpp" && ep_name != "Metal" &&
+      ep_name != "IHV Metal" && ep_name != "Vulkan" && ep_name != "IHV Vulkan" &&
+      ep_name != "CUDA" && ep_name != "IHV CUDA" && ep_name != "ROCm" &&
+      ep_name != "IHV ROCm") {
     auto error = "EP " + ep_name + " is not supported by this IHV";
     api->logger(api->context, API_IHV_LogLevel::API_IHV_FATAL, error.c_str());
     return nullptr;
@@ -190,10 +188,12 @@ const API_IHV_Struct_t* API_IHV_Setup(const API_IHV_Setup_t* api) {
 
   ihv_struct->ihv_data = handler;
   ihv_struct->device_type = handler->GetDeviceType().c_str();
+  ihv_struct->api_version = API_IHV_VERSION;
 
   return ihv_struct;
 }
 
+DEFINE_API_IHV_GET_API_VERSION_BASIC_IMPL()
 DEFINE_API_IHV_INIT_BASIC_IMPL(cil::IHV::LlamaCppHandler)
 DEFINE_API_IHV_ENUMERATE_DEVICES_BASIC_IMPL(cil::IHV::LlamaCppHandler)
 DEFINE_API_IHV_PREPARE_BASIC_IMPL(cil::IHV::LlamaCppHandler)

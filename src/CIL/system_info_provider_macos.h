@@ -5,10 +5,8 @@
 
 #include "system_info_provider.h"
 
-#if !MLPERF_PUBLISHING
 class SMCReader;
 class IOReportReader;
-#endif
 
 namespace cil {
 
@@ -33,10 +31,8 @@ class SystemInfoProviderMacOS : public SystemInfoProvider {
   size_t getMemoryUsage() const;
 
   host_cpu_load_info_data_t cpu_prev_load_info_;
-#if !MLPERF_PUBLISHING
   std::shared_ptr<SMCReader> smc_reader_;
   std::shared_ptr<IOReportReader> io_report_reader_;
-#endif
 };
 
 }  // namespace cil

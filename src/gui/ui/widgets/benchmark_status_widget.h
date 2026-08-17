@@ -40,11 +40,16 @@ class BenchmarkStatusWidget : public QDialog {
                                  const gui::BenchmarkStatus& status,
                                  QWidget* parent = nullptr);
 
+  bool OpenLogsRequested() const { return open_logs_requested_; }
+  bool OpenReportRequested() const { return open_report_requested_; }
+
  protected:
   void paintEvent(QPaintEvent* event) override;
 
  private:
   QPushButton* close_button_;
+  bool open_logs_requested_;
+  bool open_report_requested_;
 };
 
 #endif  // BENCHMARK_STATUS_WIDGET_H_

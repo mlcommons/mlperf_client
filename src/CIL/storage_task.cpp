@@ -11,14 +11,11 @@ LoggerPtr loggerStorageTask(Logger::getLogger("Downloader"));
 namespace cil {
 StorageTask::StorageTask(std::shared_ptr<Storage> storage,
                          const std::string& file_name,
-                         const std::string& sub_dir,
-                         bool cache_local_files)
+                         const std::string& sub_dir, bool cache_local_files)
     : storage_(storage),
       file_name_(file_name),
       sub_dir_(sub_dir),
-      cache_local_files_(cache_local_files),
-      status_(Status::kReady),
-      progress_(0) {}
+      cache_local_files_(cache_local_files) {}
 
 std::string StorageTask::GetSourcePath() const { return file_name_; }
 
@@ -51,15 +48,20 @@ bool StorageTask::CheckIfFileExistsInStorage(bool ignore_cache) {
     return false;
   }
 
+  if (Storage::IsLocalDirectory(file_name_)) {
+    res_path_ = std::filesystem::path(file_name_.substr(7)).string();
+    return true;
+  }
+
   if (storage_->IsForceDownloadEnabled()) {
     res_path_ = "";
     return false;
   }
 
   // File name is extracted from the URI
-  auto res_path =
-      storage_->CheckIfLocalFileExists(file_name_, sub_dir_, ignore_cache, cache_local_files_);
-  if (!res_path.empty()) {
+  if (auto res_path = storage_->CheckIfLocalFileExists(
+          file_name_, sub_dir_, ignore_cache, cache_local_files_);
+      !res_path.empty()) {
     LOG4CXX_INFO(
         loggerStorageTask,
         "File: "
@@ -85,14 +87,26 @@ bool StorageTask::Run() {
     } else {
       status_ = Status::kRunning;
       res_path_ = "";
-      bool sizes_only = storage_->IsCollectRemoteSizesOnlyEnabled();
+      bool sizes_only = storage_->IsCollectFileSizesOnlyEnabled();
+      std::string download_error;
       bool success = storage_->FindFile(
-          file_name_, sub_dir_, [this](int percent) { progress_ = percent; },
-          res_path_);
+          file_name_, sub_dir_,
+          [this](int percent, uint64_t downloaded, uint64_t total) {
+            progress_ = percent;
+            downloaded_bytes_ = downloaded;
+            total_bytes_ = total;
+          },
+          res_path_, download_error);
       if (!success) {
-        error_message_ = (sizes_only ? "Failed to get the file size: "
-                                     : "Failed to get the file: ") +
-                         file_name_;
+        if (!download_error.empty()) {
+          error_message_ = (sizes_only ? "failed to get the size of "
+                                       : "failed to download ") +
+                           file_name_ + ": " + download_error;
+        } else {
+          error_message_ = (sizes_only ? "Failed to get the file size: "
+                                       : "Failed to get the file: ") +
+                           file_name_;
+        }
       }
       if (sizes_only) {
         status_ = success ? Status::kCompleted : Status::kFailed;
@@ -108,8 +122,7 @@ bool StorageTask::Run() {
 }
 
 void StorageTask::Cancel() {
-  // can not be canceled if already completed
-  if (status_ == Status::kCompleted) return;
+  if (status_ >= Status::kCompleted) return;
   status_ = Status::kCanceled;
   storage_->StopDownload();
 }

@@ -43,7 +43,7 @@ class ExecutorBase : public ProgressableTask {
             static_cast<long long>(inference_delay * 1000))) {
     deps_dir_ = std::filesystem::path(library_path_).parent_path().string();
   }
-  virtual ~ExecutorBase(){};
+  virtual ~ExecutorBase() {};
   /**
    * @brief A pure virtual function to get the benchmark result.
    *

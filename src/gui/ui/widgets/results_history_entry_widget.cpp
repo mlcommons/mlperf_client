@@ -8,9 +8,9 @@
 
 ResultsHistoryEntryWidget::ResultsHistoryEntryWidget(
     const QString &name, const QDateTime &dateTime, bool passed,
-    double time_to_first_token, double token_generation_rate,
-    const QString &error_message, const gui::SystemInfoDetails &sys_info,
-    const QString &config_file_comment, QWidget *parent)
+    const gui::MainScores &scores, const QString &error_message,
+    const gui::SystemInfoDetails &sys_info, const QString &config_file_comment,
+    QWidget *parent)
     : QWidget(parent), is_passed_(passed) {
   ui_.setupUi(this);
 
@@ -76,14 +76,10 @@ ResultsHistoryEntryWidget::ResultsHistoryEntryWidget(
   ui_.time_label_->setText(dateTime.toString("h:mm AP"));
 
   if (passed) {
-    ui_.TTFT_label_->setText(
-        time_to_first_token == 0.0
-            ? "N/A"
-            : QString::number(time_to_first_token, 'f', 2));
-    ui_.TPS_label_->setText(
-        token_generation_rate == 0.0
-            ? "N/A"
-            : QString::number(token_generation_rate, 'f', 1));
+    ui_.TTFT_title_label_->setText(scores[0].title + ":");
+    ui_.TTFT_label_->setText(scores[0].value);
+    ui_.TPS_title_label_->setText(scores[1].title + ":");
+    ui_.TPS_label_->setText(scores[1].value);
   } else {
     ui_.open_button_->setEnabled(false);
   }

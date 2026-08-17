@@ -3,7 +3,7 @@
 
 #include "../ggml_eps_config.h"
 #include "base_inference_common.h"
-#include "llm/llama_config.h"
+#include "llm/llm_config.h"
 
 class llama_model;
 class llama_context;
@@ -36,7 +36,7 @@ class LLMInference : public cil::infer::BaseInferenceCommon {
   bool LoadModelAndContext(int gpu_layers, int device_id);
 
   const GGMLBasedExecutionProviderSettings ep_settings_;
-  cil::infer::LlamaConfig config_;
+  cil::infer::LlmConfig config_;
 
   DeviceListPtr device_list_;
   std::vector<std::pair<ggml_backend_device*, std::string> > devices_;

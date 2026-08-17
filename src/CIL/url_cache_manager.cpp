@@ -14,6 +14,27 @@ log4cxx::LoggerPtr url_cache_logger(log4cxx::Logger::getLogger("Downloader"));
 
 namespace cil {
 
+namespace {
+// Mirrors the DeviceEnumerationCache singleton pattern in
+// preparation_stage.cpp. Touched only from the enumeration worker thread, so no
+// synchronisation.
+std::unordered_map<std::string, uint64_t>& UrlSizeCache() {
+  static std::unordered_map<std::string, uint64_t> cache;
+  return cache;
+}
+}  // namespace
+
+std::optional<uint64_t> URLCacheManager::GetCachedSize(const std::string& url) {
+  const auto& cache = UrlSizeCache();
+  if (auto it = cache.find(url); it != cache.end()) return it->second;
+  return std::nullopt;
+}
+
+void URLCacheManager::SetCachedSize(const std::string& url,
+                                    uint64_t bytes_needed) {
+  UrlSizeCache()[url] = bytes_needed;
+}
+
 const std::string URLCacheManager::kUrlCacheFileName = "url_cache.json";
 
 URLCacheManager::URLCacheManager(const std::string& deps_dir) {
@@ -56,19 +77,21 @@ bool URLCacheManager::ValidateFile(const std::string& url,
   // when the same IHV dependency appears in multiple configs
   static std::unordered_map<std::string, bool> validation_cache;
 
-  std::string validation_key = url + "|" + filePath + "|" + (check_version ? "v" : "");
+  std::string validation_key =
+      url + "|" + filePath + "|" + (check_version ? "v" : "");
   try {
     if (std::filesystem::exists(filePath)) {
       auto mod_time = std::filesystem::last_write_time(filePath);
-      validation_key += "|" + std::to_string(static_cast<long long>(mod_time.time_since_epoch().count()));
+      validation_key += "|" + std::to_string(static_cast<long long>(
+                                  mod_time.time_since_epoch().count()));
     }
   } catch (...) {
     // Ignore any errors in accessing file modification time
   }
 
   if (!forced) {
-    auto it = validation_cache.find(validation_key);
-    if (it != validation_cache.end()) {
+    if (auto it = validation_cache.find(validation_key);
+        it != validation_cache.end()) {
       return it->second;
     }
   }
@@ -101,8 +124,7 @@ void URLCacheManager::AddUrlToCache(const std::string& url,
                                     bool with_version) {
   // clean the cache, if the file path exists in other urls, remove it
   for (nlohmann::json::iterator it = cache_.begin(); it != cache_.end();) {
-    std::string it_value = it.value()[0];
-    if (it_value == file_path) {
+    if (std::string it_value = it.value()[0]; it_value == file_path) {
       // remove path from the cache
       it = cache_.erase(it);
     } else {

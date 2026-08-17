@@ -1,8 +1,11 @@
 #pragma once
 
 #include <atomic>
+#include <cstdint>
 #include <functional>
 #include <string>
+
+#include "common/expected.h"
 
 #if RELEASE_BUILD
 #define LOCAL_DOWNLOAD 0
@@ -12,7 +15,14 @@
 
 namespace cil {
 
-typedef std::function<void(int)> DownloadProgressCallback;
+// (percent_completed, downloaded_bytes, total_bytes)
+using DownloadProgressCallback = std::function<void(int, uint64_t, uint64_t)>;
+
+// Metadata from a HEAD request: file size and range-request support.
+struct RemoteFileMeta {
+  uint64_t size = 0;
+  bool accepts_range = false;
+};
 /**
  * @class Downloader
  *
@@ -51,9 +61,10 @@ class Downloader {
    *
    */
 
-  bool operator()(const std::string& file_url, bool get_remote_size_only,
-                  uint64_t& file_size,
-                  const DownloadProgressCallback& progress_callback) const;
+  bool operator()(const std::string& file_url, bool get_file_size_only,
+                  bool include_local_size, uint64_t& file_size,
+                  const DownloadProgressCallback& progress_callback,
+                  std::string& error_message) const;
   /**
    * @brief Interrupts the download process.
    *
@@ -82,17 +93,15 @@ class Downloader {
                      uint64_t end, const std::string& output_file_path,
                      std::atomic<uint64_t>& progress,
                      std::atomic<bool>& has_failed, int retry) const;
-  bool GetRemoteFileSize(const std::string& file_url,
-                         uint64_t& file_size) const;
+  Expected<uint64_t> GetRemoteFileSize(const std::string& file_url) const;
 
   template <typename ClientType>
   void SetProxyIfAvailable(ClientType& client) const;
   std::pair<std::string, int> ParseProxy(const std::string_view& proxy) const;
 
   template <typename ClientType>
-  bool GetRemoteFileMeta(ClientType& client, const std::string& host_file_path,
-                         uint64_t& file_size,
-                         bool* accepts_range = nullptr) const;
+  Expected<RemoteFileMeta> GetRemoteFileMeta(
+      ClientType& client, const std::string& host_file_path) const;
 };
 
 }  // namespace cil

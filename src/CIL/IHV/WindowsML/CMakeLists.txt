@@ -14,6 +14,12 @@ include(ExternalProject)
 
 message(STATUS "Building with IHV WindowsML support...")
 
+# Mirror the inner option here so users can pass -DMLPERF_WINDOWSML_ENABLE_MIGRAPHX=ON
+# at the top-level CMake invocation and have it propagate into the
+# ExternalProject sub-build. See src/CMakeLists.txt for the rationale.
+option(MLPERF_WINDOWSML_ENABLE_MIGRAPHX
+       "Enable enumeration/registration of the MIGraphX WinML EP" OFF)
+
 # Define directories for ORT GenAI
 set(IHV_WIN_ML_BINARY_DIR ${CMAKE_BINARY_DIR}/IHV/WindowsML)
 set(IHV_WIN_ML_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -40,6 +46,7 @@ ExternalProject_Add(ihv_win_ml
         -DCMAKE_CXX_STANDARD=20
         -DWIN_ML_INSTALL_DIR=${WIN_ML_INSTALL_DIR}
         -DENV_PATH=${ENV_PATH}
+        -DMLPERF_WINDOWSML_ENABLE_MIGRAPHX=${MLPERF_WINDOWSML_ENABLE_MIGRAPHX}
 
     # Custom build command
     BUILD_COMMAND ${CMAKE_COMMAND} -E echo "Starting IHV WindowsML build for ${CMAKE_BUILD_TYPE}..."

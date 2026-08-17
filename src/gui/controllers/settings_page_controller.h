@@ -36,6 +36,7 @@ class SettingsPageController : public AbstractController {
  private slots:
   void OnDataPathChanged(const QString& path);
   void OnLogsPathChanged(const QString& path);
+  void OnPythonPathChanged(const QString& path);
   void OnKeepLogsChanged(bool keep);
   void OnAskBeforeDownloadChanged(bool ask);
   void OnResetToDefaultsRequested();

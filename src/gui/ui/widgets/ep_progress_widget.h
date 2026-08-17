@@ -16,7 +16,8 @@ class EPProgressWidget : public QWidget {
  public:
   EPProgressWidget(const QString &name, const QString &description,
                    const QString &icon_path, const QString &long_name,
-                   const QString &model_name, QWidget *parent = nullptr);
+                   const QString &model_name, bool is_agentic = false,
+                   QWidget *parent = nullptr);
 
   /**
    * @brief Updates the progress display with current step information
@@ -68,6 +69,7 @@ class EPProgressWidget : public QWidget {
   QString model_name_;
   QString ep_description_;
   QString icon_path_;
+  bool is_agentic_;
 };
 
 #endif  // EP_PROGRESS_WIDGET_H

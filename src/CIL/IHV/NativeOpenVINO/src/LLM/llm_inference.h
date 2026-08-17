@@ -8,7 +8,7 @@
 
 #include "../../IHV.h"  // Include IHV API definitions
 #include "../base_inference.h"
-#include "llm/llama_config.h"
+#include "llm/llm_config.h"
 
 namespace {
 
@@ -22,19 +22,19 @@ static double GetDurationInMs(
 }
 
 class CallbackStreamer final : public ov::genai::StreamerBase {
-public:
+ public:
   using clock = std::chrono::high_resolution_clock;
   using time_point = CallbackStreamer::clock::time_point;
-  using Status     = ov::genai::StreamingStatus;
+  using Status = ov::genai::StreamingStatus;
 
   CallbackStreamer() = default;
 
   Status write(int64_t token) override {
-      if (token_callback_) {
-          token_callback_(static_cast<uint32_t>(token));
-      }
-      token_time_.emplace_back(clock::now());  // Record token generation time
-      return Status::RUNNING;                  // Continue tokens generation
+    if (token_callback_) {
+      token_callback_(static_cast<uint32_t>(token));
+    }
+    token_time_.emplace_back(clock::now());  // Record token generation time
+    return Status::RUNNING;                  // Continue tokens generation
   }
 
   void end() override {}
@@ -42,10 +42,10 @@ public:
   void reset(size_t max_tokens = 0,
              std::function<void(uint32_t)> token_callback = 0) {
     token_callback_ = token_callback;
-      token_time_.clear();
-      if (max_tokens > 0) {
-          token_time_.reserve(max_tokens);
-      }
+    token_time_.clear();
+    if (max_tokens > 0) {
+      token_time_.reserve(max_tokens);
+    }
   }
 
   CallbackStreamer::time_point GetTokenTimeOr(
@@ -53,10 +53,10 @@ public:
     return idx < token_time_.size() ? token_time_[idx] : def;
   }
 
-double GetMsCI(size_t start_token,
-               CallbackStreamer::time_point start_time) const;
+  double GetMsCI(size_t start_token,
+                 CallbackStreamer::time_point start_time) const;
 
-private:
+ private:
   std::vector<CallbackStreamer::time_point> token_time_;
   std::function<void(uint32_t)> token_callback_;
 };
@@ -70,8 +70,8 @@ namespace infer {
 class LLMInference : public BaseInference {
  public:
   LLMInference(const std::string& model_path, const std::string& model_name,
-                  const NativeOpenVINOExecutionProviderSettings& ep_settings,
-                  cil::Logger logger, const std::string& deps_dir);
+               const NativeOpenVINOExecutionProviderSettings& ep_settings,
+               cil::Logger logger, const std::string& deps_dir);
 
   void Init(const nlohmann::json& model_config,
             std::optional<API_IHV_DeviceID_t> device_id);
@@ -96,7 +96,8 @@ class LLMInference : public BaseInference {
   }
 
  private:
-  cil::infer::LlamaConfig config_;
+  cil::infer::LlmConfig config_;
+  const bool is_agentic_;
   std::shared_ptr<CallbackStreamer> streamer_;
   std::unique_ptr<ov::genai::LLMPipeline> pipeline_;
 

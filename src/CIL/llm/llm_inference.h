@@ -1,16 +1,17 @@
 #ifndef LLAMA2_INFERENCE_H_
 #define LLAMA2_INFERENCE_H_
 
-#include <nlohmann/json.hpp>
-#include <ratio>
-#include <tuple>
-#include <vector>
-#include <thread>
 #include <atomic>
 #include <mutex>
+#include <nlohmann/json.hpp>
+#include <optional>
+#include <ratio>
+#include <thread>
+#include <tuple>
+#include <vector>
 
-#include "base_inference.h"
 #include "../system_info_provider.h"
+#include "base_inference.h"
 
 #define HW_MONITORING 1
 
@@ -22,37 +23,27 @@ class LLMInference : public BaseInference {
   using Token = uint32_t;
   using Timestamp = Clock::time_point;
   using MillisecDuration = std::chrono::duration<double, std::milli>;
-  using HWInfoRecord = std::tuple<cil::SystemInfoProvider::MemoryInfo, Timestamp>;
+  using HWInfoRecord =
+      std::tuple<cil::SystemInfoProvider::MemoryInfo, Timestamp>;
 
   struct Result {
-    Result(size_t input_tokens_count, const std::vector<Token>& tokens,
-           const std::vector<Timestamp>& timestamps, const std::vector<HWInfoRecord>& hw_info_records,
-           Timestamp start_time, Timestamp end_time)
-        : input_tokens_count(input_tokens_count),
-          tokens(tokens),
-          timestamps(timestamps),
-          hw_info_records(hw_info_records),
-          start_time(start_time),
-          end_time(end_time) {}
-
-    Result() = default;
-    Result(const Result& o) = default;
-    Result(Result&& o) = default;
-
-    size_t input_tokens_count;          // Number of input tokens
+    size_t input_tokens_count = 0;      // Number of input tokens
     std::vector<Token> tokens;          // Output tokens
     std::vector<Timestamp> timestamps;  // Timestamp when token was generated
-    std::vector<HWInfoRecord>
-        hw_info_records;                // System memory info
-    Timestamp start_time;               // Inference call start time
-    Timestamp end_time;                 // Inference call end time
-    std::string category;               // Prompt category
+    std::vector<HWInfoRecord> hw_info_records;  // System memory info
+    Timestamp start_time;                       // Inference call start time
+    Timestamp end_time;                         // Inference call end time
+    std::string category;                       // Prompt category
+    std::optional<MillisecDuration> tools_time =
+        std::nullopt;  // Time spent in tools
   };
 
-  LLMInference(const std::string& model_type, const std::string& model_path,
-               const std::string& deps_dir,
-                  EP ep, const nlohmann::json& ep_settings,
-                  const std::string& library_path);
+  LLMInference(const std::string& scenario_name,
+               const std::string& model_base_name,
+               const std::string& model_path, const std::string& deps_dir,
+               EP ep, const nlohmann::json& ep_settings,
+               const std::string& library_path,
+               const std::string& logger_name = "");
   ~LLMInference();
 
   bool IsValid() const;
@@ -69,7 +60,7 @@ class LLMInference : public BaseInference {
 
   // Run model inference
   // Result must be valid until reset() call
-  Result Run(const std::vector<Token>& input_data);
+  Result Run(std::span<const uint32_t> input_data);
 
   /**
    * @brief Clears the error message.
@@ -84,7 +75,6 @@ class LLMInference : public BaseInference {
 
   std::vector<Token> tokens_;
   std::vector<Timestamp> timestamps_;
-  const std::string model_type_;
 
   std::vector<HWInfoRecord> hw_info_records_;
   void LogHardwareInfo();

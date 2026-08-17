@@ -1,0 +1,21 @@
+{
+  "model_config": {
+    "context_length": 4096,
+    "search": {
+      "method": "greedy",
+      "temperature": 0.6,
+      "top_k": 1,
+      "top_p": 0.9,
+      "stop_on_eos": true,
+      "max_length": 256
+    }
+  },
+  "prompts": [
+    {
+      "system": "provide the JSON objects of the following CSV file, use this JSON structure: { \"id\": int, \"EP\": \"string\", \"Device\": \"string\", \"Scenario\": \"string\", \"Date\": \"string\", \"Tested By\": \"string\", \"Config Category\": \"string\", \"System Info\": \"string\", \"Overall TTFT (seconds)\": fp, \"Overall TPS\": fp, \"Content Generation TTFT (seconds)\": fp, \"Content Generation TPS\": fp, \"Creative Writing TTFT (seconds)\": fp, \"Creative Writing TPS\": fp, \"Summarization Light TTFT (seconds)\": fp, \"Summarization Light TPS\": fp, \"Summarization Moderate TTFT (seconds)\": fp, \"Summarization Moderate TPS\": fp, \"Code Analysis TTFT (seconds)\": fp, \"Code Analysis TPS\": fp }",
+      "user": "id,EP ,Device ,Scenario ,Date ,Tested By  ,Config Category ,System Info ,Overall TTFT (seconds),Overall TPS,Content Generation TTFT (seconds),Content Generation TPS,Creative Writing TTFT (seconds),Creative Writing TPS,Summarization Light TTFT (seconds),Summarization Light TPS,Summarization Moderate TTFT (seconds),Summarization Moderate TPS,Code Analysis TTFT (seconds),Code Analysis TPS\n1,NativeOpenVINO,GPU,Llama 3.1 8B Instruct,04-09-2026 10:26:09..320 -07:00,test,base,CPU: Intel(R) Core(TM) Ultra 9 288V(x64);RAM: 32 GB;GPU: Intel(R) Arc(TM) 140V GPU (16GB);OS: Microsoft Windows 11 Enterprise,0.317,23.59,0.07,24.739,0.212,24.124,0.357,23.862,0.647,22.735,0.937,22.564\n2,WindowsML,GPU,Llama 3.1 8B Instruct,04-09-2026 12:16:08..320 -07:00,test,base,CPU: Intel(R) Core(TM) Ultra 9 288V(x64);RAM: 32 GB;GPU: Intel(R) Arc(TM) 140V GPU (16GB);OS: Microsoft Windows 11 Enterprise,0.389,23.491,0.097,24.187,0.242,23.847,0.392,23.793,0.762,23.106,1.281,22.557\n3,NativeOpenVINO,NPU,Llama 3.1 8B Instruct,04-09-2026 12:04:42..320 -07:00,test,base,CPU: Intel(R) Core(TM) Ultra 9 288V(x64);RAM: 32 GB;GPU: Intel(R) Arc(TM) 140V GPU (16GB);OS: Microsoft Windows 11 Enterprise,1.028,18.485,0.274,20.057,0.661,20.451,1.043,20.916,1.903,12.995,3.192,19.36\n4,WindowsML,NPU,Llama 3.1 8B Instruct,04-09-2026 12:19:05..320 -07:00,test,base,CPU: Intel(R) Core(TM) Ultra 9 288V(x64);RAM: 32 GB;GPU: Intel(R) Arc(TM) 140V GPU (16GB);OS: Microsoft Windows 11 Enterprise,1.017,18.709,0.277,18.154,0.671,18.992,1.008,20.126,1.91,17,3.037,19.431"
+    }
+  ],
+  "category": "Structured Text",
+  "apply_chat_template": true
+}

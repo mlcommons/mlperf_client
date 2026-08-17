@@ -13,7 +13,7 @@ class PathComboBox : public QComboBox {
  public:
   explicit PathComboBox(QWidget* parent = nullptr);
 
-  /** 
+  /**
    * @brief Sets the list of predefined paths.
    */
   void SetPredefinedPaths(const QStringList& paths);
@@ -28,17 +28,30 @@ class PathComboBox : public QComboBox {
    */
   QString GetSelectedPath() const;
 
+  /**
+   * @brief Sets whether a browsed directory must be writable (default) or
+   * only needs to exist.
+   */
+  void SetRequireWritable(bool require_writable);
+
+  /**
+   * @brief Sets the title of the "Browse..." directory dialog.
+   */
+  void SetBrowseDialogTitle(const QString& title);
+
  signals:
   void PathChanged(const QString& new_path);
 
  private slots:
-  /** 
+  /**
    * @brief Handles text changes in the combo box.
    */
   void OnCurrentTextChanged(const QString& text);
 
  private:
-  QString previous_selected_path; 
+  QString previous_selected_path;
+  QString browse_dialog_title_ = "Select Data Directory";
+  bool require_writable_ = true;
 };
 
 #endif  // PATH_COMBO_BOX_H_

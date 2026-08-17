@@ -34,7 +34,6 @@ class StageBase {
 
   virtual std::string GetName() const = 0;
 
-
   const log4cxx::LoggerPtr& GetLogger() const { return logger_; }
   const ExecutionConfig& GetConfig() const { return config_; }
   Unpacker& GetUnpacker() { return unpacker_; }
@@ -42,11 +41,24 @@ class StageBase {
     return ep_dependencies_manager_;
   }
 
+  /// User-facing reason the last Run() failed (or empty if it succeeded /
+  /// nothing was recorded). Subclasses populate via SetErrorMessage(); the
+  /// runner reads it back to surface a specific message instead of a generic
+  /// "stage failed" in the GUI status widget / CLI console.
+  const std::string& GetErrorMessage() const { return error_message_; }
+
  protected:
+  void SetErrorMessage(std::string message) {
+    error_message_ = std::move(message);
+  }
+
   const log4cxx::LoggerPtr& logger_;
   const ExecutionConfig& config_;
   Unpacker& unpacker_;
   EPDependenciesManager& ep_dependencies_manager_;
+
+ private:
+  std::string error_message_;
 };
 
 using StagePtr = std::shared_ptr<StageBase>;

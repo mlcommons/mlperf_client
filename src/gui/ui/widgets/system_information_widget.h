@@ -19,6 +19,9 @@ class SystemInformationWidget : public ExpandableWidget {
       const QString& image_path, const QString& header_text,
       const QList<QPair<QString, QString>>& header_key_values);
 
+ protected:
+  int GetContentPreferredHeight() const override;
+
  private:
   QHBoxLayout* information_widgets_layout_;
 };

@@ -1,8 +1,10 @@
 #ifndef STORAGE_TASK_H_
 #define STORAGE_TASK_H_
 
-#include "progressable_task.h"
 #include <atomic>
+#include <cstdint>
+
+#include "progressable_task.h"
 namespace cil {
 
 class Storage;
@@ -27,6 +29,18 @@ class StorageTask : public ProgressableTask {
   std::string getErrorMessage() const override { return error_message_; }
   bool CheckIfTaskCanBeSkipped() override;
 
+  /**
+   * @brief Bytes downloaded so far for this task (0 until a download starts,
+   * and 0 for tasks served from cache).
+   */
+  uint64_t GetDownloadedBytes() const { return downloaded_bytes_; }
+
+  /**
+   * @brief Total size in bytes of the file this task downloads (0 until known,
+   * and 0 for tasks served from cache).
+   */
+  uint64_t GetTotalBytes() const { return total_bytes_; }
+
  private:
   std::shared_ptr<Storage> storage_;
   std::string file_name_;
@@ -37,8 +51,10 @@ class StorageTask : public ProgressableTask {
   bool pre_check_done_ = false;
   bool is_target_file_valid_ = false;
 
-  std::atomic<Status> status_;
-  std::atomic<int> progress_;
+  std::atomic<Status> status_{Status::kReady};
+  std::atomic<int> progress_{0};
+  std::atomic<uint64_t> downloaded_bytes_{0};
+  std::atomic<uint64_t> total_bytes_{0};
   std::atomic<std::chrono::high_resolution_clock::time_point> start_time_;
 
   bool CheckIfFileExistsInStorage(bool ignore_cache);

@@ -1,24 +1,37 @@
 #include "base_inference.h"
 
+#include <winrt/Windows.ApplicationModel.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.System.h>
 
+#include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <set>
+#include <sstream>
 #include <thread>
 
 #include "winrt/Microsoft.Windows.AI.MachineLearning.h"
+#include <winrt/Windows.Foundation.Collections.h>
 
 #define NOMINMAX
+// clang-format off
 #include <windows.h>
-#include <MddBootstrap.h>
+// clang-format on
 
 #define SHOW_DEBUG_ENUMERATION 0
 
 namespace fs = std::filesystem;
 namespace winml = winrt::Microsoft::Windows::AI::MachineLearning;
+
+static std::string LowerCase(const std::string& input) {
+  std::string out;
+  std::transform(input.begin(), input.end(), std::back_inserter(out),
+                 [](unsigned char c) { return std::tolower(c); });
+  return out;
+}
 
 static std::string ConvertWideToUtf8(const std::wstring& wstr) {
   int count = WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), wstr.length(), NULL,
@@ -27,6 +40,7 @@ static std::string ConvertWideToUtf8(const std::wstring& wstr) {
   WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), -1, &str[0], count, NULL, NULL);
   return str;
 }
+
 
 void LogInstalledWinMLEPVersions(cil::Logger& logger_cb) {
   static const auto runHiddenCommandCapture =
@@ -144,82 +158,190 @@ void LogInstalledWinMLEPVersions(cil::Logger& logger_cb) {
   }
 }
 
+// Outcome of the one-shot WinML runtime-activation + EP-registration phase;
+// the caller switches on it for a specific diagnostic.
+enum class EpInitOutcome {
+  kSuccess,          // Runtime activated and at least one EP registered.
+  kActivationFailed, // Self-contained WinML runtime failed to activate.
+  kNoEpRegistered,   // Runtime OK, but the catalog yielded no usable EPs.
+};
+
 static std::once_flag g_epRegistrationFlag;
-static bool EnsureAndRegisterEPs(Ort::Env& env, cil::Logger& logger) {
-  static bool initialized = false;
+static EpInitOutcome g_epInitOutcome = EpInitOutcome::kActivationFailed;
 
+static EpInitOutcome EnsureAndRegisterEPs(Ort::Env& env, cil::Logger& logger) {
   std::call_once(g_epRegistrationFlag, [&env, &logger]() {
-    // Initialize Windows App SDK (if not already initialized)
-    const UINT32 majorMinor = 0x00010008;  // WinAppSDK 1.8
-    PACKAGE_VERSION minVersion{};          // no minimum
-    const HRESULT hr = MddBootstrapInitialize2(
-        majorMinor,                                       // majorMinorVersion
-        nullptr,                                          // versionTag (stable)
-        minVersion,                                       // minVersion
-        MddBootstrapInitializeOptions_OnNoMatch_ShowUI);  // options
-    initialized = SUCCEEDED(hr);
-
+    // Self-contained WinML: the runtime is bundled and activated via RegFree
+    // WinRT — deliberately no MddBootstrap / WindowsAppRuntimeInstall.exe /
+    // containment workaround (those are WASDK framework APIs).
     winrt::init_apartment();
 
-    // Register all certified EPs, or try to register all individually if that
-    // fails
+    // Enumerate all certified EP packages; don't pre-filter on the name suffix.
+    // The trailing `.x.y` (e.g. ...WinML.AMD.NPU.EP.1.8) is the EP package
+    // version, not a WinML version.
     auto catalog = winml::ExecutionProviderCatalog::GetDefault();
-    try {
-      logger(cil::LogLevel::kInfo,
-             "Initializing and registering certified EPs.");
-      catalog.EnsureAndRegisterCertifiedAsync().get();
-    } catch (const std::exception& e) {
-      logger(cil::LogLevel::kWarning,
-             std::string("EP catalog init failed: ") + e.what());
+    logger(cil::LogLevel::kInfo,
+           "Initializing and registering certified EPs.");
 
-      logger(cil::LogLevel::kInfo,
-             "Attempting to individually ensure and register all EPs.");
+    auto get_package_name =
+        [](const winml::ExecutionProvider& p) -> std::wstring {
+      // Some providers (e.g. in-box ones not backed by an Appx framework)
+      // expose a default-constructed (null) PackageId. Dereferencing it would
+      // raise an SEH access violation in the WinRT consume template, which
+      // /EHsc does NOT translate into a C++ exception. Guard explicitly.
+      try {
+        auto pkg_id = p.PackageId();
+        if (!pkg_id) return {};
+        auto name = pkg_id.Name();
+        return std::wstring(name.c_str());
+      } catch (...) {
+        return {};
+      }
+    };
 
-      for (auto const& p : catalog.FindAllProviders()) {
+    auto ready_state_str =
+        [](winml::ExecutionProviderReadyState s) -> const char* {
+      switch (s) {
+        case winml::ExecutionProviderReadyState::NotPresent:
+          return "NotPresent";
+        case winml::ExecutionProviderReadyState::NotReady:
+          return "NotReady";
+        case winml::ExecutionProviderReadyState::Ready:
+          return "Ready";
+      }
+      return "Unknown";
+    };
+
+    auto get_safe_name = [](const winml::ExecutionProvider& p) -> std::wstring {
+      try {
+        auto n = p.Name();
+        return std::wstring(n.c_str());
+      } catch (...) {
+        return {};
+      }
+    };
+
+    auto get_safe_path = [](const winml::ExecutionProvider& p) -> std::wstring {
+      try {
+        auto p_str = p.LibraryPath();
+        return std::wstring(p_str.c_str());
+      } catch (...) {
+        return {};
+      }
+    };
+
+    // First pass — enumerate everything the catalog reports so we have a
+    // ground-truth log to triage from when registration produces zero ready
+    // EPs.
+    auto all_providers = catalog.FindAllProviders();
+    logger(cil::LogLevel::kInfo, std::string("Catalog reports ") +
+                                     std::to_string(all_providers.size()) +
+                                     " provider(s).");
+    for (auto const& p : all_providers) {
+      std::wstring pkg = get_package_name(p);
+      std::wstring nm = get_safe_name(p);
+      std::wstring pth = get_safe_path(p);
+      winml::ExecutionProviderReadyState rs =
+          winml::ExecutionProviderReadyState::NotPresent;
+      try {
+        rs = p.ReadyState();
+      } catch (...) {
+      }
+      logger(cil::LogLevel::kInfo,
+             std::string("  EP: name='") + ConvertWideToUtf8(nm) + "' pkg='" +
+                 ConvertWideToUtf8(pkg) + "' state=" + ready_state_str(rs) +
+                 " path='" + ConvertWideToUtf8(pth) + "'");
+    }
+
+    // Single registration loop: EnsureReady → TryRegister → capture path →
+    // register library with the temp OrtEnv, all on the same provider
+    // object. `found_ready_ep` is driven by the *actual* TryRegister result
+    // so the outcome reported to the caller matches reality. Each EP is
+    // registered inline because `ReadyState()` / `LibraryPath()` are not
+    // guaranteed stable across separate `FindAllProviders()` snapshots.
+    bool found_ready_ep = false;
+    for (auto const& p : all_providers) {
+      std::wstring nm = get_safe_name(p);
+      const std::string nm_utf8 = ConvertWideToUtf8(nm);
+#if !MLPERF_WINDOWSML_ENABLE_MIGRAPHX
+      // MIGraphX EP is non-functional in the certified WinML EP catalog
+      // though the catalog surfaces it on AMD; skip it. Re-enable via
+      // MLPERF_WINDOWSML_ENABLE_MIGRAPHX.
+      if (nm == L"MIGraphXExecutionProvider") {
+        logger(cil::LogLevel::kInfo,
+               std::string("Skipping MIGraphX EP (disabled at build time; "
+                           "set MLPERF_WINDOWSML_ENABLE_MIGRAPHX=ON to "
+                           "enable): ") +
+                   nm_utf8);
+        continue;
+      }
+#endif
+      try {
+        auto rs_before = p.ReadyState();
+        // EnsureReadyAsync is needed for both NotPresent (package missing) and
+        // NotReady (package installed but EP not activated). The catalog
+        // returns NotReady when the EP needs activation/preparation before
+        // it can be registered.
+        if (rs_before != winml::ExecutionProviderReadyState::Ready) {
+          logger(cil::LogLevel::kInfo,
+                 std::string("EnsureReadyAsync starting for EP '") + nm_utf8 +
+                     "' (current state=" + ready_state_str(rs_before) + ")");
+          p.EnsureReadyAsync().get();
+          logger(cil::LogLevel::kInfo,
+                 std::string("EnsureReadyAsync completed for EP '") + nm_utf8 +
+                     "' new state=" + ready_state_str(p.ReadyState()));
+        }
+        const bool try_register_ok = p.TryRegister();
+        logger(cil::LogLevel::kInfo,
+               std::string("TryRegister for EP '") + nm_utf8 + "' returned " +
+                   (try_register_ok ? "true" : "false") +
+                   " state=" + ready_state_str(p.ReadyState()));
+        if (!try_register_ok) continue;
+
+        // EP is registered system-wide. Now make it available to the temp
+        // OrtEnv so device enumeration via GetEpDevices() works for this
+        // constructor's scope. This step is best-effort — failure here does
+        // NOT invalidate the EP for other parts of the runtime.
+        std::wstring path = get_safe_path(p);
+        if (nm.empty() || path.empty()) {
+          logger(cil::LogLevel::kWarning,
+                 std::string("EP registered but name/path empty after "
+                             "TryRegister: name='") +
+                     nm_utf8 + "' path='" + ConvertWideToUtf8(path) + "'");
+          found_ready_ep = true;  // TryRegister succeeded — still counts.
+          continue;
+        }
         try {
-          if (p.ReadyState() ==
-              winml::ExecutionProviderReadyState::NotPresent) {
-            p.EnsureReadyAsync().get();
-          }
-          p.TryRegister();
+          const std::string utf8_path = ConvertWideToUtf8(path);
+          logger(cil::LogLevel::kInfo, "Registering EP library with OrtEnv: " +
+                                           nm_utf8 + " at " + utf8_path);
+          env.RegisterExecutionProviderLibrary(nm_utf8.c_str(), path);
         } catch (const std::exception& e) {
           logger(cil::LogLevel::kWarning,
-                 std::string("EP registration failed: ") + e.what());
+                 std::string(
+                     "RegisterExecutionProviderLibrary failed (best effort) "
+                     "for '") +
+                     nm_utf8 + "': " + e.what());
         }
-      }
-
-      catalog.RegisterCertifiedAsync().get();
-    }
-
-    bool foundReadyEP = false;
-
-    for (auto const& p : catalog.FindAllProviders()) {
-      if (p.ReadyState() != winml::ExecutionProviderReadyState::Ready) continue;
-
-      std::wstring name = p.Name().c_str();
-      std::wstring path = p.LibraryPath().c_str();
-      if (name.empty() || path.empty()) continue;
-      try {
-        auto utf8_name = ConvertWideToUtf8(name);
-        auto utf8_path = ConvertWideToUtf8(path);
-        foundReadyEP = true;
-        logger(cil::LogLevel::kInfo,
-               "Registering EP: " + utf8_name + " at " + utf8_path);
-        env.RegisterExecutionProviderLibrary(utf8_name.c_str(), path);
+        found_ready_ep = true;
       } catch (const std::exception& e) {
         logger(cil::LogLevel::kWarning,
-               std::string("EP registration failed: ") + e.what());
+               std::string("EP registration failed for '") + nm_utf8 +
+                   "': " + e.what());
       }
     }
+
+    logger(cil::LogLevel::kInfo,
+           std::string("WinML EP registration complete. Any EP registered: ") +
+               (found_ready_ep ? "yes" : "no"));
 
     LogInstalledWinMLEPVersions(logger);
 
-    MddBootstrapShutdown();
-
-    initialized = initialized && foundReadyEP;
+    g_epInitOutcome = found_ready_ep ? EpInitOutcome::kSuccess
+                                     : EpInitOutcome::kNoEpRegistered;
   });
 
-  return initialized;
+  return g_epInitOutcome;
 }
 
 namespace cil {
@@ -235,21 +357,84 @@ BaseInference::BaseInference(
       ep_name_(ep_name),
       deps_dir_(deps_dir) {
   SetDeviceType(ep_settings.GetDeviceType());
+
+  // OGA 0.14.0's `onnxruntime-genai-cuda.dll` runs an unconditional CUDA
+  // probe at OgaCreateModel time regardless of which EP the model targets.
+  // On dual-GPU systems (e.g. Intel iGPU + NVIDIA dGPU) this probe finding
+  // a usable `cudart64_12.dll` flips OGA into CUDA mode and breaks
+  // OpenVINO execution. To prevent that, the CUDA DLLs are staged into a
+  // `tensorrtrtx/` subfolder which is NOT on the loader search path by
+  // default — only NvTensorRtRtx scenarios add this subfolder here, and
+  // the cookie is released in the destructor so any subsequent non-NV
+  // scenario in the same process starts clean. AddDllDirectory does NOT
+  // recurse into subdirectories — that is the lever this isolation
+  // depends on.
+  {
+    const auto device_ep = LowerCase(ep_settings_.GetDeviceEP());
+    if (device_ep == "nvtensorrtrtx") {
+      fs::path tensorrtrtx_dir = fs::path(deps_dir_) / "tensorrtrtx";
+      if (fs::exists(tensorrtrtx_dir)) {
+        ep_dll_dir_cookie_ =
+            ::AddDllDirectory(tensorrtrtx_dir.wstring().c_str());
+        if (!ep_dll_dir_cookie_) {
+          logger_(LogLevel::kWarning,
+                  std::string("AddDllDirectory failed for ") +
+                      tensorrtrtx_dir.string() +
+                      " (GetLastError=" + std::to_string(::GetLastError()) +
+                      "); OGA CUDA probe may fail.");
+        }
+      } else {
+        logger_(LogLevel::kWarning,
+                std::string("tensorrtrtx/ subfolder missing under ") +
+                    deps_dir_ + " — NV deps download may have failed.");
+      }
+    }
+  }
+
   if (ep_name_.find("WindowsML") != std::string::npos) {
     Ort::Env env(ORT_LOGGING_LEVEL_ERROR, "OGA");
 
-    if (EnsureAndRegisterEPs(env, logger_))
-      logger_(LogLevel::kInfo, "Execution Providers are ready.");
-    else {
-      logger_(LogLevel::kError, "Failed to initialize Execution Providers.");
-      SetErrorMessage(
-          "WindowsML failed to initialize.\n"
-          "Enable Windows Update so the benchmark can download/install WinML.\n"
-          "Minimum required: Windows 11 Enterprise 24H2 (OS build 26100.6901)\n"
-          "Experience Pack: Windows Feature Experience Pack 1000.26100.253.0\n"
-          "Install all pending Windows Updates and reboot if needed.\n"
-          "Also install: Microsoft Visual C++ Redistributable (x64) 14.44.53211.");
-      return;
+    switch (EnsureAndRegisterEPs(env, logger_)) {
+      case EpInitOutcome::kSuccess:
+        logger_(LogLevel::kInfo, "Execution Providers are ready.");
+        break;
+      case EpInitOutcome::kActivationFailed:
+        // Self-contained WinML activation failed (RegFree WinRT, or OS
+        // predates the minimum).
+        logger_(LogLevel::kError,
+                "WindowsML runtime failed to activate (self-contained).");
+        SetErrorMessage(
+            "WindowsML failed to initialize: the self-contained Windows ML "
+            "runtime could not be activated.\n"
+            "Minimum required OS: Windows 10 build 18362 (19H1) or later.\n"
+            "Ensure the Windows ML runtime DLLs "
+            "(Microsoft.Windows.AI.MachineLearning.dll, onnxruntime.dll, "
+            "DirectML.dll) were downloaded next to IHV_WindowsML.dll and "
+            "were not blocked.\n"
+            "Also install: Microsoft Visual C++ Redistributable (x64).");
+        return;
+      case EpInitOutcome::kNoEpRegistered: {
+        // Windows App Runtime is fine; the catalog just yielded no certified
+        // vendor EP. The in-box DirectML EP needs no catalog package, so a
+        // DirectML scenario can still run — fall through to device detection.
+        // Any other EP genuinely cannot run without its vendor package.
+        const std::string device_ep = LowerCase(ep_settings_.GetDeviceEP());
+        if (device_ep == "directml") {
+          logger_(LogLevel::kWarning,
+                  "No certified WindowsML EP registered; falling back to the "
+                  "in-box DirectML EP.");
+          break;
+        }
+        logger_(LogLevel::kError,
+                "No certified WindowsML execution providers were registered.");
+        SetErrorMessage(
+            "No certified WindowsML execution providers were registered on "
+            "this system.\n"
+            "Install a WinML execution provider package matching your "
+            "hardware vendor (AMD / Intel / Qualcomm / NVIDIA) via the "
+            "Microsoft Store, then retry.");
+        return;
+      }
     }
 
     auto allProviders =
@@ -262,6 +447,12 @@ BaseInference::BaseInference(
         std::wstring name = p.Name().c_str();
         std::wstring path = p.LibraryPath().c_str();
         if (!name.empty() && !path.empty()) {
+#if !MLPERF_WINDOWSML_ENABLE_MIGRAPHX
+          // Suppress MIGraphX even if another process left it Ready system-
+          // wide, so DetectWindowsMLDevices never sees it. Matches the gate
+          // in EnsureAndRegisterEPs above.
+          if (name == L"MIGraphXExecutionProvider") continue;
+#endif
           execution_provider_paths.emplace_back(std::move(name),
                                                 std::move(path));
         }
@@ -270,14 +461,47 @@ BaseInference::BaseInference(
 
     DetectWindowsMLDevices(env, execution_provider_paths);
     if (!winml_devices_.has_value() || winml_devices_.value().empty()) {
-      SetErrorMessage(
-          "No WindowsML devices found. Please ensure you have the required "
-          "execution providers installed and registered.");
+      // EPs are registered fine; we just couldn't find a device matching
+      // the requested EP/type/vendor. Name them explicitly so the failure
+      // doesn't masquerade as a system-wide WinML problem. (E.g. an
+      // NvTensorRtRtx request on a system with no NVIDIA hardware lands
+      // here.)
+      const std::string& requested_ep = ep_settings_.GetDeviceEP();
+      const std::string& requested_type = ep_settings_.GetDeviceType();
+      const std::string& requested_vendor = ep_settings_.GetDeviceVendor();
+      std::string msg = "No WindowsML device matches the requested scenario";
+      if (!requested_ep.empty() || !requested_type.empty() ||
+          !requested_vendor.empty()) {
+        msg += " (";
+        bool first = true;
+        auto add = [&](const char* key, const std::string& val) {
+          if (val.empty()) return;
+          if (!first) msg += ", ";
+          msg += key;
+          msg += "='";
+          msg += val;
+          msg += "'";
+          first = false;
+        };
+        add("EP", requested_ep);
+        add("type", requested_type);
+        add("vendor", requested_vendor);
+        msg += ")";
+      }
+      msg +=
+          ". The corresponding hardware or vendor EP is not available on "
+          "this system. Skip this scenario or run it on a machine with the "
+          "required EP/hardware.";
+      SetErrorMessage(msg);
     }
   }
 }
 
 BaseInference::~BaseInference() {
+  if (ep_dll_dir_cookie_) {
+    ::RemoveDllDirectory(ep_dll_dir_cookie_);
+    ep_dll_dir_cookie_ = nullptr;
+  }
   // Intentionally not calling winrt::uninit_apartment() to keep apartment
   // alive across multiple BaseInference lifetimes and avoid teardown races.
 }
@@ -336,27 +560,21 @@ void BaseInference::DetectWindowsMLDevices(
 #define LOGGER_(level, msg)
 #endif
 
-  static auto lower_case = [](const std::string& input_string) {
-    std::string lower_case_str;
-    std::transform(input_string.begin(), input_string.end(),
-                   std::back_inserter(lower_case_str),
-                   [](unsigned char c) { return std::tolower(c); });
-    return lower_case_str;
-  };
-
-  auto device_vendor = lower_case(ep_settings_.GetDeviceVendor());
-  auto device_ep = lower_case(ep_settings_.GetDeviceEP());
+  auto device_vendor = LowerCase(ep_settings_.GetDeviceVendor());
+  auto device_ep = LowerCase(ep_settings_.GetDeviceEP());
 
   static const std::map<std::string, std::string> ep_aliases = {
       {"CPUExecutionProvider", "CPU"},
       {"OpenVINOExecutionProvider", "OpenVINO"},
       {"QNNExecutionProvider", "QNN"},
       {"VitisAIExecutionProvider", "VitisAI"},
+      {"RyzenAILightExecutionProvider", "RyzenAI"},
       {"NvTensorRTRTXExecutionProvider", "NvTensorRtRtx"},
       {"DmlExecutionProvider", "DirectML"}};
 
   static const std::set<std::string> supported_eps = {
-      "CPU", "DirectML", "OpenVINO", "QNN", "VitisAI", "NvTensorRtRtx"};
+      "CPU",     "DirectML", "OpenVINO",     "QNN",
+      "VitisAI", "RyzenAI",  "NvTensorRtRtx"};
 
   std::vector<Ort::ConstEpDevice> ep_devices = env.GetEpDevices();
 
@@ -410,7 +628,7 @@ void BaseInference::DetectWindowsMLDevices(
 
       if (!supported_eps.contains(ep)) continue;
 
-      if (!device_ep.empty() && device_ep != lower_case(ep)) continue;
+      if (!device_ep.empty() && device_ep != LowerCase(ep)) continue;
 
       if (ep == "DirectML") {
         try {
@@ -438,11 +656,19 @@ void BaseInference::DetectWindowsMLDevices(
                 : std::string(device.Device().Vendor());
         if (device_name.empty()) device_name = std::string(device.EpVendor());
 
+        // AMD NPUs (RyzenAI/VitisAI EPs) report the generic name
+        // "NPU Compute Accelerator Device"; prepend the vendor so the
+        // device_vendor="AMD" filter below matches.
+        if ((ep == "RyzenAI" || ep == "VitisAI") &&
+            device_name.find("NPU Compute Accelerator Device") !=
+                std::string::npos)
+          device_name = "AMD " + device_name;
+
         winml_devices.emplace_back(WinMLDevice{
             ep, type, device_name, device.Device().DeviceId(), "", std::nullopt,
             device.Device().Metadata().GetKeyValuePairs().contains("Discrete")
-                ? std::optional<bool>{device.Device().Metadata().GetValue(
-                                          "Discrete") == "1"}
+                ? std::optional<bool>{std::string{device.Device().Metadata().GetValue(
+                                          "Discrete")} == "1"}
                 : std::nullopt});
       }
     }
@@ -465,7 +691,7 @@ void BaseInference::DetectWindowsMLDevices(
 
     if (it != winml_devices.end()) continue;
 
-    if (!device_ep.empty() && device_ep != lower_case(ep)) continue;
+    if (!device_ep.empty() && device_ep != LowerCase(ep)) continue;
 
     if (ep == "NvTensorRtRtx") {
       if (device_type_.empty() || device_type_ == "GPU")
@@ -480,6 +706,9 @@ void BaseInference::DetectWindowsMLDevices(
         winml_devices.emplace_back(WinMLDevice{ep, "NPU", "Qualcomm", 0});
       if (device_type_.empty() || device_type_ == "GPU")
         winml_devices.emplace_back(WinMLDevice{ep, "GPU", "Qualcomm", 1});
+    } else if (ep == "RyzenAI") {
+      if (device_type_.empty() || device_type_ == "NPU")
+        winml_devices.emplace_back(WinMLDevice{ep, "NPU", "AMD", 0});
     }
   }
 
@@ -512,7 +741,7 @@ void BaseInference::DetectWindowsMLDevices(
     winml_devices.erase(
         std::remove_if(winml_devices.begin(), winml_devices.end(),
                        [&device_vendor](const WinMLDevice& device) {
-                         return lower_case(device.name).find(device_vendor) ==
+                         return LowerCase(device.name).find(device_vendor) ==
                                 std::string::npos;
                        }),
         winml_devices.end());
@@ -637,6 +866,9 @@ void BaseInference::AssignModelForDevices() {
               } else if (option.contains("VitisAI")) {
                 available_providers.insert("VitisAI");
                 execution_providers.insert("VitisAI");
+              } else if (option.contains("RyzenAI")) {
+                available_providers.insert("RyzenAI");
+                execution_providers.insert("RyzenAI");
               } else if (option.contains("NvTensorRtRtx")) {
                 available_providers.insert("NvTensorRtRtx");
                 execution_providers.insert("NvTensorRtRtx");

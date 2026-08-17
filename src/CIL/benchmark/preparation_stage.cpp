@@ -5,6 +5,8 @@
 #include "api_handler.h"
 #include "execution_provider.h"
 #include "file_signature_verifier.h"
+#include "llm/portable_python.h"
+#include "runner.h"
 #include "scenario_data_provider.h"
 #include "utils.h"
 
@@ -28,18 +30,19 @@ struct DeviceEnumerationCache {
     bool operator==(const Ep& other) const = default;
 
     explicit Ep(const std::string& library_path, const std::string& ep,
-        const nlohmann::json& ep_config)
+                const nlohmann::json& ep_config)
         : library_path_(library_path), ep_name_(ep) {
+      // is_string() guards against nlohmann::detail::type_error (derives from
+      // std::invalid_argument) when a field is present but null or non-string.
       std::string hash;
-      if (ep_config.contains("device_type")) {
-        hash += "dt:" + ep_config["device_type"].get<std::string>() + ";";
-      }
-      if (ep_config.contains("device_vendor")) {
-        hash += "dv:" + ep_config["device_vendor"].get<std::string>() + ";";
-      }
-      if (ep_config.contains("device_ep")) {
-        hash += "de:" + ep_config["device_ep"].get<std::string>() + ";";
-      }
+      auto append = [&](const char* field, const char* prefix) {
+        auto it = ep_config.find(field);
+        if (it != ep_config.end() && it->is_string())
+          hash += std::string(prefix) + it->get<std::string>() + ";";
+      };
+      append("device_type", "dt:");
+      append("device_vendor", "dv:");
+      append("device_ep", "de:");
       config_hash_ = hash;
     }
 
@@ -103,10 +106,13 @@ class PreparationStage::Impl {
                   const ScenarioConfig& scenario_config,
                   std::vector<std::pair<ExecutionProviderConfig, std::string>>&
                       prepared_eps,
-                  bool enumerate_only, std::optional<int> device_id) {
+                  bool enumerate_only, std::optional<int> device_id,
+                  const std::optional<std::string>& python_search_dir,
+                  const std::optional<std::string>& python_configured_dir) {
     prepared_eps.clear();
-    Impl impl{stage, scenario_config, prepared_eps, enumerate_only, device_id};
-
+    Impl impl{
+        stage,     scenario_config,   prepared_eps,         enumerate_only,
+        device_id, python_search_dir, python_configured_dir};
     return impl.Run();
   }
 
@@ -114,12 +120,16 @@ class PreparationStage::Impl {
   Impl(PreparationStage& stage, const ScenarioConfig& scenario_config,
        std::vector<std::pair<ExecutionProviderConfig, std::string>>&
            prepared_eps,
-       bool enumerate_only, std::optional<int> device_id)
+       bool enumerate_only, std::optional<int> device_id,
+       const std::optional<std::string>& python_search_dir,
+       const std::optional<std::string>& python_configured_dir)
       : logger_(stage.GetLogger()),
         unpacker_(stage.GetUnpacker()),
         ep_dependencies_manager_(stage.GetEPDependenciesManager()),
         scenario_config_(scenario_config),
         prepared_eps_(prepared_eps),
+        python_search_dir_(python_search_dir),
+        python_configured_dir_(python_configured_dir),
         enumerate_only_(enumerate_only),
         device_id_(device_id) {}
 
@@ -144,6 +154,10 @@ class PreparationStage::Impl {
   const ScenarioConfig& scenario_config_;
 
   std::vector<std::pair<ExecutionProviderConfig, std::string>>& prepared_eps_;
+
+  const std::optional<std::string> python_search_dir_;
+  const std::optional<std::string> python_configured_dir_;
+
   std::unordered_set<std::string> failed_ep_names_;
   std::unordered_map<std::string, int> prepared_ep_names_;
   std::map<Unpacker::Asset, bool> unpacked_map_;
@@ -156,8 +170,21 @@ class PreparationStage::Impl {
 bool PreparationStage::Run(const ScenarioConfig& scenario_config,
                            ScenarioData& scenario_data,
                            const ReportProgressCb&) {
+  std::optional<std::string> python_search_dir;
+  std::optional<std::string> python_configured_dir;
+  if (const std::string& python_path =
+          config_.GetSystemConfig().GetPythonPath();
+      !enumerate_only_ && scenario_config.IsAgentic()) {
+    if (!scenario_data.input_file_paths.empty())
+      python_search_dir = fs::path(scenario_data.input_file_paths.front())
+                              .parent_path()
+                              .string();
+    python_configured_dir = python_path;
+  }
+
   return Impl::Run(*this, scenario_config, scenario_data.prepared_eps,
-                   enumerate_only_, device_id_);
+                   enumerate_only_, device_id_, python_search_dir,
+                   python_configured_dir);
 }
 
 void PreparationStage::ClearDeviceEnumerationCache() {
@@ -203,13 +230,16 @@ bool PreparationStage::Impl::PrepareIHVDevicesIfNeeded(
       }
     }
 
+    // Always surface the IHV's info log (if any) so diagnostics emitted
+    // before a failure are visible. Previously this was skipped when error
+    // was non-empty, hiding all kInfo output from the IHV subprocess.
+    if (!log.empty()) {
+      LOG4CXX_INFO(logger_, log);
+    }
+
     if (!error.empty()) {
       LOG4CXX_ERROR(logger_, error);
       continue;
-    }
-
-    if (!log.empty()) {
-      LOG4CXX_INFO(logger_, log);
     }
 
     if (enumerate_only_) {
@@ -290,9 +320,7 @@ void PreparationStage::Impl::PrepareDeviceIdsIfNeeded() {
         case EP::kIHVOrtGenAI:
         case EP::kIHVNativeOpenVINO:
         case EP::kIHVWindowsML:
-        case EP::kIHVVulkan:
-        case EP::kIHVCUDA:
-        case EP::kIHVROCm:
+        case EP::kIHVLlamaCpp:
           check_devices(ep_type, library_path);
           break;
         default:
@@ -338,219 +366,12 @@ void PreparationStage::Impl::CanLoadLibrary(EP ep_type,
   eps_libraries_[ep_type].insert(library_path);
 }
 
-#if WITH_IHV_WIN_ML
-static bool EnsureWindowsAppRuntimeInstalled(const std::string& library_path,
-                                             const log4cxx::LoggerPtr& logger) {
-  static std::once_flag s_checkFlag;
-  static bool s_installed = false;
-
-  std::call_once(s_checkFlag, [&library_path, &logger]() {
-    // Helper to run command hidden; returns process exit code (0 on success)
-    auto RunHiddenCommand = [](const std::string& cmd) -> DWORD {
-      STARTUPINFOA si = {sizeof(si)};
-      PROCESS_INFORMATION pi;
-      si.dwFlags = STARTF_USESHOWWINDOW;
-      si.wShowWindow = SW_HIDE;
-
-      std::string cmd_copy = "cmd.exe /C " + cmd;
-
-      BOOL success = CreateProcessA(nullptr,
-                                    &cmd_copy[0],  // Command line (mutable)
-                                    nullptr, nullptr, FALSE, CREATE_NO_WINDOW,
-                                    nullptr, nullptr, &si, &pi);
-
-      if (success) {
-        WaitForSingleObject(pi.hProcess, INFINITE);
-        DWORD exitCode;
-        GetExitCodeProcess(pi.hProcess, &exitCode);
-        CloseHandle(pi.hProcess);
-        CloseHandle(pi.hThread);
-        return exitCode;
-      }
-
-      return (DWORD)-1;
-    };
-
-    // Helper to run command hidden and capture stdout; returns process exit
-    // code
-    auto RunHiddenCommandCapture = [](const std::string& cmd,
-                                      std::string& stdout_text) -> DWORD {
-      SECURITY_ATTRIBUTES sa;
-      sa.nLength = sizeof(sa);
-      sa.bInheritHandle = TRUE;
-      sa.lpSecurityDescriptor = nullptr;
-
-      HANDLE read_pipe = nullptr;
-      HANDLE write_pipe = nullptr;
-      if (!CreatePipe(&read_pipe, &write_pipe, &sa, 0)) {
-        return (DWORD)-1;
-      }
-      if (!SetHandleInformation(read_pipe, HANDLE_FLAG_INHERIT, 0)) {
-        CloseHandle(read_pipe);
-        CloseHandle(write_pipe);
-        return (DWORD)-1;
-      }
-
-      STARTUPINFOA si = {sizeof(si)};
-      PROCESS_INFORMATION pi;
-      ZeroMemory(&pi, sizeof(pi));
-      si.dwFlags = STARTF_USESHOWWINDOW | STARTF_USESTDHANDLES;
-      si.wShowWindow = SW_HIDE;
-      si.hStdOutput = write_pipe;
-      si.hStdError = write_pipe;
-
-      std::string cmd_copy = "cmd.exe /C " + cmd;
-
-      BOOL success =
-          CreateProcessA(nullptr, &cmd_copy[0], nullptr, nullptr, TRUE,
-                         CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi);
-
-      CloseHandle(write_pipe);
-
-      if (!success) {
-        CloseHandle(read_pipe);
-        return (DWORD)-1;
-      }
-
-      std::string buffer;
-      char chunk[4096];
-      DWORD bytes_read = 0;
-      while (ReadFile(read_pipe, chunk, sizeof(chunk), &bytes_read, nullptr) &&
-             bytes_read) {
-        buffer.append(chunk, chunk + bytes_read);
-      }
-      CloseHandle(read_pipe);
-
-      WaitForSingleObject(pi.hProcess, INFINITE);
-      DWORD exitCode;
-      GetExitCodeProcess(pi.hProcess, &exitCode);
-      CloseHandle(pi.hProcess);
-      CloseHandle(pi.hThread);
-
-      // Trim simple whitespace and CR/LF/NULLs from ends
-      size_t l = 0;
-      size_t r = buffer.size();
-      while (l < r &&
-             (buffer[l] == ' ' || buffer[l] == '\t' || buffer[l] == '\r' ||
-              buffer[l] == '\n' || buffer[l] == '\0'))
-        ++l;
-      while (r > l && (buffer[r - 1] == ' ' || buffer[r - 1] == '\t' ||
-                       buffer[r - 1] == '\r' || buffer[r - 1] == '\n' ||
-                       buffer[r - 1] == '\0'))
-        --r;
-      stdout_text.assign(buffer.data() + l, r - l);
-
-      return exitCode;
-    };
-
-    // Step 1: Detect Windows App Runtime presence for required version rail or
-    // greater
-
-    int min_major = 1;
-    int min_minor = 8;
-
-    std::string detect_cmd =
-        std::string("powershell.exe -ExecutionPolicy Bypass -NoProfile ") +
-        "-Command \"$ok=$false; "
-        "Get-AppxPackage -Name 'Microsoft.WindowsAppRuntime.*' | "
-        "ForEach-Object "
-        "{ "
-        "$m=[regex]::Match($_.Name,'Microsoft\\.WindowsAppRuntime\\.(\\d+)\\.("
-        "\\d+)'); "
-        "if($m.Success){ $maj=[int]$m.Groups[1].Value; "
-        "$min=[int]$m.Groups[2].Value; "
-        "if(($maj -gt " +
-        std::to_string(min_major) + ") -or ($maj -eq " +
-        std::to_string(min_major) + " -and $min -ge " +
-        std::to_string(min_minor) +
-        ")){ $ok=$true } } }; "
-        "if($ok){ exit 0 } else { exit 1 }\"";
-
-    // Build version query command (UTF-8 stdout)
-    std::string version_cmd =
-        std::string("powershell.exe -ExecutionPolicy Bypass -NoProfile ") +
-        "-Command \"[Console]::OutputEncoding = "
-        "[System.Text.UTF8Encoding]::new(); "
-        "$pkg = Get-AppxPackage -Name 'Microsoft.WindowsAppRuntime.*' | "
-        "Sort-Object Version -Descending | Select-Object -First 1; "
-        "if ($pkg) { "
-        "$rail = "
-        "([regex]::Match($pkg.Name,'Microsoft\\.WindowsAppRuntime\\.(\\d+)\\.("
-        "\\d+)')); "
-        "$railVer = if ($rail.Success) { $rail.Groups[1].Value + '.' + "
-        "$rail.Groups[2].Value } else { '' }; "
-        "Write-Output ($railVer + '|' + $pkg.Version) }\"";
-
-    auto detectInstalledAndLog = [&]() -> bool {
-      if (RunHiddenCommand(detect_cmd) != 0) return false;
-      std::string ver_out;
-      RunHiddenCommandCapture(version_cmd, ver_out);
-      if (!ver_out.empty()) {
-        auto pipe_pos = ver_out.find('|');
-        std::string rail = pipe_pos == std::string::npos
-                               ? std::string()
-                               : ver_out.substr(0, pipe_pos);
-        std::string pkgver = pipe_pos == std::string::npos
-                                 ? ver_out
-                                 : ver_out.substr(pipe_pos + 1);
-        std::string combined = rail.empty() ? pkgver : (rail + "." + pkgver);
-        LOG4CXX_INFO(logger,
-                     "Windows App Runtime detected, version=" << combined);
-      } else {
-        LOG4CXX_INFO(logger, "Windows App Runtime detected");
-      }
-      return true;
-    };
-
-    if (detectInstalledAndLog()) {
-      s_installed = true;
-      return;
-    }
-
-    // Step 2: Install redistributable silently from the unpacked folder
-    auto parent_dir = fs::path(library_path).parent_path();
-    fs::path installer_path =
-        (parent_dir / "WindowsAppRuntimeInstall.exe").lexically_normal();
-
-    if (!fs::exists(installer_path)) {
-      LOG4CXX_ERROR(logger, "Windows App Runtime installer not found: " +
-                                installer_path.string());
-      s_installed = false;
-      return;
-    }
-
-    std::string install_cmd = "\"" + installer_path.string() + "\"";
-    LOG4CXX_INFO(logger, "Installing Windows App Runtime from: "
-                             << installer_path.string());
-    DWORD exit_code = RunHiddenCommand(install_cmd);
-    if (exit_code != 0) {
-      LOG4CXX_ERROR(
-          logger, std::string("Failed to run Windows App Runtime installer: ") +
-                      installer_path.string() +
-                      ", exit code=" + std::to_string(exit_code));
-      s_installed = false;
-      return;
-    }
-    LOG4CXX_INFO(logger,
-                 "Windows App Runtime installer completed successfully");
-
-    // Step 3: Re-check
-    if (detectInstalledAndLog()) {
-      s_installed = true;
-      return;
-    }
-
-    LOG4CXX_ERROR(logger,
-                  "Windows App Runtime required version not detected after "
-                  "installation attempt");
-    s_installed = false;
-  });
-
-  return s_installed;
-}
-#endif
-
 bool PreparationStage::Impl::Run() {
+  if ((python_search_dir_ || python_configured_dir_) &&
+      !EnsurePortablePythonOnPath(python_search_dir_.value_or(""),
+                                  python_configured_dir_.value_or(""), logger_))
+    return false;
+
   const auto scenario_name = scenario_config_.GetName();
 
   using enum Unpacker::Asset;
@@ -564,8 +385,8 @@ bool PreparationStage::Impl::Run() {
     bool empty_library_path = library_path.empty();
 
     bool was_visited = failed_ep_names_.contains(ep_name);
-    bool is_supported =
-        utils::IsEpSupportedOnThisPlatform(scenario_name, ep_name);
+    bool is_supported = BenchmarkRunner::IsEpSupportedOnThisPlatform(
+        scenario_name, ep.GetFullName());
 
     try {
       if (!is_supported
@@ -602,13 +423,6 @@ bool PreparationStage::Impl::Run() {
           error += " library path does not exist: " + library_path;
           throw std::runtime_error(error);
         }
-#if WITH_IHV_WIN_ML
-        if (ep_type == kIHVWindowsML &&
-            !EnsureWindowsAppRuntimeInstalled(library_path, logger_)) {
-          throw std::runtime_error(
-              "Failed to ensure Windows App Runtime is installed, skipping...");
-        }
-#endif
         can_load_library();
       } else {
         switch (ep_type) {
@@ -633,40 +447,75 @@ bool PreparationStage::Impl::Run() {
             break;
 #endif
 #if WITH_IHV_WIN_ML
-          case kIHVWindowsML: {
-            unpack_library_if_needed({kWindowsML}, false);
-            if (!EnsureWindowsAppRuntimeInstalled(library_path, logger_)) {
-              throw std::runtime_error(
-                  "Failed to ensure whether Windows App Runtime is installed, "
-                  "skipping...");
-            }
-            can_load_library();
-          } break;
+          case kIHVWindowsML:
+            unpack_library_if_needed({kWindowsML});
+            break;
 #endif
 #if WITH_IHV_MLX
           case kIHVMLX:
             unpack_library_if_needed({kMLX});
             break;
 #endif
+#if WITH_IHV_GGML_METAL || WITH_IHV_GGML_VULKAN || WITH_IHV_GGML_CUDA || \
+    WITH_IHV_GGML_ROCM
+          case kIHVLlamaCpp: {
+            std::string backend;
+            if (ep_config_json.contains("backend") &&
+                ep_config_json["backend"].is_string())
+              backend = ep_config_json["backend"].get<std::string>();
+            std::vector<Unpacker::Asset> assets;
 #if WITH_IHV_GGML_METAL
-          case kIHVMetal:
-            unpack_library_if_needed({kGGML_Metal, kGGML_EPs});
-            break;
+            if (backend == "Metal") assets = {kLlama_cpp_Metal, kGGML_EPs};
 #endif
 #if WITH_IHV_GGML_VULKAN
-          case kIHVVulkan:
-            unpack_library_if_needed({kGGML_Vulkan, kGGML_EPs});
-            break;
+            if (backend == "Vulkan") assets = {kLlama_cpp_Vulkan, kGGML_EPs};
 #endif
 #if WITH_IHV_GGML_CUDA
-          case kIHVCUDA:
-            unpack_library_if_needed({kGGML_CUDA, kGGML_EPs});
-            break;
+            if (backend == "CUDA") assets = {kLlama_cpp_CUDA, kGGML_EPs};
 #endif
 #if WITH_IHV_GGML_ROCM
-          case kIHVROCm:
-            unpack_library_if_needed({kGGML_ROCm, kGGML_EPs});
+            if (backend == "ROCm") assets = {kLlama_cpp_ROCm, kGGML_EPs};
+#endif
+            if (assets.empty())
+              throw std::runtime_error("Unsupported llama-cpp backend: " +
+                                       backend);
+            unpack_library_if_needed(assets);
             break;
+          }
+#endif
+#if WITH_IHV_DIFFUSERS
+          case kIHVDiffusers: {
+            std::vector<Unpacker::Asset> assets{kDiffusers};
+#if WITH_IHV_DIFFUSERS_DISPATCHER
+            std::string vendor;
+            if (ep_config_json.contains("device_vendor") &&
+                ep_config_json["device_vendor"].is_string()) {
+              vendor = ep_config_json["device_vendor"].get<std::string>();
+              for (auto& c : vendor) c = static_cast<char>(::toupper(c));
+            } else if (ep_config_json.contains("backend") &&
+                       ep_config_json["backend"].is_string()) {
+              const std::string b =
+                  ep_config_json["backend"].get<std::string>();
+              if (b == "CUDA")
+                vendor = "NVIDIA";
+              else if (b == "MPS")
+                vendor = "APPLE";
+              else if (b == "RYZENAI")
+                vendor = "AMD";
+            }
+#if WITH_IHV_DIFFUSERS_NVIDIA
+            if (vendor == "NVIDIA") assets.push_back(kDiffusers_NVIDIA);
+#endif
+#if WITH_IHV_DIFFUSERS_APPLE
+            if (vendor == "APPLE") assets.push_back(kDiffusers_APPLE);
+#endif
+#if WITH_IHV_DIFFUSERS_AMD
+            if (vendor == "AMD") assets.push_back(kDiffusers_AMD);
+#endif
+#endif  // WITH_IHV_DIFFUSERS_DISPATCHER
+            unpack_library_if_needed(assets);
+            break;
+          }
 #endif
           default:
             throw std::runtime_error("Unrecognized IHV EP: " + ep_name);

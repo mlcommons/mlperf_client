@@ -80,6 +80,7 @@ Below are the available command line arguments that control the tool's behavior:
 | `-o, --output-dir`           | Specify output directory. If not provided, default output directory is used. | No       |
 | `-d, --data-dir`             | Specify directory, where all required data files will be downloaded          | No       | `data`        |
 | `-t, --temp-dir`             | Specify directory, where temporary files will be stored.                     | No       |               |
+| `--python-path` | Python interpreter for the agentic `execute` tool. `default` uses the config `PythonPath`, else the bundled Python; `system` uses the installed python, PATH untouched; any other value is used as the interpreter directory (overrides config `PythonPath`). | No | `default` | `default`, `system`, any valid path |
 | `-p, --pause`                | Flag to allow pausing the program at the end of execution.                   | No       | `true`        | `true`, `false`             |
 | `-l, --logger`               | Path to the log4cxx configuration file                                       | No       | `log4cxx.xml` | Any valid path              |
 | `-m, --list-models`          | List all the available models supported by the tool                          | No       |               |                             |
@@ -153,6 +154,7 @@ Where:
       It controls the behavior of the application's file downloading process. If the `DownloadBehavior` provided in both the
       configuration file and the command line, the command line argument will take precedence.
     - `CacheLocalFiles`: The `CacheLocalFiles` is an Optional field that do exactly what the `--cache-local-files` command line argument does. If it is set to false local files specified in the config will not be copied and cached. If the `CacheLocalFiles` provided in both the configuration file and the command line, the command line argument will take precedence
+    - `PythonPath`: An Optional field pointing at an existing Python interpreter directory (e.g. `C:/Python313` or `file://C:/Python313/`) for scenarios that run Python (the agentic `execute` tool). When set, that interpreter is used instead of downloading the bundled portable Python (the download is skipped). The directory may hold the interpreter directly (a standard install) or nest it under a `python/` subdirectory; if no interpreter is found there the run aborts with an error.
 
 - Scenarios: A list of scenarios to run using the tool. Each scenario has the following format:
     ```json
@@ -176,21 +178,21 @@ Where:
       each model has the following format:
       ```json
       {
-          "ModelName": "llama-2-7b-chat-dml",
-          "FilePath": "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/llama2/models/OrtGenAI/model.onnx",
-          "DataFilePath": "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/llama2/models/OrtGenAI/model.onnx.data.zip",
-          "TokenizerPath": "https://client.mlcommons-storage.org/deps/1.0/scenario_files/llm/llama2/models/OrtGenAI/tokenizer.zip"
+          "ModelName": "llama-3.1-8b-instruct-dml",
+          "FilePath": "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/llama3/models/WindowsML/model.onnx",
+          "DataFilePath": "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/llama3/models/WindowsML/model.onnx.data.zip",
+          "TokenizerPath": "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/llama3/models/WindowsML/tokenizer.zip"
       }
       ```
       Where:
         - `ModelName`: Specifies the model name.
-        - `FilePath`:  Specifies the path to the main model file (e.g., OrtGenAI/model.onnx).
+        - `FilePath`:  Specifies the path to the main model file (e.g., WindowsML/model.onnx).
         - `DataFilePath`: Specifies the path to the data file associated with the model (e.g.,
-          OrtGenAI/model.onnx.data). This file is required for executing the Llama2 scenario. Some models might have this file splitted into multiple
+          WindowsML/model.onnx.data). This file is required for executing the scenario. Some models might have this file splitted into multiple
           files. To avoid setting manually all the files in this dictionary, these can be zipped into a single
           file - the app will take care of the unzipping.
-        - `TokenizerPath`: Specifies the path to the tokenizer file (e.g., OrtGenAI/tokenizer.zip). This file is
-          required for executing the Llama2 scenario and contains the necessary tokenizer configuration and data.(The
+        - `TokenizerPath`: Specifies the path to the tokenizer file (e.g., WindowsML/tokenizer.zip). This file is
+          required for executing the scenario and contains the necessary tokenizer configuration and data.(The
           file does not need to be in ZIP format; it can be any supported format compatible with the model.)
 
     - `InputFilePath`: is a list of paths to the data files used in the scenario (input data) this could be a list of
@@ -235,7 +237,7 @@ Where:
       each execution provider has the following format:
       ```json
       {
-        "Name": "OrtGenAI",
+        "Name": "WindowsML",
         "Config": {
           "device_type": "GPU",
           "device_id": 0
@@ -248,7 +250,7 @@ Where:
       Where:
       - `Name`: the name of the execution provider.
       - `Config`: the configuration for the execution provider, this is specific to each execution provider, for
-      example, the configuration for OrtGenAI execution provider may look like this:
+      example, the configuration for WindowsML execution provider may look like this:
       ```json
       {
          "device_type": "GPU",
@@ -320,9 +322,6 @@ official [ONNX Runtime Documentation](https://onnxruntime.ai/docs/execution-prov
 | NativeOpenVINO(✅ **Active**)             | device_type                           | string                 | True         |                       | ["GPU", "NPU"]                                              |                                                                                   |
 |                                            | num_of_threads                        | integer                | False        | 0                     | >= -1                                                       |                                                                                  |
 |                                            | num_streams                           | integer                | False        | 0                     | >= 1                                                        |                                                                                  |
-| OrtGenAI(✅ **Active**)                   | device_type                           | string                 | True         |                       | ["GPU"]                                                     |                                                                                   |
-|                                            | device_id                             | integer                | False        | 0                     |                                                             |                                                                                  |
-|                                            | device_vendor                         | string                 | False        |                       | ["Intel", "AMD", "NVIDIA"]                                  |                                                                                  |
 | WindowsML(✅ **Active**)                   | device_type                          | string                 | True         |                       | ["GPU", "NPU"]                                              |                                                                                   |
 |                                            | device_id                             | integer                | False        | 0                     |                                                             |                                                                                  |
 |                                            | device_vendor                         | string                 | False        |                       | ["Intel", "AMD", "NVIDIA"]                                  |                                                                                  |
@@ -330,14 +329,11 @@ official [ONNX Runtime Documentation](https://onnxruntime.ai/docs/execution-prov
 | NativeQNN(✅ **Active**)                  | device_type                           | string                 | True         |                       | ["NPU_CPU"]                                                 |                                                                                   |
 | OrtGenAI-RyzenAI(✅ **Active**)           | device_type                           | string                 | True         |                       | ["NPU and GPU", "NPU"]                                             |                                                                                   |
 | MLX(✅ **Active**)                        | device_type                           | string                 | True         |                       | ["GPU"]                                                     |                                                                                   |
-| Metal(✅ **Active**)                      | device_type                           | string                 | True         |                       | ["GPU"]                                                     | From [llama-cpp](https://github.com/ggml-org/llama.cpp)                           |
+| llama-cpp(✅ **Active**)                  | backend                               | string                 | True         |                       | ["Metal", "CUDA"]                                          | From [llama-cpp](https://github.com/ggml-org/llama.cpp)                           |
+|                                            | device_type                           | string                 | True         |                       | ["GPU"]                                                     |                                                                                  |
 |                                            | gpu_layers                            | integer                | True         |                       | >= 0                                                        |                                                                                  |
-| CUDA(✅ **Active**)                 | device_type                           | string                 | True         |                       | ["GPU"]                                                     | From [llama-cpp](https://github.com/ggml-org/llama.cpp)                           |
-|                                            | gpu_layers                            | integer                | True         |                       | >= 0                                                        |                                                                                  |
-|                                            | fa                                   | integer                | False         | 0                      |                                                           |                                                                                   |
-|                                            | no_mmap                              | integer                | False         | 0                       |                                                          |                                                                                   |
-| ROCm(✅ **Active**)                        | device_type                          | string                 | True         |                       | ["GPU"]                                                     | From [llama-cpp](https://github.com/ggml-org/llama.cpp)                           |
-|                                            | gpu_layers                           | integer                | True         |                       | >= 0                                                        |                                                                                   |
+|                                            | fa                                   | integer                | False         | 0                      | CUDA only                                                 |                                                                                   |
+|                                            | no_mmap                              | integer                | False         | 0                       | CUDA only                                                |                                                                                   |
 
 ### Status Definitions
 
@@ -346,7 +342,7 @@ official [ONNX Runtime Documentation](https://onnxruntime.ai/docs/execution-prov
 
 ### Notes
 
-- OrtGenAI:
+- WindowsML:
     - `device_id` is not required. If not present, the app will use any adapters it finds, unless they are
       software/default render devices.
     - `devide_type` - optional; "GPU" and "NPU"(for DirectML only) are valid options. If it is used:
@@ -366,18 +362,16 @@ official [ONNX Runtime Documentation](https://onnxruntime.ai/docs/execution-prov
 | Execution Provider | Windows x64 | Windows ARM | Linux x64 | macOS | iOS
 |--------------------|-------------|-------------|-------|-----|----------|
 | NativeOpenVINO     | ✅          | ❌         | ✅    | ❌    | ❌   |
-| OrtGenAI           | ✅          | ❌         | ❌    | ❌    | ❌   |
 | WindowsML          | ✅          | ✅         | ❌    | ❌    | ❌   |
 | NativeQNN          | ❌          | ✅         | ❌    | ❌    | ❌   |
 | OrtGenAI-RyzenAI   | ✅          | ❌         | ❌    | ❌    | ❌   |
 | MLX                | ❌          | ❌         | ❌    | ✅    | ✅   |
-| Metal              | ❌          | ❌         | ❌    | ✅    | ✅   |
-| CUDA               | ✅          | ❌         | ❌    | ❌    | ❌   |
-| ROCm               | ✅          | ❌         | ❌    | ❌    | ❌   |
+| llama-cpp (Metal)  | ❌          | ❌         | ❌    | ✅    | ✅   |
+| llama-cpp (CUDA)   | ✅          | ❌         | ❌    | ❌    | ❌   |
 
 _____________________________________________
 _____________________________________________
 
 ## Prompt Generation
 
-To create or update prompt templates for benchmarking language models, see [docs/PROMPTS_GENERATION.md](docs/PROMPTS_GENERATION.md). This guide explains how to use the provided scripts (`generate_prompt.py` and `update_old_prompt.py`), describes all parameters, and provides examples for prompt generation.
+To create prompt templates for benchmarking language models, see [docs/LLM_PROMPTS_GENERATION.md](docs/LLM_PROMPTS_GENERATION.md). This guide explains how to use the provided `generate_prompt.py` script, describes all parameters, and provides examples for prompt generation.

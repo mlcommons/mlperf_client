@@ -21,13 +21,27 @@ void SettingsPage::SetupUi() {
 
   ui_.data_wgt_->setProperty("class", "transparent_panel_widget");
   ui_.log_wgt_->setProperty("class", "transparent_panel_widget");
+  ui_.python_wgt_->setProperty("class", "transparent_panel_widget");
   ui_.cooldown_wgt_->setProperty("class", "transparent_panel_widget");
   ui_.data_path_label_->setProperty("class", "large_strong_label");
   ui_.logs_path_label_->setProperty("class", "large_strong_label");
+  ui_.python_path_label_->setProperty("class", "large_strong_label");
   ui_.keep_logs_label_->setProperty("class", "medium_normal_label");
   ui_.ask_download_label_->setProperty("class", "medium_normal_label");
   ui_.cooldown_label_->setProperty("class", "large_strong_label");
   ui_.cooldown_description_label_->setProperty("class", "medium_normal_label");
+
+  ui_.python_path_box_->SetRequireWritable(false);
+  ui_.python_path_box_->SetBrowseDialogTitle("Select Python Directory");
+  ui_.python_path_box_->setToolTip(
+      "Interpreter used for agentic workflows. Default uses the Python bundled "
+      "with the app; System uses the user's preinstalled Python; "
+      "or browse to a custom Python directory.");
+
+#if defined(Q_OS_IOS)
+  // iOS can't run external processes, so there is no interpreter to choose.
+  ui_.python_wgt_->setVisible(false);
+#endif
 
 #ifdef __APPLE__
   auto updateBoxFn = [](QComboBox *box) {
@@ -39,6 +53,7 @@ void SettingsPage::SetupUi() {
   };
   updateBoxFn(ui_.data_path_box_);
   updateBoxFn(ui_.logs_path_box_);
+  updateBoxFn(ui_.python_path_box_);
 #endif
 }
 
@@ -56,6 +71,8 @@ void SettingsPage::InstallSignalHandlers() {
           &SettingsPage::DataPathChanged);
   connect(ui_.logs_path_box_, &PathComboBox::PathChanged, this,
           &SettingsPage::LogsPathChanged);
+  connect(ui_.python_path_box_, &PathComboBox::PathChanged, this,
+          &SettingsPage::PythonPathChanged);
   connect(ui_.log_switch_, &ToggleButton::toggled, this,
           &SettingsPage::KeepLogsChanged);
   connect(ui_.ask_download_switch_, &ToggleButton::toggled, this,
@@ -74,12 +91,20 @@ void SettingsPage::SetLogPaths(const QStringList &paths) {
   ui_.logs_path_box_->SetPredefinedPaths(paths);
 }
 
+void SettingsPage::SetPythonPaths(const QStringList &paths) {
+  ui_.python_path_box_->SetPredefinedPaths(paths);
+}
+
 void SettingsPage::SetDataCurrentPath(const QString &path) {
   ui_.data_path_box_->SetSelectedPath(path);
 }
 
 void SettingsPage::SetLogsCurrentPath(const QString &path) {
   ui_.logs_path_box_->SetSelectedPath(path);
+}
+
+void SettingsPage::SetPythonCurrentPath(const QString &path) {
+  ui_.python_path_box_->SetSelectedPath(path);
 }
 
 void SettingsPage::SetKeepLogs(bool keep) { ui_.log_switch_->setChecked(keep); }
@@ -98,6 +123,10 @@ QString SettingsPage::GetDataCurrentPath() const {
 
 QString SettingsPage::GetLogsCurrentPath() const {
   return ui_.logs_path_box_->GetSelectedPath();
+}
+
+QString SettingsPage::GetPythonCurrentPath() const {
+  return ui_.python_path_box_->GetSelectedPath();
 }
 
 bool SettingsPage::GetKeepLogs() const { return ui_.log_switch_->isChecked(); }

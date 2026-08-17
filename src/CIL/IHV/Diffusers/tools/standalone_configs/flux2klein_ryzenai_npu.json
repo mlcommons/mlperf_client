@@ -1,0 +1,24 @@
+{
+  "Name": "flux2klein_ryzenai_npu",
+  "Vendor": "AMD",
+  "Model": {
+    "Name": "FLUX.2-klein-4B",
+    "BaseName": "flux_2_klein_4b",
+    "FilePath": "amd/FLUX.2-klein-4B-amdnpu@olive"
+  },
+  "Device": {
+    "backend": "RYZENAI",
+    "device_vendor": "AMD",
+    "device_type": "NPU",
+    "device_id": 0,
+    "gpu_mode": "",
+    "components": {
+      "__is_distilled__": "true",
+      "__is_dynamic__": "false"
+    }
+  },
+  "InputFilePath": "../../../../../../data/prompts/flux_2_klein_4b/test/flux_2_klein_prompts.json",
+  "Iterations": 1,
+  "WarmUp": 1,
+  "SaveImages": true
+}

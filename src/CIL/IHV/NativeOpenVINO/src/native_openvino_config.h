@@ -22,6 +22,7 @@ class NativeOpenVINOExecutionProviderSettings {
 
   const std::string& GetDeviceType() const { return device_type_; }
   std::optional<size_t> GetDeviceId() const { return device_id_; }
+  std::optional<bool> GetIsAgentic() const { return is_agentic_; }
   const std::optional<int>& GetNumOfThreads() const { return num_of_threads_; }
   const std::optional<int>& GetNumStreams() const { return num_streams_; }
 
@@ -29,7 +30,6 @@ class NativeOpenVINOExecutionProviderSettings {
 
   static void from_json(const nlohmann::json& j,
                         NativeOpenVINOExecutionProviderSettings& obj) {
-
     if (j.contains("device_type")) {
       j.at("device_type").get_to(obj.device_type_);
     }
@@ -45,6 +45,10 @@ class NativeOpenVINOExecutionProviderSettings {
     if (j.contains("num_streams")) {
       obj.num_streams_ = j.value("num_streams", 0);
     }
+
+    if (j.contains("IsAgentic")) {
+      obj.is_agentic_ = j.value("IsAgentic", false);
+    }
   }
 
   static inline std::string GetDeviceType(const nlohmann::json& j) {
@@ -56,8 +60,9 @@ class NativeOpenVINOExecutionProviderSettings {
  private:
   std::string device_type_;
   std::optional<size_t> device_id_{std::nullopt};
-  std::optional<int> num_of_threads_;
-  std::optional<int> num_streams_;
+  std::optional<int> num_of_threads_{std::nullopt};
+  std::optional<int> num_streams_{std::nullopt};
+  std::optional<bool> is_agentic_{std::nullopt};
 };
 
 }  // namespace IHV

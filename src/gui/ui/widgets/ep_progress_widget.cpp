@@ -11,13 +11,15 @@ EPProgressWidget::EPProgressWidget(const QString &name,
                                    const QString &description,
                                    const QString &icon_path,
                                    const QString &long_name,
-                                   const QString &model_name, QWidget *parent)
+                                   const QString &model_name, bool is_agentic,
+                                   QWidget *parent)
     : QWidget(parent),
       ep_name_(name),
       ep_description_(description),
       ep_long_name_(long_name),
       model_name_(model_name),
-      icon_path_(icon_path) {
+      icon_path_(icon_path),
+      is_agentic_(is_agentic) {
   SetupUI();
 }
 
@@ -84,7 +86,9 @@ void EPProgressWidget::SetupUI() {
   // Progress Label
   progress_label_ = new QLabel(content_frame_);
   progress_label_->setProperty("class", "large_strong_label");
-  progress_label_->setToolTip("Completed Prompts / Total Prompts");
+  progress_label_->setToolTip(is_agentic_
+                                  ? "Completed Prompt Files / Total Prompt Files"
+                                  : "Completed Prompts / Total Prompts");
   content_layout->addWidget(progress_label_);
 
   auto main_layout = new QHBoxLayout(this);

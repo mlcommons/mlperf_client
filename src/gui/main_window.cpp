@@ -13,10 +13,12 @@
 #include "ui/results_report_page.h"
 #include "ui/settings_page.h"
 #include "ui/start_page.h"
+#include "ui/widgets/loading_widget.h"
 #include "ui/widgets/popup_widget.h"
 
 // include controllers
 #include "controllers/app_controller.h"
+#include "controllers/loading_widget_controller.h"
 #include "controllers/realtime_page_controller.h"
 #include "controllers/results_history_page_controller.h"
 #include "controllers/results_report_page_controller.h"
@@ -36,6 +38,7 @@ MainWindow::MainWindow(controllers::AppController *app_controller,
       history_page_widget_(nullptr),
       report_page_widget_(nullptr),
       settings_page_widget_(nullptr),
+      loading_widget_(nullptr),
       popup_widget_(nullptr),
       app_controller_(app_controller),
       is_mouse_pressed_(false) {
@@ -87,6 +90,9 @@ void MainWindow::SetupUi() {
   ui_.m_stacked_widget->addWidget(report_page_widget_);
   ui_.m_stacked_widget->addWidget(settings_page_widget_);
 
+  loading_widget_ = new LoadingWidget(this);
+  loading_widget_->hide();
+
   blur_effect_ = new QGraphicsBlurEffect(this);
   blur_effect_->setBlurRadius(8);
   blur_effect_->setEnabled(false);
@@ -116,6 +122,8 @@ void MainWindow::InitializeControllers() {
       report_page_widget_);
 
   app_controller_->GetSettingsPageController()->SetView(settings_page_widget_);
+
+  app_controller_->GetLoadingWidgetController()->SetWidget(loading_widget_);
 }
 
 void MainWindow::InstallSignalHandlers() {
@@ -124,10 +132,14 @@ void MainWindow::InstallSignalHandlers() {
   // handle SwitchToPage requests from the App Controller
   connect(app_controller_, &controllers::AppController::SwitchToPage, this,
           &MainWindow::SwitchToPage);
+  connect(app_controller_, &controllers::AppController::ShowLoadingWidget, this,
+          &MainWindow::ShowLoadingWidget, Qt::QueuedConnection);
+  connect(app_controller_, &controllers::AppController::HideLoadingWidget, this,
+          &MainWindow::HideLoadingWidget, Qt::QueuedConnection);
+  connect(loading_widget_, &QDialog::rejected, this,
+          &MainWindow::HideLoadingWidget);
   connect(app_controller_, &controllers::AppController::ShowGlobalPopup, this,
           &MainWindow::ShowGlobalPopup, Qt::QueuedConnection);
-  connect(app_controller_, &controllers::AppController::UpdateProgressPopup,
-          this, &MainWindow::UpdateProgressPopup, Qt::QueuedConnection);
   connect(app_controller_, &controllers::AppController::HidePopup, this,
           &MainWindow::HidePopup);
 
@@ -247,24 +259,13 @@ bool MainWindow::CanLeaveCurrentPage() {
   return true;
 }
 
-void MainWindow::ShowGlobalPopup(const QString &message, bool is_progress) {
+void MainWindow::ShowGlobalPopup(const QString &message) {
   blur_effect_->setEnabled(true);
-
   if (popup_widget_) HidePopup();
-
-  popup_widget_ =
-      is_progress ? new ProgressPopupWidget(this) : new PopupWidget(this);
+  popup_widget_ = new PopupWidget(this);
   connect(popup_widget_, &PopupWidget::rejected, this, &MainWindow::HidePopup);
   popup_widget_->SetMessage(message);
   popup_widget_->show();
-}
-
-void MainWindow::UpdateProgressPopup(int progress) {
-  ProgressPopupWidget *progress_popup =
-      qobject_cast<ProgressPopupWidget *>(popup_widget_);
-  if (progress_popup) {
-    progress_popup->SetProgressPercent(progress);
-  }
 }
 
 void MainWindow::HidePopup() {
@@ -273,6 +274,19 @@ void MainWindow::HidePopup() {
     popup_widget_->deleteLater();
     popup_widget_ = nullptr;
   }
+}
+
+void MainWindow::ShowLoadingWidget() {
+  blur_effect_->setEnabled(true);
+  loading_widget_->show();
+}
+
+void MainWindow::HideLoadingWidget() {
+  if (!loading_widget_) return;
+  blur_effect_->setEnabled(false);
+  app_controller_->GetLoadingWidgetController()->SetWidget(nullptr);
+  loading_widget_->deleteLater();
+  loading_widget_ = nullptr;
 }
 
 }  // namespace gui

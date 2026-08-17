@@ -1,0 +1,65 @@
+{
+  "SystemConfig": {
+    "Comment": "llama-cpp CUDA, GPU",
+    "TempPath": "",
+    "EPDependenciesConfigPath": ""
+  },
+  "Scenarios": [
+    {
+      "Name": "qwen3",
+      "Models": [
+        {
+          "ModelName": "Qwen3-8B-Q4_0",
+          "FilePath": "https://client.mlcommons-storage.org/deps/2.0/scenario_files/models/qwen3/8b/GGML/Qwen_Qwen3-8B-Q4_0.gguf",
+          "TokenizerPath": "https://client.mlcommons-storage.org/deps/2.0/scenario_files/models/qwen3/8b/GGML/tokenizer.zip"
+        }
+      ],
+      "InputFilePath": {
+        "base": [
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/agentic/prompts/qwen3/8b/swe_agent/swe-agent-prompts.json"
+        ],
+        "extended": [
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/agentic/prompts/qwen3/8b/data_agent/da-agent-scenario.json"
+        ]
+      },
+      "AssetsPath": [
+        "https://client.mlcommons-storage.org/deps/2.0/scenario_files/agentic/prompts/qwen3/8b/swe_agent/swe_warmup.md",
+        "https://client.mlcommons-storage.org/deps/2.0/scenario_files/agentic/prompts/qwen3/8b/swe_agent/swe_system.md",
+        "https://client.mlcommons-storage.org/deps/2.0/scenario_files/agentic/prompts/qwen3/8b/swe_agent/swe_user_0.md",
+        "https://client.mlcommons-storage.org/deps/2.0/scenario_files/agentic/prompts/qwen3/8b/swe_agent/swe_user_1.md",
+        "https://client.mlcommons-storage.org/deps/2.0/scenario_files/agentic/prompts/qwen3/8b/swe_agent/swe_user_2.md",
+        "https://client.mlcommons-storage.org/deps/2.0/scenario_files/agentic/prompts/qwen3/8b/swe_agent/swe_agent_0.md",
+        "https://client.mlcommons-storage.org/deps/2.0/scenario_files/agentic/prompts/qwen3/8b/swe_agent/swe_agent_1.md",
+        "https://client.mlcommons-storage.org/deps/2.0/scenario_files/agentic/prompts/qwen3/8b/swe_agent/swe_agent_2.md",
+        "https://client.mlcommons-storage.org/deps/2.0/scenario_files/agentic/prompts/qwen3/8b/data_agent/da_warmup.md",
+        "https://client.mlcommons-storage.org/deps/2.0/scenario_files/agentic/prompts/qwen3/8b/data_agent/da_system.md",
+        "https://client.mlcommons-storage.org/deps/2.0/scenario_files/agentic/prompts/qwen3/8b/data_agent/da_user_0.md",
+        "https://client.mlcommons-storage.org/deps/2.0/scenario_files/agentic/prompts/qwen3/8b/data_agent/da_user_1.md",
+        "https://client.mlcommons-storage.org/deps/2.0/scenario_files/agentic/prompts/qwen3/8b/data_agent/da_user_2.md",
+        "https://client.mlcommons-storage.org/deps/2.0/scenario_files/agentic/prompts/qwen3/8b/data_agent/da_user_3.md",
+        "https://client.mlcommons-storage.org/deps/2.0/scenario_files/agentic/prompts/qwen3/8b/data_agent/da_agent_0.md",
+        "https://client.mlcommons-storage.org/deps/2.0/scenario_files/agentic/prompts/qwen3/8b/data_agent/da_agent_1.md",
+        "https://client.mlcommons-storage.org/deps/2.0/scenario_files/agentic/prompts/qwen3/8b/data_agent/da_agent_2.md",
+        "https://client.mlcommons-storage.org/deps/2.0/scenario_files/agentic/prompts/qwen3/8b/data_agent/da_agent_3.md",
+        "https://client.mlcommons-storage.org/deps/2.0/scenario_files/agentic/tools_sandbox.zip"
+      ],
+      "ResultsVerificationFile": "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/generation-greedy-results.json",
+      "DataVerificationFile": "",
+      "Iterations": 3,
+      "Delay": 5,
+      "ExecutionProviders": [
+        {
+          "Name": "llama-cpp",
+          "Config": {
+            "backend": "CUDA",
+            "device_type": "GPU",
+            "gpu_layers": 999,
+            "fa": 1,
+            "no_mmap": 1
+          }
+        }
+      ],
+      "IsAgentic": true
+    }
+  ]
+}

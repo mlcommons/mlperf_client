@@ -28,10 +28,18 @@ namespace cil {
 namespace IHV {
 
 cil::IHV::NativeQNN::NativeQNN(const API_IHV_Setup_t& api) {
-  std::string model_name = api.model_name;
   std::string ep_name = api.ep_name;
+  const std::string scenario_name = api.scenario_name;
   std::string model_path = api.model_path;
   std::string ep_settings_str = api.ep_settings;
+  const std::string model_name = api.model_base_name;
+  const std::string model_family =
+      [](const std::string& base_name) -> std::string {
+    if (base_name.starts_with("llama_3")) return "llama3";
+    if (base_name.starts_with("phi_4_mini")) return "phi4-mini";
+    if (base_name.starts_with("phi_4")) return "phi4";
+    return base_name;
+  }(model_name);
 
   NativeQnnExecutionProviderSettings ep_settings(
       nlohmann::json::parse(ep_settings_str));
@@ -49,23 +57,24 @@ cil::IHV::NativeQNN::NativeQNN(const API_IHV_Setup_t& api) {
     return;
   }
 
-  if (model_name == "llama3" ||
-      model_name == "phi3.5" || model_name == "phi4") {
-    inference_ = std::make_shared<infer::LlmInference>(model_path, model_name,
-                                                          ep_settings, logger);
+  bool is_canonical_scenario = false;
+  IHV_VALIDATE_SCENARIO_WITH_ALIASES(api, scenario_name, is_canonical_scenario,
+                                     "llama3", "phi4mini",
+                                     "phi4reason", "phi4");
+  IHV_VALIDATE_MODEL_BASE_NAME(api, model_name, scenario_name,
+                               is_canonical_scenario, "llama_3_1_8b_instruct",
+                               "phi_4_mini_instruct",
+                               "phi_4_reasoning_14b");
 
-    auto error_message = inference_->GetErrorMessage();
-    if (!error_message.empty()) {
-      api.logger(api.context, API_IHV_LogLevel::API_IHV_ERROR,
-                 error_message.c_str());
-      inference_.reset();
-    }
+  inference_ = std::make_shared<infer::LlmInference>(model_path, model_family,
+                                                     ep_settings, logger);
 
-    return;
+  if (auto error_message = inference_->GetErrorMessage();
+      !error_message.empty()) {
+    api.logger(api.context, API_IHV_LogLevel::API_IHV_ERROR,
+               error_message.c_str());
+    inference_.reset();
   }
-
-  auto error = "Model " + model_name + " is not supported";
-  api.logger(api.context, API_IHV_LogLevel::API_IHV_FATAL, error.c_str());
 }
 
 DEFINE_IHV_CLASS_ENUMERATE_DEVICES_IMPL(cil::IHV::NativeQNN)

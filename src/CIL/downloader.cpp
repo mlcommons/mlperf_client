@@ -3,14 +3,13 @@
 #include <httplib.h>
 #include <log4cxx/logger.h>
 
+#include <cerrno>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <ostream>
-#include <fstream>
-
 #include <regex>
-#include <fstream>
 
 #include "progress_notifier.h"
 #include "utils.h"
@@ -27,30 +26,6 @@ bool HasFileScheme(const std::string& url) {
 
 bool HasHttpScheme(const std::string& url) {
   return url.rfind("http://", 0) == 0 || url.rfind("https://", 0) == 0;
-}
-
-bool CheckDiskSpace(const std::string& destination_path, uint64_t file_size) {
-  // Get Parent directory of the destination file
-  std::filesystem::path destination_parent_path =
-      std::filesystem::path(destination_path).parent_path();
-  // make sure the parent directory exists
-  if (!std::filesystem::exists(destination_parent_path)) {
-    if (!utils::CreateDirectory(destination_parent_path.string())) {
-      LOG4CXX_ERROR(loggerDownloader, "Error creating the parent directory: "
-                                          << destination_parent_path);
-      return false;
-    }
-  }
-  auto available_space =
-      utils::GetAvailableDiskSpace(destination_parent_path.string());
-  if (available_space < file_size) {
-    LOG4CXX_ERROR(
-        loggerDownloader,
-        "Error: Not enough space to download the file: " << destination_path);
-    return false;
-  }
-
-  return true;
 }
 
 // Template function to set proxy if available
@@ -104,39 +79,42 @@ std::pair<std::string, int> Downloader::ParseProxy(
 }
 
 template <typename ClientType>
-bool Downloader::GetRemoteFileMeta(ClientType& client,
-                                   const std::string& host_file_path,
-                                   uint64_t& file_size,
-                                   bool* accepts_range) const {
+Expected<RemoteFileMeta> Downloader::GetRemoteFileMeta(
+    ClientType& client, const std::string& host_file_path) const {
   auto res = client.Head(host_file_path.c_str());
-  if (!res || res->status != 200) {
-    LOG4CXX_ERROR(
-        loggerDownloader,
-        "Error getting the content length of the file: " << host_file_path);
-    if (res) {
-      auto error = res.error();
-      LOG4CXX_ERROR(loggerDownloader, "Status code: " << res->status);
-      LOG4CXX_ERROR(loggerDownloader, "Error: " << error);
-    }
-    return false;
+  if (!res) {
+    // No response at all (DNS / connect / TLS / timeout): treat as offline.
+    LOG4CXX_ERROR(loggerDownloader,
+                  "Error getting the content length of the file: "
+                      << host_file_path << " - no response (" << res.error()
+                      << ")");
+    return Expected<RemoteFileMeta>::error(
+        "could not connect to the download server - check your internet "
+        "connection");
+  }
+  if (res->status != 200) {
+    LOG4CXX_ERROR(loggerDownloader,
+                  "Error getting the content length of the file: "
+                      << host_file_path << " - HTTP status " << res->status);
+    return Expected<RemoteFileMeta>::error(
+        "the download server returned HTTP status " +
+        std::to_string(res->status) +
+        " (the file may be unavailable or have moved)");
   }
 
   auto content_length = res->get_header_value("Content-Length");
   if (content_length.empty()) {
-    LOG4CXX_ERROR(
-        loggerDownloader,
-        "Error getting the content length of the file: " << host_file_path);
-    return false;
-  }
-  file_size = std::stoull(content_length);
-
-  if (accepts_range) {
-    auto accept_range_it = res->headers.find("Accept-Ranges");
-    *accepts_range = accept_range_it != res->headers.end() &&
-                     accept_range_it->second == "bytes";
+    LOG4CXX_ERROR(loggerDownloader,
+                  "Error getting the content length of the file: "
+                      << host_file_path << " - missing Content-Length header");
+    return Expected<RemoteFileMeta>::error(
+        "the download server did not report the file size");
   }
 
-  return true;
+  auto accept_range_it = res->headers.find("Accept-Ranges");
+  return RemoteFileMeta{std::stoull(content_length),
+                        accept_range_it != res->headers.end() &&
+                            accept_range_it->second == "bytes"};
 }
 
 void Downloader::DownloadChunk(const std::string& host_name,
@@ -158,21 +136,49 @@ void Downloader::DownloadChunk(const std::string& host_name,
     client.set_read_timeout(60, 0);
     httplib::Headers headers = {{"Range", "bytes=" + std::to_string(start) +
                                               "-" + std::to_string(end)}};
-    std::ofstream output_file(output_file_path, std::ios::binary);
+    // Open the pre-allocated destination without truncating so sibling
+    // threads' writes to other byte ranges are preserved, then seek to this
+    // chunk's start offset. The ios::in flag is what suppresses truncation.
+    std::fstream output_file(output_file_path,
+                             std::ios::binary | std::ios::in | std::ios::out);
+    if (!output_file) {
+      LOG4CXX_ERROR(loggerDownloader,
+                    "Error opening destination file for chunk ("
+                        << start << " - " << end << "): " << output_file_path);
+      if (i < retry - 1) continue;
+      break;
+    }
+    output_file.seekp(start);
     uint64_t downloaded_size = 0;
-    auto res = client.Get(host_file_path.c_str(), headers,
-                          [&](const char* data, size_t data_length) -> bool {
-                            if (stop_download.load()) {
-                              LOG4CXX_ERROR(loggerDownloader,
-                                            "Download stopped by user.");
-                              return false;
-                            }
-                            output_file.write(data, data_length);
-                            downloaded_size += data_length;
-                            progress += data_length;
+    bool disk_full = false;
+    auto res = client.Get(
+        host_file_path.c_str(), headers,
+        [&](const char* data, size_t data_length) -> bool {
+          if (stop_download.load()) {
+            LOG4CXX_ERROR(loggerDownloader, "Download stopped by user.");
+            return false;
+          }
+          output_file.write(data, data_length);
+          if (output_file.fail()) {
+            if (errno == ENOSPC) {
+              disk_full = true;
+              LOG4CXX_ERROR(loggerDownloader,
+                            "Error: Not enough disk space to write "
+                            "chunk ("
+                                << start << " - " << end << ") of "
+                                << host_file_path);
+            } else {
+              LOG4CXX_ERROR(loggerDownloader, "Error writing chunk ("
+                                                  << start << " - " << end
+                                                  << ") of " << host_file_path);
+            }
+            return false;
+          }
+          downloaded_size += data_length;
+          progress += data_length;
 
-                            return true;
-                          });
+          return true;
+        });
 
     if (!res || res->status != 206) {
       // Revert progress
@@ -185,6 +191,9 @@ void Downloader::DownloadChunk(const std::string& host_name,
         LOG4CXX_ERROR(loggerDownloader, "Status code: " << res->status);
         LOG4CXX_ERROR(loggerDownloader, "Error: " << error);
       }
+
+      if (disk_full) break;
+
       if (i < retry - 1) {
         LOG4CXX_ERROR(loggerDownloader, "Retrying download chunk ("
                                             << start << " - " << end << ") of "
@@ -209,15 +218,10 @@ bool Downloader::DownloadRemoteFile(
   SetProxyIfAvailable(client);
   client.set_follow_location(true);
 
-  uint64_t file_size = 0;
-  bool accepts_range = false;
-  if (!GetRemoteFileMeta(client, host_file_path, file_size, &accepts_range))
-    return false;
-
-  // Check if there is enough space to download the file
-  if (!CheckDiskSpace(destination_file_path, file_size)) {
-    return false;
-  }
+  auto meta = GetRemoteFileMeta(client, host_file_path);
+  if (!meta) return false;
+  const uint64_t file_size = meta.value().size;
+  const bool accepts_range = meta.value().accepts_range;
 
   // Small file optimization or fallback for unsupported range requests:
   // If the server does not support range requests, or if threads num is 1, or
@@ -228,15 +232,27 @@ bool Downloader::DownloadRemoteFile(
       num_threads > 1 && file_size < 1024 * 1024) {
     std::ofstream output_file(destination_file_path, std::ios::binary);
     uint64_t downloaded_size = 0;
-    auto res =
-        client.Get(host_file_path.c_str(),
-                   [&](const char* data, size_t data_length) -> bool {
-                     output_file.write(data, data_length);
-                     downloaded_size += data_length;
-                     progress_notifier((int)(downloaded_size * 100 / file_size),
-                                       progress_callback);
-                     return true;
-                   });
+    auto res = client.Get(
+        host_file_path.c_str(),
+        [&](const char* data, size_t data_length) -> bool {
+          output_file.write(data, data_length);
+          if (output_file.fail()) {
+            if (errno == ENOSPC) {
+              LOG4CXX_ERROR(loggerDownloader,
+                            "Error: Not enough disk space to "
+                            "download the file: "
+                                << host_file_path);
+            } else {
+              LOG4CXX_ERROR(loggerDownloader,
+                            "Error writing the file: " << host_file_path);
+            }
+            return false;
+          }
+          downloaded_size += data_length;
+          progress_notifier((int)(downloaded_size * 100 / file_size),
+                            downloaded_size, file_size, progress_callback);
+          return true;
+        });
     output_file.close();
     if (!res || res->status != 200) {
       LOG4CXX_ERROR(loggerDownloader,
@@ -244,6 +260,29 @@ bool Downloader::DownloadRemoteFile(
       return false;
     }
     return true;
+  }
+
+  // Pre-allocate the destination file so each chunk thread can seek to its
+  // start offset and write directly into the final file in parallel — no
+  // per-chunk .part files and no separate merge phase. std::filesystem::
+  // resize_file is C++17 and portable across Windows / Linux / macOS, but it
+  // requires the file to exist, so create it first.
+  {
+    std::ofstream create_file(destination_file_path,
+                              std::ios::binary | std::ios::trunc);
+    if (!create_file) {
+      LOG4CXX_ERROR(loggerDownloader, "Error creating destination file: "
+                                          << destination_file_path);
+      return false;
+    }
+  }
+  std::error_code ec;
+  std::filesystem::resize_file(destination_file_path, file_size, ec);
+  if (ec) {
+    LOG4CXX_ERROR(loggerDownloader, "Error preallocating destination file ("
+                                        << destination_file_path
+                                        << "): " << ec.message());
+    return false;
   }
 
   std::vector<std::thread> threads;
@@ -254,25 +293,17 @@ bool Downloader::DownloadRemoteFile(
     uint64_t start = i * chunk_size;
     uint64_t end =
         (i == num_threads - 1) ? file_size - 1 : (start + chunk_size - 1);
-    std::string temp_file = destination_file_path + ".part" + std::to_string(i);
     threads.emplace_back(&Downloader::DownloadChunk, this, host_name,
-                         host_file_path, start, end, temp_file,
+                         host_file_path, start, end, destination_file_path,
                          std::ref(progress), std::ref(has_failed), 5);
   }
-
-  const double download_progress_interval = 1.0 - num_threads * 0.02;
-  const double merge_progress_interval = 1.0 - download_progress_interval;
-
-  double download_progress_percent = 0.0;
 
   std::thread progress_thread([&]() {
     while (progress < file_size && !has_failed && !stop_download.load()) {
       std::this_thread::sleep_for(std::chrono::milliseconds(500));
-
-      download_progress_percent =
-          download_progress_interval * (double)progress * 100 / file_size;
-
-      progress_notifier((int)download_progress_percent, progress_callback);
+      progress_notifier(static_cast<int>(static_cast<double>(progress) * 100 /
+                                         static_cast<double>(file_size)),
+                        progress.load(), file_size, progress_callback);
     }
   });
 
@@ -287,42 +318,13 @@ bool Downloader::DownloadRemoteFile(
     return false;
   }
 
-  // merge the chunks
-  std::ofstream full_output_file(destination_file_path, std::ios::binary);
-  for (int i = 0; i < num_threads; ++i) {
-    std::string temp_file_path =
-        destination_file_path + ".part" + std::to_string(i);
-    if (!std::filesystem::exists(temp_file_path)) {
-      LOG4CXX_ERROR(loggerDownloader,
-                    "Error: " << temp_file_path << " does not exist.");
-      return false;
-    }
-    try {
-      std::ifstream temp_file(temp_file_path, std::ios::binary);
-      full_output_file << temp_file.rdbuf();
-      temp_file.close();
-      std::filesystem::remove(temp_file_path);
-    } catch (...) {
-      LOG4CXX_ERROR(loggerDownloader, "Error merging the chunks.");
-      return false;
-    }
-
-    double progress_percent =
-        download_progress_percent +
-        merge_progress_interval * (double)(i + 1) * 100 / num_threads;
-
-    progress_notifier((int)progress_percent, progress_callback);
-  }
-  full_output_file.close();
+  progress_notifier(100, file_size, file_size, progress_callback);
   return true;
 }
 
-bool Downloader::GetRemoteFileSize(const std::string& file_url,
-                                   uint64_t& file_size) const {
-  if (HasFileScheme(file_url) || !HasHttpScheme(file_url)) {
-    file_size = 0;
-    return true;
-  }
+Expected<uint64_t> Downloader::GetRemoteFileSize(
+    const std::string& file_url) const {
+  if (HasFileScheme(file_url) || !HasHttpScheme(file_url)) return uint64_t{0};
 
   // Parse the URL to extract the host name and file path
   std::string host_name;
@@ -333,7 +335,9 @@ bool Downloader::GetRemoteFileSize(const std::string& file_url,
   SetProxyIfAvailable(client);
   client.set_follow_location(true);
 
-  return GetRemoteFileMeta(client, host_file_path, file_size);
+  auto meta = GetRemoteFileMeta(client, host_file_path);
+  if (!meta) return Expected<uint64_t>::error(meta.error());
+  return meta.value().size;
 }
 
 Downloader::Downloader(const std::string& destination_file_path)
@@ -341,10 +345,36 @@ Downloader::Downloader(const std::string& destination_file_path)
 
 Downloader::~Downloader() = default;
 
-bool Downloader::operator()(
-    const std::string& file_url, bool get_remote_size_only, uint64_t& file_size,
-    const DownloadProgressCallback& progress_callback) const {
-  if (get_remote_size_only) return GetRemoteFileSize(file_url, file_size);
+bool Downloader::operator()(const std::string& file_url,
+                            bool get_file_size_only, bool include_local_size,
+                            uint64_t& file_size,
+                            const DownloadProgressCallback& progress_callback,
+                            std::string& error_message) const {
+  if (get_file_size_only) {
+    if (include_local_size &&
+        (HasFileScheme(file_url) || !HasHttpScheme(file_url))) {
+      const std::string local_path =
+          HasFileScheme(file_url) ? file_url.substr(7) : file_url;
+      std::error_code ec;
+      const auto size = std::filesystem::file_size(local_path, ec);
+      if (ec) {
+        LOG4CXX_ERROR(loggerDownloader,
+                      "Failed to stat local file: " << local_path << " ("
+                                                    << ec.message() << ")");
+        error_message = "could not read the local file (" + ec.message() + ")";
+        return false;
+      }
+      file_size = static_cast<uint64_t>(size);
+      return true;
+    }
+    auto remote_size = GetRemoteFileSize(file_url);
+    if (!remote_size) {
+      error_message = remote_size.error();
+      return false;
+    }
+    file_size = remote_size.value();
+    return true;
+  }
 
   if (HasFileScheme(file_url))
     return CopyFileWithProgress(file_url.substr(7), destination_file_path_,
@@ -374,7 +404,7 @@ bool Downloader::operator()(
       DownloadRemoteFile(host_name, host_file_path, temp_download_path,
                          num_threads, progress_callback);
   if (!download_success) {
-    // remove the temp file if exists
+    // remove the partially-written temp file
     std::remove(temp_download_path.c_str());
     LOG4CXX_ERROR(loggerDownloader, "Error downloading file: " << file_url);
   } else {
@@ -412,10 +442,6 @@ bool Downloader::CopyFileWithProgress(
                       << source_path);
     return false;
   }
-  auto src_file_size = fs::file_size(fs::path(source_path));
-  if (!CheckDiskSpace(destination_path, src_file_size)) {
-    return false;
-  }
   std::ifstream source_file(src_path.c_str(), std::ios::binary);
   if (!source_file) {
     LOG4CXX_ERROR(loggerDownloader,
@@ -447,7 +473,9 @@ bool Downloader::CopyFileWithProgress(
 
     bytes_copied += source_file.gcount();
 
-    progress_notifier((int)(bytes_copied * 100 / file_size), progress_callback);
+    progress_notifier((int)(bytes_copied * 100 / file_size),
+                      (uint64_t)bytes_copied, (uint64_t)file_size,
+                      progress_callback);
   }
 
   if (!destination_file) {

@@ -70,8 +70,12 @@ void ExpandableWidget::SetContentHeight(int height) {
   content_widget_->setMaximumHeight(height);
 }
 
+int ExpandableWidget::GetContentPreferredHeight() const {
+  return content_widget_ ? content_widget_->sizeHint().height() : 0;
+}
+
 void ExpandableWidget::ToggleExpand(bool is_expanded) {
-  animation_->setEndValue(content_widget_->sizeHint().height());
+  animation_->setEndValue(GetContentPreferredHeight());
   animation_->setDirection(is_expanded ? QAbstractAnimation::Forward
                                        : QAbstractAnimation::Backward);
   animation_->start();
@@ -81,7 +85,7 @@ void ExpandableWidget::Expand(bool with_animation) {
   if (with_animation) {
     expand_button_->click();
   } else {
-    SetContentHeight(content_widget_->sizeHint().height());
+    SetContentHeight(GetContentPreferredHeight());
     expand_button_->setChecked(true);
   }
 }

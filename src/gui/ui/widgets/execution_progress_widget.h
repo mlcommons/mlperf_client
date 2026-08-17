@@ -35,14 +35,14 @@ class ExecutionProgressWidget : public QWidget {
 
   int AddEPProgressWidget(const QString &name, const QString &description,
                           const QString &icon_path, const QString &long_name,
-                          const QString &model_name);
+                          const QString &model_name, bool is_agentic);
   void MoveToNextEP(bool current_success);
 
   void ClearEPs();
 
   void AddEP(const QString &name, const QString &description,
              const QString &device_type, const QString &long_name,
-             const QString &model_name);
+             const QString &model_name, bool is_agentic);
 
   void SetTaskName(const QString &name);
 

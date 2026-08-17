@@ -97,7 +97,7 @@ class PerformanceCounterDataNpuGpu : public PerformanceCounterDataBase {
     std::map<int, double> values;
   };
 
-  std::vector<Device> FindDevices(DeviceType type);
+  std::vector<Device> FindDevices(DeviceType type) const;
   void UpdateDeviceMemory();
 
   //

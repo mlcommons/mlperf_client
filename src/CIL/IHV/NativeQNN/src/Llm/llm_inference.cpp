@@ -22,10 +22,11 @@ limitations under the License.
 #include <regex>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "../native_qnn_config.h"
-#include "llm/llama_config.h"
+#include "llm/llm_config.h"
 #include "math_utils.h"
 #include "windows.h"
 
@@ -43,6 +44,46 @@ std::vector<std::vector<uint32_t>> token_ids;
 
 namespace fs = std::filesystem;
 
+namespace {
+
+// Translate a shell glob ("name_*.bin") to a fully anchored regex pattern.
+// Only `*` is treated as a wildcard; all other regex specials are escaped.
+std::string GlobToRegex(const std::string& glob) {
+  std::string regex = "^";
+  for (char c : glob) {
+    switch (c) {
+      case '*': regex += ".*"; break;
+      case '.': case '+': case '(': case ')': case '[': case ']':
+      case '{': case '}': case '?': case '|': case '^': case '$':
+      case '\\':
+        regex += '\\';
+        regex += c;
+        break;
+      default: regex += c;
+    }
+  }
+  regex += '$';
+  return regex;
+}
+
+// Walk a JSON value; for every string scalar, apply `subst`. If `subst`
+// returns a non-null JSON value, the scalar is replaced wholesale. Supports
+// both interpolation (returning a string) and array/number replacement.
+void WalkAndSubstitute(
+    nlohmann::json& node,
+    const std::function<nlohmann::json(const std::string&)>& subst) {
+  if (node.is_object()) {
+    for (auto& [_, v] : node.items()) WalkAndSubstitute(v, subst);
+  } else if (node.is_array()) {
+    for (auto& v : node) WalkAndSubstitute(v, subst);
+  } else if (node.is_string()) {
+    auto replaced = subst(node.get<std::string>());
+    if (!replaced.is_null()) node = std::move(replaced);
+  }
+}
+
+}  // namespace
+
 std::vector<std::string> LlmInference::listNpuFiles(
     const std::string& model_folder_, const std::string& model_name_) {
   try {
@@ -55,28 +96,29 @@ std::vector<std::string> LlmInference::listNpuFiles(
       return {};
     }
 
-    // Regex
-    std::regex pattern;
-    if (model_name_ == "llama3") {
-      pattern = std::regex(R"(^llama3_npu_.*\.bin$)");
-    } else if (model_name_ == "phi3.5") {
-      pattern = std::regex(R"(^phi3_5_npu_.*\.bin$)");
-    } else if (model_name_ == "phi4") {
-      pattern = std::regex(R"(^phi4_npu_.*\.bin$)");
-    } else {
-      logger_(cil::LogLevel::kFatal, "Model name is not recognized");
-      error_message_ = "Model name is not recognized";
+    if (npu_bin_pattern_.empty()) {
+      error_message_ =
+          "npu_bin_pattern not set; cannot enumerate NPU bins in " +
+          model_folder_;
+      logger_(cil::LogLevel::kFatal, error_message_);
       return {};
     }
-    std::vector<std::string> files;
 
+    const std::regex pattern(GlobToRegex(npu_bin_pattern_));
+    std::vector<std::string> files;
     for (const auto& entry : fs::directory_iterator(folder)) {
       if (!entry.is_regular_file()) continue;
-
       const std::string name = entry.path().filename().string();
       if (std::regex_match(name, pattern)) {
         files.push_back(model_folder_ + "/" + name);
       }
+    }
+
+    if (files.empty()) {
+      error_message_ = "No NPU bins matched glob '" + npu_bin_pattern_ +
+                       "' in " + model_folder_;
+      logger_(cil::LogLevel::kFatal, error_message_);
+      return {};
     }
 
     std::sort(files.begin(), files.end());
@@ -110,6 +152,7 @@ LlmInference::LlmInference(
   model_folder_ =
       fs::current_path().append(model_parent_path.string()).string();
   device_type_ = ep_settings.GetDeviceType();
+  is_agentic_ = ep_settings.GetIsAgentic();
 
   unsigned long long ramSize = checkDeviceRAM();
 
@@ -123,19 +166,134 @@ LlmInference::LlmInference(
 }
 
 void LlmInference::FillConfigString(const nlohmann::json& model_config) {
-  npu_bins_ = listNpuFiles(model_folder_, model_name_);
-  if (model_name_ == "llama3") {
-    configString_ = formConfigStringLlama3_SDX_Elite(
-        model_config, device_type_, model_folder_, model_path_, npu_bins_);
-  } else if (model_name_ == "phi3.5") {
-    configString_ = formConfigStringPhi3_5_SDX_Elite(
-        model_config, device_type_, model_folder_, model_path_, npu_bins_);
-  } else if (model_name_ == "phi4") {
-    configString_ = formConfigStringPhi4_SDX_Elite(
-        model_config, device_type_, model_folder_, model_path_, npu_bins_);
+  // 1. Pick the per-device config file.
+  std::string config_filename;
+  if (device_type_ == "NPU") {
+    config_filename = "native_qnn_config_npu.json";
+  } else if (device_type_ == "NPU_CPU") {
+    config_filename = "native_qnn_config_npu_cpu.json";
   } else {
+    error_message_ = "Unsupported device_type '" + device_type_ +
+                     "'; expected NPU or NPU_CPU";
+    logger_(cil::LogLevel::kFatal, error_message_);
     configString_ = "";
+    return;
   }
+
+  const fs::path config_path =
+      fs::path(model_folder_) / config_filename;
+  std::ifstream in(config_path);
+  if (!in) {
+    error_message_ = config_filename + " not found in " + model_folder_;
+    logger_(cil::LogLevel::kFatal, error_message_);
+    configString_ = "";
+    return;
+  }
+
+  // 2. Parse it.
+  nlohmann::json file_doc;
+  try {
+    in >> file_doc;
+  } catch (const std::exception& e) {
+    error_message_ = std::string("Failed to parse ") + config_filename +
+                     ": " + e.what();
+    logger_(cil::LogLevel::kFatal, error_message_);
+    configString_ = "";
+    return;
+  }
+
+  if (!file_doc.contains("npu_bin_pattern") ||
+      !file_doc["npu_bin_pattern"].is_string() ||
+      !file_doc.contains("dialog") || !file_doc["dialog"].is_object()) {
+    error_message_ = config_filename +
+                     " is missing required 'npu_bin_pattern' or 'dialog'";
+    logger_(cil::LogLevel::kFatal, error_message_);
+    configString_ = "";
+    return;
+  }
+
+  npu_bin_pattern_ = file_doc["npu_bin_pattern"].get<std::string>();
+
+  // 3. Glob the NPU bin files now that we know the pattern.
+  npu_bins_ = listNpuFiles(model_folder_, model_name_);
+  if (npu_bins_.empty()) {
+    configString_ = "";
+    return;
+  }
+
+  // 4. Pull out the dialog and substitute placeholders.
+  nlohmann::json dialog = file_doc["dialog"];
+  const auto npu_bins_json = nlohmann::json(npu_bins_);
+
+  auto subst = [&](const std::string& s) -> nlohmann::json {
+    if (s == "${NPU_BINS}") return npu_bins_json;
+    std::string out = s;
+    auto replace_all = [&](const std::string& key, const std::string& val) {
+      size_t pos = 0;
+      while ((pos = out.find(key, pos)) != std::string::npos) {
+        out.replace(pos, key.size(), val);
+        pos += val.size();
+      }
+    };
+    replace_all("${MODEL_FOLDER}", model_folder_);
+    replace_all("${MODEL_PATH}", model_path_);
+    if (out == s) return nullptr;
+    return out;
+  };
+  WalkAndSubstitute(dialog, subst);
+
+  // 5. Inject per-prompt fields from the prompt JSON's model_config.
+  try {
+    dialog["max-num-tokens"] = model_config["search"]["max_length"];
+    // Agentic conversations need the full configured context to hold the
+    // accumulated multi-turn history, so they run uncapped. Non-agentic runs
+    // keep the 4096-token cap.
+    const int context_length =
+        cil::infer::LlmConfig::GetContextLength(model_config);
+    dialog["context"]["size"] =
+        is_agentic_ ? context_length : std::min(4096, context_length);
+    auto& sampler = dialog["sampler"];
+    // Skip the fixed sampler for greedy (temp==0) runs like MMLU.
+    if (model_name_ == "phi4-mini" &&
+        model_config["search"].value("temperature", 0.0) != 0.0) {
+      // Phi-4-mini requires fixed sampler settings for correct generation.
+      sampler["temp"] = 0.8;
+      sampler["top-k"] = 40;
+      sampler["top-p"] = 0.95;
+    } else {
+      sampler["temp"] = model_config["search"]["temperature"];
+      sampler["top-k"] = model_config["search"]["top_k"];
+      sampler["top-p"] = model_config["search"].value("top_p", 0.95);
+    }
+
+    // Set the CPU (QnnGenAiTransformer) engine's thread count to the machine's
+    // logical core count. In NPU_CPU mode "engine" is an array holding both the
+    // HTP (NPU) engine and the CPU engine; pick the QnnGenAiTransformer one.
+    const unsigned int n_threads = std::thread::hardware_concurrency();
+    if (dialog.contains("engine") && dialog["engine"].is_array()) {
+      for (auto& cpu_engine : dialog["engine"]) {
+        if (cpu_engine.value("backend", nlohmann::json::object())
+                .value("type", "") == "QnnGenAiTransformer") {
+          cpu_engine["n-threads"] = n_threads;
+        }
+      }
+    }
+  } catch (const std::exception& e) {
+    error_message_ = std::string("Failed to apply prompt model_config to ") +
+                     config_filename + ": " + e.what();
+    logger_(cil::LogLevel::kFatal, error_message_);
+    configString_ = "";
+    return;
+  }
+
+  // 6. Wrap and emit. Keep the diagnostic dump.
+  nlohmann::json full;
+  full["dialog"] = dialog;
+  {
+    std::ofstream debug_f(model_folder_ + "/generated_genie_config.json");
+    if (debug_f) debug_f << full.dump(2);
+  }
+  configString_ = full.dump();
 }
 
 void LlmInference::Init(const nlohmann::json& model_config) {
@@ -167,7 +325,6 @@ void LlmInference::Init(const nlohmann::json& model_config) {
                         "QnnHtp.dll",
                         "QnnHtpNetRunExtensions.dll",
                         "QnnSystem.dll",
-                        "QnnGenAiTransformerCpuOpPkg.dll",
                         "QnnGenAiTransformerModel.dll",
                         "QnnGenAiTransformer.dll"};
     } else if (device_type_ == "NPU") {
@@ -175,7 +332,7 @@ void LlmInference::Init(const nlohmann::json& model_config) {
                         "QnnSystem.dll"};
     } else {
       extra_cpu_deps = {
-          "Genie.dll", "QnnSystem.dll", "QnnGenAiTransformerCpuOpPkg.dll",
+          "Genie.dll", "QnnSystem.dll",
           "QnnGenAiTransformerModel.dll", "QnnGenAiTransformer.dll"};
     }
 

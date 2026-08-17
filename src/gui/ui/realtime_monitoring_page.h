@@ -58,6 +58,17 @@ class RealTimeMonitoringPage : public AbstractView {
    */
   SystemMonitoringWidget *GetSystemMonitoringWidget() const;
 
+ signals:
+  /**
+   * @brief Emits when user clicks "Open Report"
+   */
+  void OpenReportRequested(const QStringList& ids);
+
+  /**
+   * @brief Emits when user requests "Share Logs" on iOS
+   */
+  void ShareLogsRequested(const QString& logs_path);
+
  protected:
   void SetupUi() override;
   void InstallSignalHandlers() override;

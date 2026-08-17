@@ -4,6 +4,7 @@
 
 #include <filesystem>
 
+#include "benchmark/runner.h"
 #include "ep_dependencies_config.h"
 #include "execution_provider.h"
 #include "utils.h"
@@ -18,11 +19,14 @@ namespace cil {
 EPDependenciesManager::EPDependenciesManager(
     const std::unordered_map<std::string, std::string>& eps,
     const std::string& config_path, const std::string& config_schema_path,
-    const std::string& deps_dir)
+    const std::string& deps_dir,
+    const std::unordered_map<std::string, std::vector<nlohmann::json>>&
+        ep_configs)
     : eps_(eps),
       config_path_(config_path),
       config_schema_path_(config_schema_path),
-      deps_dir_(deps_dir) {}
+      deps_dir_(deps_dir),
+      ep_configs_(ep_configs) {}
 
 EPDependenciesManager::~EPDependenciesManager() = default;
 
@@ -50,14 +54,9 @@ bool EPDependenciesManager::Initialize() {
     if (ep == "IHV OrtGenAi" || ep == "OrtGenAi") continue;
 #endif
 
-#if !WITH_IHV_GGML_METAL
-    if (ep == "Metal" || ep == "IHV Metal") continue;
-#endif
-#if !WITH_IHV_GGML_VULKAN
-    if (ep == "Vulkan" || ep == "IHV Vulkan") continue;
-#endif
-#if !WITH_IHV_GGML_CUDA
-    if (ep == "CUDA" || ep == "IHV CUDA") continue;
+#if !WITH_IHV_GGML_METAL && !WITH_IHV_GGML_VULKAN && !WITH_IHV_GGML_CUDA && \
+    !WITH_IHV_GGML_ROCM
+    if (ep == "llama-cpp" || ep == "IHV LlamaCpp") continue;
 #endif
 
 #if !WITH_IHV_NATIVE_QNN
@@ -65,9 +64,6 @@ bool EPDependenciesManager::Initialize() {
 #endif
 #if !WITH_IHV_MLX
     if (ep == "MLX" || ep == "IHV MLX") continue;
-#endif
-#if !WITH_IHV_GGML_ROCM
-    if (ep == "ROCM" || ep == "IHV ROCM") continue;
 #endif
     if (!fs::exists(download_files_dir) &&
         !fs::create_directories(download_files_dir)) {
@@ -77,13 +73,24 @@ bool EPDependenciesManager::Initialize() {
     }
 
     const auto& dependencies = config_->GetDependenciesForEP(ep);
+    std::vector<nlohmann::json> configs_for_ep;
+    if (const auto cfg_it = ep_configs_.find(ep); cfg_it != ep_configs_.end()) {
+      configs_for_ep = cfg_it->second;
+    }
+    const auto filtered_files = dependencies.FilterFiles(configs_for_ep);
 
     required_files_[ep] =
         std::make_pair(ep_path, std::unordered_set<std::string>());
-    for (const auto& file : dependencies.GetFiles()) {
-      const fs::path file_path = download_files_dir / file.first;
+    auto& names = resolved_file_names_[ep];
+    for (const auto& file : filtered_files) {
+      const fs::path file_path = download_files_dir / file.name;
       // if (!fs::exists(file_path))
-      required_files_[ep].second.insert(file.second);
+      required_files_[ep].second.insert(file.path);
+      names.push_back(file.name);
+      const auto parent = fs::path(file.name).parent_path();
+      if (!parent.empty()) {
+        file_subdirs_[file.path] = parent.generic_string();
+      }
     }
   }
   return true;
@@ -105,15 +112,16 @@ bool EPDependenciesManager::PrepareDependenciesForEP(
     // EP not tracked by the dependencies manager
     return true;
   }
-  const auto& dependencies = config_->GetDependenciesForEP(ep_name);
   bool success = true;
-  for (const auto& file : dependencies.GetFiles()) {
-    const fs::path file_path =
-        fs::path(required_files_[ep_name].first) / file.first;
+  const auto names_it = resolved_file_names_.find(ep_name);
+  if (names_it == resolved_file_names_.end()) return true;
+  const auto& dest_dir = required_files_[ep_name].first;
+  for (const auto& file_name : names_it->second) {
+    const fs::path file_path = fs::path(dest_dir) / file_name;
     if (!fs::exists(file_path)) {
       LOG4CXX_ERROR(loggerEPDependenciesManager,
                     "Unable to prepare ep dependency, name: "
-                        << file.first << ", path: " << file.second);
+                        << file_name << ", expected at: " << file_path);
       success = false;
     }
   }
@@ -125,7 +133,7 @@ EPDependenciesManager::GetEpsStorageFiles() const {
   std::map<std::string, std::unordered_set<std::string>> eps_storage_files;
   for (const auto& [ep, files_of_ep] : required_files_) {
 #if IGNORE_FILES_FROM_DISABLED_EPS && 1
-    if (!cil::utils::IsEpSupportedOnThisPlatform("", ep)) continue;
+    if (!cil::BenchmarkRunner::IsEpSupportedOnThisPlatform("", ep)) continue;
 #endif
     fs::path download_files_dir = files_of_ep.first;
 
@@ -137,6 +145,11 @@ EPDependenciesManager::GetEpsStorageFiles() const {
                                   files_of_ep.second.end());
   }
   return eps_storage_files;
+}
+
+std::unordered_map<std::string, std::string>
+EPDependenciesManager::GetFileSubdirs() const {
+  return file_subdirs_;
 }
 
 }  // namespace cil

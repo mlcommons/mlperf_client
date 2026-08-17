@@ -33,6 +33,20 @@ add_compile_definitions(
     $<$<CONFIG:RelWithDebInfo>:RELWITHDEBINFO_BUILD>
 )
 
+set(MLX_SWIFT_SOURCE_DIR ${CMAKE_BINARY_DIR}/_deps/mlx-swift)
+ExternalProject_Add(mlx_swift_download
+    GIT_REPOSITORY https://github.com/ml-explore/mlx-swift.git
+    GIT_TAG        0.31.3
+    SOURCE_DIR     ${MLX_SWIFT_SOURCE_DIR}
+    CONFIGURE_COMMAND ""
+    BUILD_COMMAND ""
+    INSTALL_COMMAND ""
+)
+configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/swift/Package.swift.in
+    ${CMAKE_CURRENT_SOURCE_DIR}/swift/Package.swift
+)
+
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 # Define the source files for the library
@@ -89,20 +103,21 @@ else()
     set(LLAMA_MLX_DESTINATION "platform=OS X,arch=arm64")
     set(DERIVED_DATA_DIR "${CMAKE_BINARY_DIR}/build/Build/Products/${CMAKE_BUILD_TYPE}")
 endif()
-set(LIB_LLAMA_MLX "${CMAKE_BINARY_DIR}/libLlamaMLX.a")
+set(LIB_LLAMA_MLX "${CMAKE_BINARY_DIR}/libMLXInference.a")
 
-add_custom_target(llama_mlx
-    COMMAND xcodebuild -scheme LlamaMLX -derivedDataPath ${CMAKE_BINARY_DIR}/build -configuration ${CMAKE_BUILD_TYPE} -destination ${LLAMA_MLX_DESTINATION} build
+add_custom_target(mlx_inference
+    COMMAND xcodebuild -scheme MLXInference -derivedDataPath ${CMAKE_BINARY_DIR}/build -configuration ${CMAKE_BUILD_TYPE} -destination ${LLAMA_MLX_DESTINATION} build
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/swift
-    COMMENT "Building llama MLX library via xcodebuild"
+    COMMENT "Building MLX inference library via xcodebuild"
+    DEPENDS mlx_swift_download
 )
 
 add_custom_command(
     OUTPUT ${LIB_LLAMA_MLX}
     COMMAND libtool -static -o ${LIB_LLAMA_MLX} *.o
     WORKING_DIRECTORY ${DERIVED_DATA_DIR}
-    DEPENDS llama_mlx
-    COMMENT "Creating static library libLlamaMLX.a"
+    DEPENDS mlx_inference
+    COMMENT "Creating static library libMLXInference.a"
 )
 
 add_custom_target(create_static_lib ALL DEPENDS ${LIB_LLAMA_MLX})
@@ -133,7 +148,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 "${INTERMEDIATES_DIR}/mlx-swift.build/${CMAKE_BUILD_TYPE}/MLXOptimizers.build/Objects-normal/arm64"
 "${INTERMEDIATES_DIR}/mlx-swift.build/${CMAKE_BUILD_TYPE}/MLXNN.build/Objects-normal/arm64"
 "${INTERMEDIATES_DIR}/mlx-swift.build/${CMAKE_BUILD_TYPE}/MLXRandom.build/Objects-normal/arm64"
-"${INTERMEDIATES_DIR}/LlamaMLX.build/${CMAKE_BUILD_TYPE}/LlamaMLX.build/Objects-normal/arm64"
+"${INTERMEDIATES_DIR}/MLXInference.build/${CMAKE_BUILD_TYPE}/MLXInference.build/Objects-normal/arm64"
 )
 
 if(IOS)

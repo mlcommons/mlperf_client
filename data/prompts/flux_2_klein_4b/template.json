@@ -1,0 +1,22 @@
+{
+  "model_config": {
+    "image_generation": {
+      "width": "<int>",
+      "height": "<int>",
+      "num_inference_steps": "<int>",
+      "guidance_scale": "<float>",
+      "seed": "<int>",
+      "num_images_per_prompt": "<int>",
+      "seeds": ["<int>", "<int>"],
+      "max_sequence_length": "<int>"
+    }
+  },
+  "prompts": [
+    "<prompt text>",
+    {
+      "positive": "<positive prompt text>",
+      "negative": "<negative prompt text>"
+    }
+  ],
+  "category": "<string>"
+}

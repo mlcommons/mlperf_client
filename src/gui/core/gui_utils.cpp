@@ -83,37 +83,31 @@ QString BytesToHumanReadableString(uint64_t bytes) {
 QString EPCardName(const QString& file_name, const QString& ep_name) {
   QString long_ep_name =
       QString::fromStdString(cil::EPNameToLongName(ep_name.toStdString()));
-  QStringList excluded_kit_names = {"DML", "RyzenAI"};
   QStringList name_list = file_name.split('_');
   if (name_list.size() < 3) return long_ep_name;
   int kit_start_index = name_list[1].indexOf('-');
   if (kit_start_index != -1) {
     QString kit_name = name_list[1].mid(kit_start_index + 1);
-    if (!excluded_kit_names.contains(kit_name, Qt::CaseInsensitive)) {
-      kit_name.replace("-", " ");
-      if (!long_ep_name.contains(kit_name, Qt::CaseInsensitive)) {
-        long_ep_name += " " + kit_name;
-      } else {
-        // Check if the first part is different
-        QString first_part = name_list[1].left(kit_start_index);
-        QString first_part_to_long = QString::fromStdString(
-            cil::EPNameToLongName(first_part.toStdString()));
-        if (first_part_to_long != long_ep_name &&
-            !long_ep_name.contains(first_part, Qt::CaseInsensitive)) {
-          long_ep_name = first_part + " " + long_ep_name;
-        }
-      }
-    }
+    // ORT GenAI is DirectML by default; the kit is in the file name only for
+    // consistency and stays hidden.
+    if (kit_name.compare("DML", Qt::CaseInsensitive) == 0)
+      kit_name = ep_name.startsWith("OrtGenAI", Qt::CaseInsensitive)
+                     ? QString()
+                     : QStringLiteral("DirectML");
+    kit_name.replace("-", " ");
+    // Skip kits the EP name already carries, e.g. "ORT GenAI Ryzen AI".
+    if (!kit_name.isEmpty() &&
+        !QString(long_ep_name)
+             .remove(' ')
+             .contains(QString(kit_name).remove(' '), Qt::CaseInsensitive))
+      long_ep_name += " " + kit_name;
   }
   return name_list[0] + " " + long_ep_name + " " + name_list[2];
 }
 
 QString ModelDisplayName(const std::string& model_name) {
-  auto model_full_name = cil::BenchmarkRunner::GetModelFullName(
-      cil::utils::StringToLowerCase(model_name));
-
-  auto model_display_name =
-      model_full_name.has_value() ? model_full_name.value() : model_name;
+  auto model_display_name = cil::BenchmarkRunner::GetModelFullName(model_name);
+  if (model_display_name.empty()) model_display_name = model_name;
   return QString::fromStdString(model_display_name);
 }
 

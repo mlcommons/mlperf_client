@@ -1,5 +1,7 @@
 #include "base_inference.h"
 
+#include <system_error>
+
 #include "../api_handler.h"
 
 using namespace log4cxx;
@@ -22,6 +24,7 @@ BaseInference::BaseInference(const std::string& model_path,
                              const std::string& deps_dir, EP ep,
                              const nlohmann::json& ep_settings,
                              const std::string& scenario_name,
+                             const std::string& model_base_name,
                              const std::string& logger_name,
                              const std::string& library_path)
     : model_path_(model_path),
@@ -30,8 +33,12 @@ BaseInference::BaseInference(const std::string& model_path,
       ep_settings_(ep_settings),
       benchmark_time_(0),
       scenario_name_(scenario_name),
-      logger_name_(logger_name),
+      model_base_name_(model_base_name),
       library_path_(library_path) {
+  std::error_code ec;
+  saved_cwd_ = std::filesystem::current_path(ec);
+  saved_cwd_valid_ = !ec;
+
   logger_ = Logger::getLogger(logger_name);
 
   auto logger = [this](API_Handler::LogLevel level, std::string message) {
@@ -54,14 +61,30 @@ BaseInference::BaseInference(const std::string& model_path,
 
   api_handler_ = std::make_unique<API_Handler>(library_path, logger);
 
-  if (!api_handler_->Setup(EPToString(ep), scenario_name_, model_path,
-                           deps_dir_, ep_settings, device_type_))
+  if (!api_handler_->Setup(EPToString(ep), scenario_name_, model_base_name_,
+                           model_path, deps_dir_, ep_settings, device_type_))
     error_message_ = "Failed to setup IHV";
 }
 
 BaseInference::~BaseInference() {
-  if (!api_handler_->Release())
-    error_message_ = "Failed to release IHV";
+  try {
+    try {
+      if (api_handler_ && !api_handler_->Release()) {
+        LOG4CXX_WARN(logger_, "Failed to release IHV");
+      }
+    } catch (const std::exception& e) {
+      LOG4CXX_ERROR(logger_, "Exception while releasing IHV: " << e.what());
+    } catch (...) {
+      LOG4CXX_ERROR(logger_, "Unknown exception while releasing IHV");
+    }
+  } catch (...) {
+    // log4cxx threw too; nothing safe left to do in a dtor
+  }
+
+  if (saved_cwd_valid_) {
+    std::error_code ec;
+    std::filesystem::current_path(saved_cwd_, ec);
+  }
 }
 
 double cil::infer::BaseInference::GetBenchmarkTime() const {
@@ -72,8 +95,7 @@ std::string BaseInference::GetDeviceType() const { return device_type_; }
 
 std::string BaseInference::GetErrorMessage(bool include_ep_errors) const {
   if (include_ep_errors) {
-    std::string ihv_errors = GetEPErrorMessages();
-    if (!ihv_errors.empty()) {
+    if (std::string ihv_errors = GetEPErrorMessages(); !ihv_errors.empty()) {
       return error_message_ + ":\n" + ihv_errors;
     }
   }
@@ -106,8 +128,8 @@ void BaseInference::SetMetadata(const std::string& key, const std::any& value) {
 }
 
 std::any BaseInference::GetMetadata(const std::string& key) const {
-  if (metadata_.find(key) != metadata_.end()) {
-    return metadata_.at(key);
+  if (auto it = metadata_.find(key); it != metadata_.end()) {
+    return it->second;
   }
   return std::any();
 }

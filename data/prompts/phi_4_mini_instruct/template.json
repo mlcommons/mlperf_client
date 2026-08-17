@@ -1,0 +1,21 @@
+{
+  "model_config": {
+    "context_length": "<int>",
+    "search": {
+      "method": "greedy",
+      "temperature": 0.6,
+      "top_k": 1,
+      "top_p": 0.9,
+      "stop_on_eos": true,
+      "max_length": "<int>"
+    }
+  },
+  "prompts": [
+    {
+      "system": "<system text>",
+      "user": "<user text>"
+    }
+  ],
+  "category": "<string>",
+  "apply_chat_template": true
+}

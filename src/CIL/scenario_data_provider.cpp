@@ -39,7 +39,8 @@ const std::string& ScenarioDataProvider::GetInputFileSchemaPath() const {
 
 void ScenarioDataProvider::ReadOutputResultsFile() {
   if (output_results_path_.empty()) {
-    LOG4CXX_ERROR(loggerDataProvider, "Output results file is not provided!");
+    LOG4CXX_DEBUG(loggerDataProvider,
+                  "Output results file is not provided, skipping.");
     return;
   }
 

@@ -26,6 +26,8 @@ class ExpandableWidget : public QWidget {
 
   void SetContentHeight(int height);
 
+  virtual int GetContentPreferredHeight() const;
+
   QPushButton *expand_button_;
   QWidget *header_widget_;
   QWidget *content_widget_;

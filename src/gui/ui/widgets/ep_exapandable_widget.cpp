@@ -3,6 +3,7 @@
 #include <QCheckBox>
 #include <QLayout>
 #include <QListView>
+#include <QMap>
 #include <QPushButton>
 
 #include "elided_label.h"
@@ -67,9 +68,15 @@ void ContentWidget::SetupUi(const nlohmann::json &fields,
         new JsonSchemaPair(field_name_str, field_schema, this);
     m_json_schema_pairs.append(json_schema_pair);
 
-    // hide device type and vendor for now
+    // Hide fields the config identity already pins (device, backend,
+    // device_ep, quantization) and passthrough fields (nested object/array
+    // config the harness consumes but the user can't edit) — all still
+    // round-trip via m_json_schema_pairs in GetConfiguration().
     if (field_name_str == "device_type" || field_name_str == "device_id" ||
-        field_name_str == "device_vendor" || field_name_str == "device_name") {
+        field_name_str == "device_vendor" || field_name_str == "device_name" ||
+        field_name_str == "backend" || field_name_str == "device_ep" ||
+        field_name_str == "quantization" ||
+        json_schema_pair->GetWidgetType() == "passthrough") {
       json_schema_pair->GetInputWidget()->hide();
       json_schema_pair->GetLabelWidget()->hide();
       continue;
@@ -102,9 +109,12 @@ nlohmann::json ContentWidget::GetConfiguration() {
 
 EPExpandableHeaderWidget::EPExpandableHeaderWidget(
     const QString &ep_name, const QString &short_description,
-    const QString &help_text, const QString &category, QWidget *parent)
+    const QString &help_text, const QString &category,
+    const QString &scenario_kind, const QStringList &prompt_types,
+    QWidget *parent)
     : QWidget(parent) {
-  SetupUi(ep_name, short_description, help_text, category);
+  SetupUi(ep_name, short_description, help_text, category, scenario_kind,
+          prompt_types);
   SetupConnections();
   SetSelected(false);
 }
@@ -117,7 +127,7 @@ bool EPExpandableHeaderWidget::IsSelected() const {
   return m_select_button->isChecked();
 }
 QString EPExpandableHeaderWidget::GetPromptsType() const {
-  return m_prompts_box->currentText().toLower();
+  return m_prompts_box->currentData().toString();
 }
 
 void EPExpandableHeaderWidget::SetChecked(bool checked) const {
@@ -139,7 +149,9 @@ void EPExpandableHeaderWidget::SetEPNameWidth(int width) {
 void EPExpandableHeaderWidget::SetupUi(const QString &ep_name,
                                        const QString &short_description,
                                        const QString &help_text,
-                                       const QString &category) {
+                                       const QString &category,
+                                       const QString &scenario_kind,
+                                       const QStringList &prompt_types) {
   setFixedHeight(60);
 
   m_select_button = new QCheckBox(this);
@@ -158,17 +170,32 @@ void EPExpandableHeaderWidget::SetupUi(const QString &ep_name,
   ElidedLabel *description_label = new ElidedLabel(short_description, this);
   description_label->setObjectName("ep_short_description_label");
 
+  static const QMap<QString, QString> kPromptTooltips = {
+      {"base", "Run the benchmark on base prompts only."},
+      {"extended", "Run the benchmark on extended (4k/8k) prompts only."},
+  };
+  QStringList groups = prompt_types;
+  if (groups.isEmpty()) groups << QStringLiteral("base");
+
   m_prompts_box = new QComboBox(this);
   m_prompts_box->setView(new QListView());
-  m_prompts_box->addItems({"Base", "Extended", "Both"});
-  m_prompts_box->setItemData(0, "Run the benchmark on base prompts only.",
-                             Qt::ToolTipRole);
-  m_prompts_box->setItemData(
-      1, "Run the benchmark on extended (4k/8k) prompts only.",
-      Qt::ToolTipRole);
-  m_prompts_box->setItemData(
-      2, "Run the benchmark on both base and extended prompts.",
-      Qt::ToolTipRole);
+  for (const QString &group : groups) {
+    QString label = group;
+    if (!label.isEmpty()) label[0] = label[0].toUpper();
+    m_prompts_box->addItem(label, group);
+    m_prompts_box->setItemData(
+        m_prompts_box->count() - 1,
+        kPromptTooltips.value(
+            group.toLower(),
+            QString("Run the benchmark on %1 prompts only.").arg(group)),
+        Qt::ToolTipRole);
+  }
+  if (groups.size() > 1) {
+    m_prompts_box->addItem("Both", QStringLiteral("both"));
+    m_prompts_box->setItemData(m_prompts_box->count() - 1,
+                               "Run the benchmark on all prompt groups.",
+                               Qt::ToolTipRole);
+  }
 
   // m_prompts_box->setProperty("class", "secondary_checkbox");
   QLabel *ext_prompts_label = new QLabel("Prompts", this);
@@ -200,6 +227,16 @@ void EPExpandableHeaderWidget::SetupUi(const QString &ep_name,
   category_widget->setProperty("category", category);
   category_widget->setLayout(category_layout);
 
+  QLabel *kind_label = new QLabel(scenario_kind, this);
+  kind_label->setProperty("class", "medium_normal_label");
+  QHBoxLayout *kind_layout = new QHBoxLayout;
+  kind_layout->setContentsMargins(10, 0, 10, 0);
+  kind_layout->addWidget(kind_label);
+  QWidget *kind_widget = new QWidget(this);
+  kind_widget->setProperty("class", "scenario_kind_widget");
+  kind_widget->setProperty("scenario_kind", scenario_kind);
+  kind_widget->setLayout(kind_layout);
+
   // Add and Delete buttons
   auto createBtnFn = [this](const QString &icon_normal,
                             const QString &icon_disabled) {
@@ -227,6 +264,7 @@ void EPExpandableHeaderWidget::SetupUi(const QString &ep_name,
   main_layout->addSpacing(5);
   main_layout->addWidget(info_icon);
   main_layout->addWidget(description_label, 1);
+  main_layout->addWidget(kind_widget);
   main_layout->addWidget(category_widget);
   main_layout->addWidget(m_prompts_widget);
   main_layout->addWidget(m_delete_button);
@@ -254,12 +292,13 @@ void EPExpandableHeaderWidget::SetSelected(bool selected) {
 EPExpandableWidget::EPExpandableWidget(
     const QString &ep_name, const QString &short_description,
     const QString &help_text, const QString &category,
+    const QString &scenario_kind, const QStringList &prompt_types,
     const QStringList &devices, const nlohmann::json &fields,
     const nlohmann::json &values, QWidget *parent)
 
     : ExpandableWidget(parent) {
-  SetupUi(ep_name, short_description, help_text, category, devices, fields,
-          values);
+  SetupUi(ep_name, short_description, help_text, category, scenario_kind,
+          prompt_types, devices, fields, values);
   SetupConnections();
 
   OnSelectionChanged(m_header_widget->IsSelected());
@@ -289,17 +328,17 @@ void EPExpandableWidget::SetEPNameWidth(int width) {
   m_header_widget->SetEPNameWidth(width);
 }
 
-void EPExpandableWidget::SetupUi(const QString &ep_name,
-                                 const QString &short_description,
-                                 const QString &help_text,
-                                 const QString &category,
-                                 const QStringList &devices,
-                                 const nlohmann::json &fields,
-                                 const nlohmann::json &values) {
+void EPExpandableWidget::SetupUi(
+    const QString &ep_name, const QString &short_description,
+    const QString &help_text, const QString &category,
+    const QString &scenario_kind, const QStringList &prompt_types,
+    const QStringList &devices, const nlohmann::json &fields,
+    const nlohmann::json &values) {
   QString description = short_description;
   if (devices.empty()) description += " (No Supported Device)";
-  m_header_widget = new EPExpandableHeaderWidget(ep_name, description,
-                                                 help_text, category, this);
+  m_header_widget =
+      new EPExpandableHeaderWidget(ep_name, description, help_text, category,
+                                   scenario_kind, prompt_types, this);
   m_content_widget = new ContentWidget(fields, values, devices, this);
 
   ExpandableWidget::SetupUi(m_header_widget, m_content_widget);

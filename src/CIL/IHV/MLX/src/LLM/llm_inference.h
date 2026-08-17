@@ -3,7 +3,7 @@
 #include <vector>
 
 #include "../api.h"
-#include "llm/llama_config.h"
+#include "llm/llm_config.h"
 #include "base_inference_common.h"
 #include "../mlx_config.h"
 
@@ -36,7 +36,7 @@ private:
     std::filesystem::path FindSafeTensorsDir(const std::filesystem::path& dir);
 
     const MLXExecutionProviderSettings ep_settings_;
-    cil::infer::LlamaConfig config_;
+    cil::infer::LlmConfig config_;
     void* inference_ = nullptr;
     void* kv_cache_ = nullptr;
     std::vector<uint32_t> output_data_;

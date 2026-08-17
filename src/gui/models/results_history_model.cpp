@@ -34,9 +34,7 @@ QVariant ResultsHistoryModel::data(const QModelIndex &index, int role) const {
     case Qt::UserRole + 4:
       return entry.success_;
     case Qt::UserRole + 5:
-      return entry.overall_time_to_first_token_;
-    case Qt::UserRole + 6:
-      return entry.overall_token_generation_rate_;
+      return QVariant::fromValue(entry.main_scores_);
     case Qt::UserRole + 7:
       return entry.error_message_;
     case Qt::UserRole + 8:

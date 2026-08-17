@@ -1,5 +1,7 @@
 #include "start_page_controller.h"
 
+#include <algorithm>
+
 #include "../CIL/system_info_provider.h"
 #include "core/gui_utils.h"
 #include "core/types.h"
@@ -112,6 +114,7 @@ void StartPageController::LoadEPsInformation(
   EPFilter device_type_filter{"Device Type", {}};
   EPFilter model_type_filter{"Model Type", {}};
   EPFilter config_status_filter{"Config Type", {}};
+  EPFilter scenario_filter{"Scenario", {}};
 
   auto addOptionFn = [](QList<QPair<QString, bool>>& options,
                         const QString& option_name) {
@@ -132,9 +135,16 @@ void StartPageController::LoadEPsInformation(
 
   config_status_filter.options = {
       {"Base", true}, {"Extended", true}, {"Experimental", true}};
+  for (const QString& kind : {"LLM", "Agentic", "Image gen"})
+    if (std::any_of(eps_configs_.begin(), eps_configs_.end(),
+                    [&](const auto& config) {
+                      return config.scenario_kind_ == kind;
+                    }))
+      scenario_filter.options << qMakePair(kind, true);
 
-  start_page->LoadFiltersCard({config_status_filter, vendor_filter, ep_filter,
-                               device_type_filter, model_type_filter});
+  start_page->LoadFiltersCard({config_status_filter, scenario_filter,
+                               vendor_filter, ep_filter, device_type_filter,
+                               model_type_filter});
   start_page->LoadEPInformationCards(schema, configs);
 
   OnEPsFilterChanged();
@@ -209,6 +219,9 @@ void StartPageController::OnEPsFilterChanged() {
             (filter.name == "Model Type" &&
              eps_configs_[i].model_name_.compare(name, Qt::CaseInsensitive) ==
                  0) ||
+            (filter.name == "Scenario" &&
+             eps_configs_[i].scenario_kind_.compare(
+                 name, Qt::CaseInsensitive) == 0) ||
             (name == "Base" && eps_configs_[i].config_category_.isEmpty()) ||
             name.compare(eps_configs_[i].config_category_,
                          Qt::CaseInsensitive) == 0) {

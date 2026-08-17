@@ -76,7 +76,11 @@ QWidget* JsonSchemaPair::CreateInputWidget(const nlohmann::json& schema) {
       return CreateCheckBox(schema);
     }
   }
-  return new QLabel("Unsupported type");
+  // No editable widget for this type (e.g. nested object/array config such
+  // as the Diffusers EP's `components` / `optimizations`). Carry the value
+  // through unchanged so it survives the config round-trip.
+  widget_type_ = "passthrough";
+  return new QLabel(parent_);
 }
 
 nlohmann::json JsonSchemaPair::GetValue() const {
@@ -90,6 +94,9 @@ nlohmann::json JsonSchemaPair::GetValue() const {
     json_value = static_cast<QSpinBox*>(input_widget_)->value();
   } else if (widget_type_ == "check_box") {
     json_value = static_cast<QCheckBox*>(input_widget_)->isChecked();
+  } else if (widget_type_ == "passthrough") {
+    json_value = schema_.contains("default") ? schema_["default"]
+                                             : nlohmann::json();
   } else {
     json_value = nullptr;
   }

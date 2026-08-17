@@ -1,7 +1,66 @@
+# WindowsML IHV
+
+Loads ONNX models on the self-contained WindowsML stack, dispatching to a certified backend (DirectML, NvTensorRtRtx, OpenVINO, VitisAI, QNN) chosen per scenario via the `device_ep` config field.
+
+## Build & runtime DLL sourcing
+
+Version pins (top of [`CMakeLists.txt`](CMakeLists.txt)) — bump and delete `build/IHV/WindowsML/` to refresh:
+
+```cmake
+set(MML_OGA_VERSION                 "0.14.1")    # OGA / genai (FetchContent from nuget.org)
+set(MML_WINML_VERSION               "2.4.66-preview") # Microsoft.Windows.AI.MachineLearning (self-contained WinML runtime, PackageReference)
+set(MML_CPPWINRT_VERSION            "2.0.240111.5") # Microsoft.Windows.CppWinRT (WinRT projection, PackageReference)
+set(MLPERF_WINDOWSML_CUDART_VERSION "12.6.77")   # cudart64_12.dll (NVIDIA redist server)
+```
+
+The Windows ML runtime (`onnxruntime.dll`, `DirectML.dll`, `Microsoft.Windows.AI.MachineLearning.dll`) is delivered self-contained via the `Microsoft.Windows.AI.MachineLearning` NuGet `PackageReference` (its MSBuild `.targets` link the import libs, set up RegFree WinRT activation, and copy the runtime DLLs to the output). There is no Windows App SDK framework / bootstrap. At run time the dep manager downloads the same runtime DLLs from `MLPERF_WINML_PREFIX` (the `WindowsML` group in `ep_dependencies_config_windows_*.json.in`) next to the unpacked `IHV_WindowsML.dll`.
+
+One file is NOT in the NuGet packages and is fetched directly at configure time:
+
+- **`cudart64_12.dll`** from [NVIDIA's CUDA redist server](https://developer.download.nvidia.com/compute/cuda/redist/cuda_cudart/windows-x86_64/). OGA 0.14.x imports the CUDA 12 ABI, so this DLL is fetched directly from the redist server — WindowsML needs no host CUDA toolkit. ~600 KB, EULA-compliant per the [CUDA EULA](https://docs.nvidia.com/cuda/eula/index.html).
+
+Cached in `${BUILD}/IHV/WindowsML/.nuget/`. Override the cudart lookup with `-DMLPERF_WINDOWSML_CUDART_DLL_PATH=<absolute path>` if you have a local copy.
+
+## Staging layout
+
+All WinML runtime DLLs land in one folder via the package `.targets` + the IHV's POST_BUILD copy:
+
+```
+${EXE}/IHV/WindowsML/
+  DirectML.dll
+  IHV_WindowsML.dll
+  Microsoft.Windows.AI.MachineLearning.dll
+  onnxruntime.dll
+  onnxruntime-genai.dll
+  onnxruntime-genai-cuda.dll       — NV scenarios only
+  cudart64_12.dll                  — NV scenarios only
+```
+
+For offline / local-dev work, override with `-DMLPERF_WINML_PREFIX=file://IHV/WindowsML` to skip HTTP and resolve against the IHV's POST_BUILD staging dir.
+
+## Conditional NV files
+
+`onnxruntime-genai-cuda.dll` and `cudart64_12.dll` are listed in the `WindowsML` group of [`data/ep_dependencies_config_windows_x64.json.in`](../../../../../data/ep_dependencies_config_windows_x64.json.in) with:
+
+```json
+"Condition": { "device_ep": "NvTensorRtRtx" }
+```
+
+The dep-manager evaluates the condition against each scenario's `ExecutionProviders[].Config` at `Initialize` time. Non-NV machines never download these.
+
+## Runtime activation
+
+The Windows ML runtime is self-contained: [`base_inference.cpp`](base_inference.cpp) `EnsureAndRegisterEPs` calls `winrt::init_apartment()` and then `ExecutionProviderCatalog::GetDefault()`. The WinML WinRT types are activated via RegFree WinRT from the bundled `Microsoft.Windows.AI.MachineLearning.dll` — there is no `MddBootstrapInitialize2` and no Windows App Runtime framework dependency. The catalog enumerates the certified EP packages installed on the system and registers them into the single (self-contained) `onnxruntime.dll`.
+
+## Cache invalidation
+
+After changes to the generated `ep_dependencies_config_*.json` (template, CMake prefix vars, or schema), wipe `%LOCALAPPDATA%\Temp\MLPerf\<app-version>\` — deps are keyed by URL hash and stale entries shadow the new layout.
+
+---
 
 # Model Building
 
-This document describes how to build, quantize, and compile models for WindowsML—targeting DirectML, NvTensorRtRtx, Vitis AI, and OpenVINO—with Olive and ONNXRuntime GenAI,
+This section describes how to build, quantize, and compile models for WindowsML—targeting DirectML, NvTensorRtRtx, Vitis AI, and OpenVINO—with Olive and ONNXRuntime GenAI,
 including recipes that reproduce quantized and compiled variants of **Llama 2 7B Chat**, **Llama 3.1 8B Instruct**, **Phi-3.5 Mini Instruct**, and **Phi 4 Reasoning 14B**.
 
 **How to use this README**
@@ -53,19 +112,18 @@ Packaging for MLPerf configuration:
 
 #### NPU models
 ```bash
-olive run --config ../recipes/OpenVINO/Llama-2-7b-chat-hf_ov-int4-CHw.json
 olive run --config ../recipes/OpenVINO/Llama-3.1-8B-Instruct_ov-int4-CHw.json
-olive run --config ../recipes/OpenVINO/Phi-3.5-mini-instruct_ov-int4-CHw.json
+olive run --config ../recipes/OpenVINO/Phi-4-mini-instruct_ov-int4-CHw.json
 olive run --config ../recipes/OpenVINO/Phi-4-reasoning_ov-int4-CHw.json
-
+olive run --config ../recipes/OpenVINO/qwen3-8B_ov_int4-CHw.json
 ```
 
 #### GPU models
 ```bash
-olive run --config ../recipes/OpenVINO/Llama-2-7b-chat-hf_ov-int4-GRw.json
-olive run --config ../recipes/OpenVINO/Llama-3.1-8B-Instruct_ov-int4-GRw.json
-olive run --config ../recipes/OpenVINO/Phi-3.5-mini-instruct_ov-int4-GRw.json
+olive run --config ../recipes/OpenVINO/Llama-3.1-8B-Instruct_ov-int4-GPU.json
+olive run --config ../recipes/OpenVINO/Phi-4-mini-instruct_ov-int4-GRw.json
 olive run --config ../recipes/OpenVINO/Phi-4-reasoning_ov-int4-GRw.json
+olive run --config ../recipes/OpenVINO/qwen3-8B_ov_int4-GRw.json 
 ```
 
 ### QNN models

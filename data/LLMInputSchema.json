@@ -4,6 +4,10 @@
   "properties": {
     "model_config": {
       "properties": {
+        "context_length": {
+          "type": "integer",
+          "minimum": 1
+        },
         "model": {
           "properties": {
             "bos_token_id": {
@@ -20,13 +24,7 @@
               "type": "integer",
               "minimum": 1
             }
-          },
-          "required": [
-            "bos_token_id",
-            "eos_token_id",
-            "vocab_size",
-            "context_length"
-          ]
+          }
         },
         "search": {
           "properties": {
@@ -66,19 +64,54 @@
         }
       },
       "required": [
-        "model",
         "search"
-      ],
-      "additionalProperties": false
+      ]
     },
     "prompts": {
       "type": "array",
       "items": {
-        "type": "string"
+        "oneOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "system": {
+                "type": "string"
+              },
+              "user": {
+                "type": "string"
+              },
+              "assistant": {
+                "type": "string"
+              },
+              "agent": {
+                "type": "string"
+              },
+              "enable_thinking": {
+                "type": "boolean"
+              }
+            },
+            "minProperties": 1,
+            "additionalProperties": false
+          }
+        ]
       }
     },
     "category": {
       "type": "string"
+    },
+    "apply_chat_template": {
+      "type": "boolean",
+      "default": false
+    },
+    "enable_thinking": {
+      "type": "boolean"
+    },
+    "prompt_files": {
+      "type": "boolean",
+      "default": false
     }
   },
   "required": [

@@ -38,7 +38,15 @@ class ResultsReportPageController : public AbstractController {
   QList<HistoryEntry> table_entries_;
   std::vector<cil::BenchmarkResult> results_;
 
-  void DoLoadResultsTable();
+  // Builds the column headers from table_entries_ and initializes the table.
+  void AddHeaders();
+  // "Overall" section: LLM, image, and agentic metrics.
+  void AddOverallSection();
+  // Per-category sections (LLM and image), each with metric rows + I/O row.
+  void AddCategorySections();
+  // The three image metric rows; `primary_bold` bolds the throughput rows.
+  // Shared by AddOverallSection and AddCategorySections.
+  void AddImageMetricRows(bool primary_bold);
 
   views::ResultsReportPage* GetView() const;
 };

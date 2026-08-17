@@ -1,0 +1,52 @@
+{
+  "SystemConfig": {
+    "Comment": "llama-cpp Metal, GPU",
+    "TempPath": "",
+    "EPDependenciesConfigPath": ""
+  },
+  "Scenarios": [
+    {
+      "Name": "phi4reason",
+      "Models": [
+        {
+          "ModelName": "Phi-4-reasoning-Q4_0",
+          "FilePath": "https://client.mlcommons-storage.org/deps/2.0/scenario_files/models/phi4/reasoning/GGML/Phi-4-reasoning-Q4_0.gguf",
+          "TokenizerPath": "https://client.mlcommons-storage.org/deps/2.0/scenario_files/models/phi4/reasoning/GGML/tokenizer.zip"
+        }
+      ],
+      "InputFilePath": {
+        "base": [
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/phi4/reasoning/content_generation/greedy-prompt_cot.39329.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/phi4/reasoning/content_generation/greedy-prompt_t0.677207.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/phi4/reasoning/creative_writing/greedy-prompt_niv.123362.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/phi4/reasoning/creative_writing/greedy-prompt_niv.77134.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/phi4/reasoning/structured_text/data_csv2json.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/phi4/reasoning/structured_text/events_ics2xml.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/phi4/reasoning/code_analysis/command_parser_cpp_2k.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/phi4/reasoning/code_analysis/performance_counter_group_cpp_2k.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/phi4/reasoning/intermediate4k/booksum_4k.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/phi4/reasoning/intermediate4k/downloader_cpp_4k.json"
+        ],
+        "extended": [
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/phi4/reasoning/substantial8k/booksum_8k.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/phi4/reasoning/substantial8k/gov_report_train_infrastructure.json"
+        ]
+      },
+      "AssetsPath": [],
+      "ResultsVerificationFile": "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/generation-greedy-results.json",
+      "DataVerificationFile": "",
+      "Iterations": 3,
+      "Delay": 0,
+      "ExecutionProviders": [
+        {
+          "Name": "llama-cpp",
+          "Config": {
+            "backend": "Metal",
+            "device_type": "GPU",
+            "gpu_layers": 999
+          }
+        }
+      ]
+    }
+  ]
+}

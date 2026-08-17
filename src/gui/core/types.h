@@ -10,6 +10,8 @@
 #ifndef __GUI_TYPES_H__
 #define __GUI_TYPES_H__
 
+#include <array>
+
 #include <QDateTime>
 #include <QMap>
 #include <nlohmann/json.hpp>
@@ -40,6 +42,18 @@ struct SystemInfoDetails {
 };
 
 /**
+ * @brief A single headline score (label + display-ready value) on a card.
+ */
+struct Metric {
+  QString title;
+  QString value;
+};
+
+// The two headline scores of a run; their meaning depends on the scenario
+// (LLM: TTFT/TPS, Agentic: E2E/Tools, Image gen: Images-per-minute/Avg-E2E).
+using MainScores = std::array<Metric, 2>;
+
+/**
  * @brief Complete record of a benchmark execution.
  */
 struct HistoryEntry {
@@ -51,10 +65,9 @@ struct HistoryEntry {
   bool success_;
   bool tested_by_ml_commons_;
   QString config_category_;
-  double overall_time_to_first_token_;
-  double overall_token_generation_rate_;
   QString error_message_;
   QString config_file_comment_;
+  MainScores main_scores_;
 
   SystemInfoDetails system_info_;
 };
@@ -73,6 +86,8 @@ struct EPInformationCard {
   QString config_category_;
   QString prompts_type_;
   QString mapped_name_;
+  QString scenario_kind_;     // "LLM", "Agentic", or "Image gen"
+  QStringList prompt_types_;  // input groups the config declares
 };
 
 /**
@@ -90,6 +105,9 @@ struct EPBenchmarkStatus {
   QString ep_name_;
   bool success_;
   QString error_message_;
+
+  // We need this as an id of the EP benchmark in the results
+  QString benchmark_start_time_;
 };
 
 /**
@@ -97,14 +115,21 @@ struct EPBenchmarkStatus {
  * action result and the status of each execution provider.
  */
 struct BenchmarkStatus {
-  bool success_;
-  bool download_accepted_;
-  bool size_info_collected_;
+  bool success_ = false;
+  bool download_accepted_ = false;
+  // True when the run ended because the user cancelled it (declined the
+  // download prompt or pressed Cancel)
+  bool cancelled_ = false;
+  bool size_info_collected_ = false;
   QString logs_path_;
   QList<EPBenchmarkStatus> eps_benchmark_status_;
+
+  BenchmarkStatus() = default;
+  explicit BenchmarkStatus(const QString& logs_path) : logs_path_(logs_path) {}
 };
 }  // namespace gui
 
 Q_DECLARE_METATYPE(gui::SystemInfoDetails)
+Q_DECLARE_METATYPE(gui::MainScores)
 
 #endif  // __GUI_TYPES_H__

@@ -241,8 +241,6 @@ make
 
 The application will be located in `Bin/Linux/Release/mlperf-linux`.
 
-#### Windows GUI Build
-
 ### Windows Build Instructions
 
 #### Windows CLI Build
@@ -286,7 +284,6 @@ The following table shows the available flags that can be used to control the bu
 We support many IHV EPs, Each IHV EP has its own detailed documentation:
 - [NativeOpenVINO](src/CIL/IHV/NativeOpenVINO/src/README.md)
 - [NativeQNN](src/CIL/IHV/NativeQNN/src/README.md)
-- [OrtGenAI](src/CIL/IHV/OrtGenAI/src/README.md)
 and more IHV EPs can be found in the [src/CIL/IHV](src/cil/IHV) directory.
 
 

@@ -20,6 +20,18 @@ LoggerPtr loggerSystemInfoProviderWindows(
 
 namespace cil {
 
+// _bstr_t -> std::string goes through CP_ACP, which corrupts non-Latin chars.
+static std::string WideToUtf8(const wchar_t* s) {
+  if (!s || !*s) return {};
+  int size_needed =
+      WideCharToMultiByte(CP_UTF8, 0, s, -1, nullptr, 0, nullptr, nullptr);
+  if (size_needed <= 1) return {};
+  std::string out(size_needed - 1, '\0');
+  WideCharToMultiByte(CP_UTF8, 0, s, -1, out.data(), size_needed, nullptr,
+                      nullptr);
+  return out;
+}
+
 static std::string CPUArchitectureIDToString(int id) {
   switch (id) {
     case 0:
@@ -142,14 +154,14 @@ void SystemInfoProviderWindows::FetchCpuInfo() {
     VariantClear(&var);
 
     class_object->Get(L"Name", 0, &var, nullptr, nullptr);
-    cpu_info_.model_name = _bstr_t(var.bstrVal, false);
+    cpu_info_.model_name = WideToUtf8(var.bstrVal);
     if (cpu_info_.architecture == "ARM64") {
       cpu_info_.model_name = cpu_info_.model_name.substr(0, 10);
     }
     VariantClear(&var);
 
     class_object->Get(L"Manufacturer", 0, &var, nullptr, nullptr);
-    cpu_info_.vendor_id = _bstr_t(var.bstrVal, false);
+    cpu_info_.vendor_id = WideToUtf8(var.bstrVal);
     VariantClear(&var);
 
     class_object->Get(L"NumberOfCores", 0, &var, nullptr, nullptr);
@@ -196,8 +208,7 @@ void SystemInfoProviderWindows::FetchGpuInfo() {
     memset(&var, 0, sizeof(VARIANT));
 
     class_object->Get(L"PNPDeviceID", 0, &var, nullptr, nullptr);
-    std::string pnp_device_id;
-    pnp_device_id = _bstr_t(var.bstrVal, false);
+    std::string pnp_device_id = WideToUtf8(var.bstrVal);
     VariantClear(&var);
 
     // Skip virtual devices: physical GPUs have "VEN_" in the second part of
@@ -209,15 +220,15 @@ void SystemInfoProviderWindows::FetchGpuInfo() {
       continue;
 
     class_object->Get(L"Name", 0, &var, nullptr, nullptr);
-    gpu_info.name = _bstr_t(var.bstrVal, false);
+    gpu_info.name = WideToUtf8(var.bstrVal);
     VariantClear(&var);
 
     class_object->Get(L"AdapterCompatibility", 0, &var, nullptr, nullptr);
-    gpu_info.vendor = _bstr_t(var.bstrVal, false);
+    gpu_info.vendor = WideToUtf8(var.bstrVal);
     VariantClear(&var);
 
     class_object->Get(L"DriverVersion", 0, &var, nullptr, nullptr);
-    gpu_info.driver_version = _bstr_t(var.bstrVal, false);
+    gpu_info.driver_version = WideToUtf8(var.bstrVal);
     VariantClear(&var);
 
     class_object->Get(L"AdapterRAM", 0, &var, nullptr, nullptr);
@@ -236,7 +247,7 @@ void SystemInfoProviderWindows::FetchGpuInfo() {
   for (int i = 0; i < data_npu_gpu->GetDeviceCount(); i++) {
     auto it = std::find_if(
         gpu_info_.begin(), gpu_info_.end(), [&](const GPUInfo& info) {
-          return std::string(_bstr_t(data_npu_gpu->GetDeviceName(i).c_str())) ==
+          return WideToUtf8(data_npu_gpu->GetDeviceName(i).c_str()) ==
                  info.name;
         });
     if (it != gpu_info_.end()) {
@@ -276,7 +287,7 @@ void SystemInfoProviderWindows::FetchNpuInfo() {
     // Name
     if (SUCCEEDED(class_object->Get(L"Name", 0, &var, nullptr, nullptr)) &&
         var.vt == VT_BSTR) {
-      npu_info_.name = _bstr_t(var.bstrVal, false);
+      npu_info_.name = WideToUtf8(var.bstrVal);
     } else {
       continue;
     }
@@ -286,7 +297,7 @@ void SystemInfoProviderWindows::FetchNpuInfo() {
     if (SUCCEEDED(
             class_object->Get(L"Manufacturer", 0, &var, nullptr, nullptr)) &&
         var.vt == VT_BSTR) {
-      npu_info_.vendor = _bstr_t(var.bstrVal, false);
+      npu_info_.vendor = WideToUtf8(var.bstrVal);
     } else {
       continue;
     }
@@ -302,8 +313,7 @@ void SystemInfoProviderWindows::FetchNpuInfo() {
   auto data_npu_gpu =
       (PerformanceCounterDataNpuGpu*)npu_gpu_counters_->GetData();
   for (int i = 0; i < data_npu_gpu->GetDeviceCount(); i++) {
-    if (std::string(_bstr_t(data_npu_gpu->GetDeviceName(i).c_str())) ==
-        npu_info_.name) {
+    if (WideToUtf8(data_npu_gpu->GetDeviceName(i).c_str()) == npu_info_.name) {
       npu_info_.dedicated_memory_size =
           data_npu_gpu->GetDeviceMemory(i).dedicated_video_memory;
       npu_info_.shared_memory_size =
@@ -375,15 +385,15 @@ void SystemInfoProviderWindows::FetchOsInfo() {
     memset(&var, 0, sizeof(VARIANT));
 
     class_object->Get(L"Caption", 0, &var, nullptr, nullptr);
-    os_info_.full_name = _bstr_t(var.bstrVal, false);
+    os_info_.full_name = WideToUtf8(var.bstrVal);
     VariantClear(&var);
 
     class_object->Get(L"Version", 0, &var, nullptr, nullptr);
-    os_info_.version = _bstr_t(var.bstrVal, false) + " Build ";
+    os_info_.version = WideToUtf8(var.bstrVal) + " Build ";
     VariantClear(&var);
 
     class_object->Get(L"BuildNumber", 0, &var, nullptr, nullptr);
-    os_info_.version += _bstr_t(var.bstrVal, false);
+    os_info_.version += WideToUtf8(var.bstrVal);
     VariantClear(&var);
 
     class_object->Release();
@@ -421,7 +431,7 @@ void SystemInfoProviderWindows::FetchPerformanceInfo() {
         npu_gpu_counters_->GetValue(i, "Shared Memory", &exists);
 
     NPUGPUPerformanceInfo info = {
-        std::string(_bstr_t(data->GetDeviceName(i).c_str())),
+        WideToUtf8(data->GetDeviceName(i).c_str()),
         static_cast<size_t>(max(max(usage_3D, usage_compute), usage_copy)),
         true,
         50,

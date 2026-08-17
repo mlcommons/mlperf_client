@@ -1,0 +1,30 @@
+{
+  "EPDependencies": [
+    {
+      "Name": "NativeQNN",
+      "Files": [
+        { "Name": "Genie.dll",                       "Path": "@MLPERF_NATIVE_QNN_PREFIX@/Genie.dll" },
+        { "Name": "QnnHtp.dll",                      "Path": "@MLPERF_NATIVE_QNN_PREFIX@/QnnHtp.dll" },
+        { "Name": "QnnHtpNetRunExtensions.dll",      "Path": "@MLPERF_NATIVE_QNN_PREFIX@/QnnHtpNetRunExtensions.dll" },
+        { "Name": "QnnSystem.dll",                   "Path": "@MLPERF_NATIVE_QNN_PREFIX@/QnnSystem.dll" },
+        { "Name": "QnnHtpV73Stub.dll",               "Path": "@MLPERF_NATIVE_QNN_PREFIX@/QnnHtpV73Stub.dll" },
+        { "Name": "libQnnHtpV73Skel.so",             "Path": "@MLPERF_NATIVE_QNN_PREFIX@/libQnnHtpV73Skel.so" },
+        { "Name": "libqnnhtpv73.cat",                "Path": "@MLPERF_NATIVE_QNN_PREFIX@/libqnnhtpv73.cat" },
+        { "Name": "QnnGenAiTransformerModel.dll",    "Path": "@MLPERF_NATIVE_QNN_PREFIX@/QnnGenAiTransformerModel.dll" },
+        { "Name": "QnnGenAiTransformer.dll",         "Path": "@MLPERF_NATIVE_QNN_PREFIX@/QnnGenAiTransformer.dll" },
+        { "Name": "QnnHtpV81Stub.dll",               "Path": "@MLPERF_NATIVE_QNN_PREFIX@/QnnHtpV81Stub.dll" },
+        { "Name": "libQnnHtpV81Skel.so",             "Path": "@MLPERF_NATIVE_QNN_PREFIX@/libQnnHtpV81Skel.so" },
+        { "Name": "libqnnhtpv81.cat",                "Path": "@MLPERF_NATIVE_QNN_PREFIX@/libqnnhtpv81.cat" }
+      ]
+    },
+    {
+      "Name": "WindowsML",
+      "Files": [
+        { "Name": "DirectML.dll",                              "Path": "@MLPERF_WINML_PREFIX@/DirectML.dll" },
+        { "Name": "Microsoft.Windows.AI.MachineLearning.dll",  "Path": "@MLPERF_WINML_PREFIX@/Microsoft.Windows.AI.MachineLearning.dll" },
+        { "Name": "onnxruntime.dll",                           "Path": "@MLPERF_WINML_PREFIX@/onnxruntime.dll" },
+        { "Name": "onnxruntime-genai.dll",                     "Path": "@MLPERF_WINML_PREFIX@/onnxruntime-genai.dll" }
+      ]
+    }
+  ]
+}

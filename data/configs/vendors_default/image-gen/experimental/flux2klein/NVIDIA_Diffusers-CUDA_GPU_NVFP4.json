@@ -1,0 +1,52 @@
+{
+  "SystemConfig": {
+    "Comment": "Diffusers CUDA, GPU, NVFP4",
+    "TempPath": "",
+    "EPDependenciesConfigPath": ""
+  },
+  "Scenarios": [
+    {
+      "Name": "flux2klein",
+      "Models": [
+        {
+          "ModelName": "FLUX.2-klein-4B",
+          "FilePath": "https://client.mlcommons-storage.org/deps/2.0/scenario_files/models/flux2/klein_4b/Diffusers/CUDA/nvfp4/model_index.json",
+          "DataFilePath": "https://client.mlcommons-storage.org/deps/2.0/scenario_files/models/flux2/klein_4b/Diffusers/CUDA/nvfp4/nvfp4.zip"
+        }
+      ],
+      "InputFilePath": [
+        "https://client.mlcommons-storage.org/deps/2.0/scenario_files/image/prompts/flux2/klein_4b/multi_seed_prompts.json"
+      ],
+      "AssetsPath": [],
+      "ResultsVerificationFile": "",
+      "DataVerificationFile": "",
+      "Iterations": 4,
+      "WarmUp": 1,
+      "Delay": 0,
+      "ExecutionProviders": [
+        {
+          "Name": "Diffusers",
+          "Config": {
+            "backend": "CUDA",
+            "device_vendor": "NVIDIA",
+            "device_type": "GPU",
+            "gpu_mode": "direct",
+            "quantization": "nvfp4",
+            "components": {
+              "transformer": "flux-2-klein-4b-nvfp4.safetensors",
+              "vae": "small_decoder"
+            },
+            "optimizations": [
+              {
+                "type": "nvfp4"
+              },
+              {
+                "type": "tensorrt_rtx"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

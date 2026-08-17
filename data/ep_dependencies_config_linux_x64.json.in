@@ -1,0 +1,32 @@
+{
+  "EPDependencies": [
+    {
+      "Name": "NativeOpenVINO",
+      "Files": [
+        { "Name": "libopenvino.so",                       "Path": "@MLPERF_NATIVE_OPENVINO_PREFIX@/libopenvino.so" },
+        { "Name": "libopenvino.so.2630",                  "Path": "@MLPERF_NATIVE_OPENVINO_PREFIX@/libopenvino.so.2630" },
+        { "Name": "libopenvino_auto_batch_plugin.so",     "Path": "@MLPERF_NATIVE_OPENVINO_PREFIX@/libopenvino_auto_batch_plugin.so" },
+        { "Name": "libopenvino_auto_plugin.so",           "Path": "@MLPERF_NATIVE_OPENVINO_PREFIX@/libopenvino_auto_plugin.so" },
+        { "Name": "libopenvino_c.so",                     "Path": "@MLPERF_NATIVE_OPENVINO_PREFIX@/libopenvino_c.so" },
+        { "Name": "libopenvino_genai.so",                 "Path": "@MLPERF_NATIVE_OPENVINO_PREFIX@/libopenvino_genai.so" },
+        { "Name": "libopenvino_genai.so.2630",            "Path": "@MLPERF_NATIVE_OPENVINO_PREFIX@/libopenvino_genai.so.2630" },
+        { "Name": "libopenvino_ir_frontend.so.2630",      "Path": "@MLPERF_NATIVE_OPENVINO_PREFIX@/libopenvino_ir_frontend.so.2630" },
+        { "Name": "libopenvino_hetero_plugin.so",         "Path": "@MLPERF_NATIVE_OPENVINO_PREFIX@/libopenvino_hetero_plugin.so" },
+        { "Name": "libopenvino_intel_cpu_plugin.so",      "Path": "@MLPERF_NATIVE_OPENVINO_PREFIX@/libopenvino_intel_cpu_plugin.so" },
+        { "Name": "libopenvino_intel_gpu_plugin.so",      "Path": "@MLPERF_NATIVE_OPENVINO_PREFIX@/libopenvino_intel_gpu_plugin.so" },
+        { "Name": "libopenvino_intel_npu_compiler_loader.so",      "Path": "@MLPERF_NATIVE_OPENVINO_PREFIX@/libopenvino_intel_npu_compiler_loader.so" },
+        { "Name": "libopenvino_intel_npu_compiler.so",      "Path": "@MLPERF_NATIVE_OPENVINO_PREFIX@/libopenvino_intel_npu_compiler.so" },
+        { "Name": "libopenvino_intel_npu_plugin.so",      "Path": "@MLPERF_NATIVE_OPENVINO_PREFIX@/libopenvino_intel_npu_plugin.so" },
+        { "Name": "libopenvino_onnx_frontend.so",         "Path": "@MLPERF_NATIVE_OPENVINO_PREFIX@/libopenvino_onnx_frontend.so" },
+        { "Name": "libopenvino_paddle_frontend.so",       "Path": "@MLPERF_NATIVE_OPENVINO_PREFIX@/libopenvino_paddle_frontend.so" },
+        { "Name": "libopenvino_pytorch_frontend.so",      "Path": "@MLPERF_NATIVE_OPENVINO_PREFIX@/libopenvino_pytorch_frontend.so" },
+        { "Name": "libopenvino_tensorflow_frontend.so",   "Path": "@MLPERF_NATIVE_OPENVINO_PREFIX@/libopenvino_tensorflow_frontend.so" },
+        { "Name": "libopenvino_tensorflow_lite_frontend.so","Path": "@MLPERF_NATIVE_OPENVINO_PREFIX@/libopenvino_tensorflow_lite_frontend.so" },
+        { "Name": "libopenvino_tokenizers.so",            "Path": "@MLPERF_NATIVE_OPENVINO_PREFIX@/libopenvino_tokenizers.so" },
+        { "Name": "libtbb.so.12",                         "Path": "@MLPERF_NATIVE_OPENVINO_PREFIX@/libtbb.so.12" },
+        { "Name": "libtbbmalloc.so",                      "Path": "@MLPERF_NATIVE_OPENVINO_PREFIX@/libtbbmalloc.so" },
+        { "Name": "plugins.xml",                          "Path": "@MLPERF_NATIVE_OPENVINO_PREFIX@/plugins.xml" }
+      ]
+    }
+  ]
+}

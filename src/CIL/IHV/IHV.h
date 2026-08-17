@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -51,7 +52,7 @@ extern "C" {
  *
  * @brief API version defined using Year, Month, Day format.
  */
-#define API_IHV_VERSION 250205
+#define API_IHV_VERSION 260512
 
 /**
  * @enum API_IHV_LogLevel
@@ -104,6 +105,53 @@ typedef void (*const API_IHV_Logger_func)(void *context, API_IHV_LogLevel level,
 typedef void (*const API_IHV_Token_Callback_func)(void *obj, uint32_t token);
 
 /**
+ * @enum API_IHV_ImageStep_Phase
+ *
+ * @brief Phase of image generation reported via the image-step callback.
+ */
+enum API_IHV_ImageStep_Phase {
+  API_IHV_ImageStep_Start, /**< Generation beginning (step=0, total_steps=N) */
+  API_IHV_ImageStep_Step,  /**< Denoising step completed (step=1..N) */
+  API_IHV_ImageStep_End,   /**< Generation finished (step=N, total_steps=N) */
+  API_IHV_ImageStep_Submodule, /**< Submodule forward pass completed
+                                  (submodule, duration_ms) */
+};
+
+/**
+ * @struct API_IHV_ImageStep_Event_t
+ *
+ * @brief Event payload for the image-step callback.
+ *
+ * Carries either per-step lifecycle information (Start/Step/End) or a
+ * completed submodule forward-pass duration. Field validity per phase:
+ *   - Start:     step=0, total_steps=N
+ *   - Step:      step=1..N, total_steps=N
+ *   - End:       step=N, total_steps=N
+ *   - Submodule: submodule != NULL, duration_ms
+ *
+ * `submodule` is a NUL-terminated string owned by the IHV for the duration
+ * of the call. `duration_ms` is the wall-clock duration of the submodule
+ * forward pass measured on the device with appropriate synchronization
+ * (e.g. CUDA events, MPS sync), or host-clock as a fallback.
+ */
+struct API_IHV_ImageStep_Event_t {
+  API_IHV_ImageStep_Phase phase;
+  unsigned step;
+  unsigned total_steps;
+  const char *submodule;
+  double duration_ms;
+};
+
+/**
+ * @typedef API_IHV_ImageStep_Callback_func
+ *
+ * @brief Callback invoked by the IHV during image generation to report
+ *        lifecycle phases, per-step progress, and submodule timings.
+ */
+typedef void (*const API_IHV_ImageStep_Callback_func)(
+    void *obj, const struct API_IHV_ImageStep_Event_t *event);
+
+/**
  * @struct API_IHV_Struct_t
  *
  * @brief Structure defining the IHV configuration, references IHV-specific
@@ -135,6 +183,19 @@ struct API_IHV_Struct_t {
    * additional context, e.g. pointer to a singleton object.
    */
   void *ihv_data;
+
+  // --- Fields below were added in API version 260423 ---
+
+  /**
+   * @brief API protocol version supported by this IHV.
+   *
+   * IHVs should set this to API_IHV_VERSION they were compiled against.
+   * The harness uses this to determine which Setup_t fields the IHV
+   * understands (e.g. model_base_name, scenario_name).
+   * Old IHVs that do not set this field will have it default-initialized
+   * to 0, signaling pre-260423 protocol.
+   */
+  unsigned api_version;
 };
 
 /**
@@ -171,9 +232,15 @@ struct API_IHV_Setup_t {
   const char *ep_name;
 
   /**
-   * @brief The Name of the model to be used. Read-only.
+   * @brief Canonical scenario name (e.g. "txt2txt") or one of its aliases
+   * (e.g. "llama3", "phi4mini", "phi4reason"). Read-only.
+   *
+   * This slot was named `model_name` in the pre-260423 ABI: old IHVs at that
+   * offset see the value as a "model name" and dispatch against their family
+   * alias list, which by design matches the scenario aliases above. New IHVs
+   * (those exporting `API_IHV_GetAPIVersion`) consume it as the scenario name.
    */
-  const char *model_name;
+  const char *scenario_name;
 
   /**
    * @brief Filesystem path to the model. Read-only.
@@ -189,6 +256,21 @@ struct API_IHV_Setup_t {
    * @brief Execution provider settings in JSON string format. Read-only.
    */
   const char *ep_settings;
+
+  // --- Fields below were added in API version 260423 ---
+  // IHV implementations compiled against older API versions will not see
+  // these fields. The harness uses presence of the `API_IHV_GetAPIVersion`
+  // export to decide whether the IHV understands them.
+
+  /**
+   * @brief Unique, machine-readable model identifier
+   * (e.g. "phi_4_reasoning_14b"). Read-only.
+   *
+   * IHVs that need a coarser-grained "model family" string for internal
+   * dispatch must derive it from this field themselves; the harness no
+   * longer provides one.
+   */
+  const char *model_base_name;
 };
 
 /**
@@ -241,7 +323,8 @@ struct API_IHV_Init_t {
  */
 enum API_IHV_Callback_Type {
   API_IHV_CB_None,
-  API_IHV_CB_Token,  // API_IHV_Token_Callback_func
+  API_IHV_CB_Token,      // API_IHV_Token_Callback_func
+  API_IHV_CB_ImageStep,  // API_IHV_ImageStep_Callback_func
 };
 
 /**
@@ -277,12 +360,15 @@ struct API_IHV_Callback_t {
 struct API_IHV_IO_Data_t {
   /**
    * @brief Input data, read-only.
+   *         - txt2txt: array of uint32_t tokens
+   *         - txt2img: JSON string ({"prompt":"...", ...})
    */
   const void *const input;
 
   /**
    * @brief Size of input data.
-   *         - Llama2 - number of input (uint32_t) tokens
+   *         - txt2txt: number of input (uint32_t) tokens
+   *         - txt2img: JSON string length in bytes
    */
   const unsigned input_size;
 
@@ -294,7 +380,8 @@ struct API_IHV_IO_Data_t {
 
   /**
    * @brief Size of output data
-   *         - Llama2 - number of tokens with timestamps
+   *         - txt2txt: number of tokens with timestamps
+   *         - txt2img: raw RGB pixel buffer size in bytes (width*height*3)
    */
   unsigned output_size;
 
@@ -481,6 +568,22 @@ struct API_IHV_DeviceEnumeration_t {
  * 6. API_IHV_Release()
  */
 /**
+ * @typedef API_IHV_GetAPIVersion_func
+ *
+ * @brief Function pointer type for the GetAPIVersion function.
+ *
+ * @details GetAPIVersion returns the API protocol version the IHV was compiled
+ * against (`API_IHV_VERSION`). The harness uses the presence of this exported
+ * symbol to detect a "new" IHV: if the symbol is found, the IHV understands
+ * the post-260423 API surface (including the `model_base_name` and
+ * `scenario_name` fields of `API_IHV_Setup_t`); if the symbol is missing,
+ * the harness falls back to the pre-260423 contract.
+ *
+ * Expected exported function name is `API_IHV_GetAPIVersion`.
+ */
+typedef unsigned (*API_IHV_GetAPIVersion_func)(void);
+
+/**
  * @typedef API_IHV_Setup_func
  *
  * @brief Function pointer type for the Setup function.
@@ -601,6 +704,7 @@ typedef void (*API_IHV_Release_func)(const struct API_IHV_Release_t *api);
 // Macro to define exports for IHV API functions.
 
 #define EXPORT_API_IHV                                                \
+  EXPORT_API unsigned API_IHV_GetAPIVersion(void);                    \
   EXPORT_API const struct API_IHV_Struct_t *API_IHV_Setup(            \
       const struct API_IHV_Setup_t *api);                             \
   EXPORT_API int API_IHV_EnumerateDevices(                            \

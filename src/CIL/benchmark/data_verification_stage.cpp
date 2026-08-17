@@ -27,6 +27,7 @@ bool DataVerificationStage::Run(const ScenarioConfig& scenario_config,
   std::map<std::string, std::string> not_verified_files;
 
   for (const auto& model_file_path : scenario_data.model_file_paths) {
+    if (fs::is_directory(model_file_path)) continue;
     if (!verifier->Verify(model_file_path, calculated_hash))
       not_verified_files[model_file_path] = calculated_hash;
   }
@@ -37,9 +38,17 @@ bool DataVerificationStage::Run(const ScenarioConfig& scenario_config,
 
   if (not_verified_files.empty()) return true;
 
-  LOG4CXX_WARN(logger_, "Following files used for the model "
-                            << scenario_config.GetName()
-                            << " cannot be verified, using at your risk:");
+  std::string model_names;
+  for (const auto& m : scenario_config.GetModels()) {
+    if (!model_names.empty()) model_names += ", ";
+    const auto& base = m.GetModelBaseName();
+    model_names += base.empty() ? m.GetDisplayName() : base;
+  }
+
+  LOG4CXX_WARN(logger_, "Following files used for scenario "
+                            << scenario_config.GetDisplayName() << " (model "
+                            << model_names
+                            << ") cannot be verified, using at your risk:");
   for (const auto& [file_path, hash] : not_verified_files)
     LOG4CXX_WARN(logger_, "[" << utils::GetFileNameFromPath(file_path) << ": "
                               << hash << "]");

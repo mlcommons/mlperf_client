@@ -1,0 +1,43 @@
+{
+  "SystemConfig": {
+    "Comment": "Diffusers RyzenAI, NPU",
+    "TempPath": "",
+    "EPDependenciesConfigPath": ""
+  },
+  "Scenarios": [
+    {
+      "Name": "flux2klein",
+      "Models": [
+        {
+          "ModelName": "FLUX.2-klein-4B",
+          "FilePath": "https://client.mlcommons-storage.org/deps/2.0/scenario_files/models/flux2/klein_4b/Diffusers/RyzenAI/model_index.json",
+          "DataFilePath": "https://client.mlcommons-storage.org/deps/2.0/scenario_files/models/flux2/klein_4b/Diffusers/RyzenAI/ryzenai_bfp16.zip"
+        }
+      ],
+      "InputFilePath": [
+        "https://client.mlcommons-storage.org/deps/2.0/scenario_files/image/prompts/flux2/klein_4b/multi_seed_prompts.json"
+      ],
+      "AssetsPath": [],
+      "ResultsVerificationFile": "",
+      "DataVerificationFile": "",
+      "Iterations": 4,
+      "WarmUp": 1,
+      "Delay": 0,
+      "ExecutionProviders": [
+        {
+          "Name": "Diffusers",
+          "Config": {
+            "backend": "RYZENAI",
+            "device_vendor": "AMD",
+            "device_type": "NPU",
+            "gpu_mode": "",
+            "components": {
+              "__is_distilled__": "true",
+              "__is_dynamic__": "false"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

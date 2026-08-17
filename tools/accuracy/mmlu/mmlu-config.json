@@ -1,0 +1,22 @@
+{
+    "MMLUDataPath": "mmlu_data",
+    "MLPerfProgramPath": "../../../mlperf-windows.exe",
+    "OutputDir": "output",
+    "DataSplitStep": null,
+    "Subjects": null,
+    "HfToken": null,
+    "RunID": null,
+    "FewShotPromptsNumber": 5,
+    "PromptFormat": "raw",
+    "InputConfigPath": null,
+    "RunConfigPath": "../../../data/configs/vendors_default/llm/phi4mini/AMD_WindowsML-DML_GPU.json",
+    "InputConfigTemplate": {
+        "model_config": {
+            "model": {
+                "context_length": 4096
+            },
+            "search": {}
+        }
+    },
+    "RunConfigTemplate": null
+}

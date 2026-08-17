@@ -1,0 +1,18 @@
+{
+  "model_config": {
+    "image_generation": {
+      "width": 1024,
+      "height": 1024,
+      "num_inference_steps": 4,
+      "seed": 42,
+      "num_images_per_prompt": 4,
+      "seeds": [42, 43, 44, 45]
+    }
+  },
+  "prompts": [
+    "A photorealistic close-up of a fluffy ginger tabby cat perched on a weathered wooden windowsill at golden-hour sunset, warm amber light streaming through the dusty glass and rim-lighting its soft fur, a blurred city skyline and slowly drifting dust motes in the background, shallow depth of field, shot on a 50mm lens, highly detailed with natural color grading.",
+    "A sweeping cinematic aerial view of a sprawling futuristic megacity at night, towering glass skyscrapers glowing with bands of teal and magenta light along their facades, sleek flying vehicles streaking between the buildings and leaving long light trails, reflections shimmering on rain-slicked empty streets far below, volumetric fog and dramatic atmospheric lighting, ultra-detailed science-fiction concept art.",
+    "A serene Japanese garden in early autumn at dawn, a vermilion wooden footbridge arching over a still koi pond that mirrors the pale sky, maple trees turning crimson and gold, a moss-covered stone lantern beside smooth river rocks, delicate morning mist hanging in the air, soft diffused light and a painterly composition with rich natural color, extremely detailed.",
+    "Ultra-realistic commercial studio product photography of two minimalist ceramic coffee mugs on a polished concrete surface: a matte black mug centered in the foreground with hot coffee and visible steam rising, the words \"GOOD MORNING\" printed across its front in clean, crisp white capital letters facing the camera, and a matching matte yellow mug to its right; concrete gray studio backdrop, soft white highlights, three-point softbox lighting with diffused reflections and no harsh shadows, rule-of-thirds composition, high-angle medium shot, sharp focus on the mugs, steam, and lettering, shot on an 85mm lens at f/5.6, ISO 200."
+  ]
+}

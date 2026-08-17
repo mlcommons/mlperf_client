@@ -88,7 +88,7 @@ std::wstring GetDevicePropertyString(HDEVINFO hDevInfo,
 }
 
 template <typename ResultType, typename Type>
-ResultType ÑonvertType(BYTE* data, bool* ok = nullptr) {
+ResultType ConvertType(BYTE* data, bool* ok = nullptr) {
   if (ok) *ok = true;
   if (sizeof(ResultType) == sizeof(Type)) {
     return *reinterpret_cast<ResultType*>(data);
@@ -109,13 +109,13 @@ ResultType GetDevicePropertyPOD(HDEVINFO hDevInfo, SP_DEVINFO_DATA& devInfoData,
                         propertyBuffer)) {
     switch (propertyType) {
       case DEVPROP_TYPE_UINT32:
-        return ÑonvertType<ResultType, uint32_t>(propertyBuffer.data(), ok);
+        return ConvertType<ResultType, uint32_t>(propertyBuffer.data(), ok);
       case DEVPROP_TYPE_UINT64:
-        return ÑonvertType<ResultType, uint64_t>(propertyBuffer.data(), ok);
+        return ConvertType<ResultType, uint64_t>(propertyBuffer.data(), ok);
       case DEVPROP_TYPE_BOOLEAN:
-        return ÑonvertType<ResultType, char>(propertyBuffer.data(), ok);
+        return ConvertType<ResultType, char>(propertyBuffer.data(), ok);
       case DEVPROP_TYPE_GUID:
-        return ÑonvertType<ResultType, GUID>(propertyBuffer.data(), ok);
+        return ConvertType<ResultType, GUID>(propertyBuffer.data(), ok);
       default:
         break;
     }
@@ -171,7 +171,7 @@ void PerformanceCounterDataNpuGpu::Process(int index, const wchar_t* name,
 }
 
 std::vector<PerformanceCounterDataNpuGpu::Device>
-PerformanceCounterDataNpuGpu::FindDevices(DeviceType type) {
+PerformanceCounterDataNpuGpu::FindDevices(DeviceType type) const {
   GUID deviceGuid =
       (type == eNPU) ? GUID_DEVCLASS_COMPUTEACCELERATOR : GUID_DEVCLASS_DISPLAY;
   HDEVINFO deviceInfo = SetupDiGetClassDevs(&deviceGuid, NULL, NULL,

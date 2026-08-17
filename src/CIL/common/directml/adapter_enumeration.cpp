@@ -103,7 +103,7 @@ std::vector<AdapterInfo> EnumerateDirectMLAdapters(
   LibraryPathHandle path_handle;
 
   if (!directml_directory.empty()) {
-    path_handle = AddLibraryPath(directml_directory);
+    path_handle = AddLibraryPath(fs::absolute(directml_directory));
     if (!path_handle.IsValid()) return {};
   };
 
@@ -240,7 +240,7 @@ std::vector<AdapterInfo> EnumerateDXCoreAdapters(
   LibraryPathHandle path_handle;
 
   if (!dxcore_directory.empty()) {
-    path_handle = AddLibraryPath(dxcore_directory);
+    path_handle = AddLibraryPath(fs::absolute(dxcore_directory));
     if (!path_handle.IsValid()) return {};
   };
 

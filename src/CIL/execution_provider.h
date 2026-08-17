@@ -13,12 +13,10 @@ enum class EP {
   kIHVOrtGenAI,
   kkIHVOrtGenAIRyzenAI,
   kIHVWindowsML,
-  kIHVMetal,
-  kIHVVulkan,
-  kIHVCUDA,
-  kIHVROCm,
+  kIHVLlamaCpp,
   kIHVNativeQNN,
   kIHVMLX,
+  kIHVDiffusers,
   kUnknown
 };
 
@@ -32,18 +30,14 @@ inline std::string EPToString(EP ep) {
       return "IHV OrtGenAI RyzenAI";
     case EP::kIHVWindowsML:
       return "IHV WindowsML";
-    case EP::kIHVMetal:
-      return "IHV Metal";
-    case EP::kIHVVulkan:
-      return "IHV Vulkan";
-    case EP::kIHVCUDA:
-      return "IHV CUDA";
-    case EP::kIHVROCm:
-      return "IHV ROCm";
+    case EP::kIHVLlamaCpp:
+      return "IHV LlamaCpp";
     case EP::kIHVNativeQNN:
       return "NativeQNN";
     case EP::kIHVMLX:
       return "IHV MLX";
+    case EP::kIHVDiffusers:
+      return "IHV Diffusers";
     default:
       return "Unknown";
   }
@@ -59,12 +53,16 @@ inline EP NameToEP(const std::string& ep_name) {
   if (ep_name == "IHV WindowsML" || ep_name == "WindowsML" ||
       ep_name == "WinML")
     return EP::kIHVWindowsML;
-  if (ep_name == "IHV Metal" || ep_name == "Metal") return EP::kIHVMetal;
-  if (ep_name == "IHV Vulkan" || ep_name == "Vulkan") return EP::kIHVVulkan;
-  if (ep_name == "IHV CUDA" || ep_name == "CUDA") return EP::kIHVCUDA;
-  if (ep_name == "IHV ROCm" || ep_name == "ROCm") return EP::kIHVROCm;
+  if (ep_name == "llama-cpp" || ep_name == "LlamaCpp" ||
+      ep_name == "IHV LlamaCpp" || ep_name == "IHV Metal" ||
+      ep_name == "Metal" || ep_name == "IHV Vulkan" || ep_name == "Vulkan" ||
+      ep_name == "IHV CUDA" || ep_name == "CUDA" || ep_name == "IHV ROCm" ||
+      ep_name == "ROCm")
+    return EP::kIHVLlamaCpp;
   if (ep_name == "NativeQNN") return EP::kIHVNativeQNN;
   if (ep_name == "MLX" || ep_name == "IHV MLX") return EP::kIHVMLX;
+  if (ep_name == "Diffusers" || ep_name == "IHV Diffusers")
+    return EP::kIHVDiffusers;
   return EP::kUnknown;
 }
 
@@ -78,10 +76,14 @@ inline std::string EPNameToLongName(const std::string& ep_name) {
   if (ep_name == "IHV WindowsML" || ep_name == "WindowsML" ||
       ep_name == "Windows ML")
     return "Windows ML";
-  if (ep_name == "IHV Metal" || ep_name == "Metal") return "llamacpp Metal";
-  if (ep_name == "IHV Vulkan" || ep_name == "Vulkan") return "llamacpp Vulkan";
-  if (ep_name == "IHV CUDA" || ep_name == "CUDA") return "llamacpp CUDA";
-  if (ep_name == "IHV ROCm" || ep_name == "ROCm") return "llamacpp ROCm";
+  if (ep_name == "llama-cpp" || ep_name == "LlamaCpp" ||
+      ep_name == "IHV LlamaCpp")
+    return "llama.cpp";
+  if (ep_name == "IHV Metal" || ep_name == "Metal") return "llama.cpp Metal";
+  if (ep_name == "IHV Vulkan" || ep_name == "Vulkan") return "llama.cpp Vulkan";
+  if (ep_name == "IHV CUDA" || ep_name == "CUDA") return "llama.cpp CUDA";
+  if (ep_name == "IHV ROCm" || ep_name == "ROCm") return "llama.cpp ROCm";
+  if (ep_name == "IHV Diffusers" || ep_name == "Diffusers") return "Diffusers";
   return ep_name;
 }
 
@@ -91,23 +93,14 @@ inline std::string EPNameToDisplayName(const std::string& ep_name) {
   if (ep_name == "NativeOpenVINO") return "Native OpenVINO";
   if (ep_name == "NativeQNN") return "Native QNN";
   if (ep_name == "WindowsML") return "Windows ML";
+  if (ep_name == "Diffusers") return "Diffusers";
+  if (ep_name == "llama-cpp" || ep_name == "LlamaCpp") return "llama.cpp";
+
+  if (auto pos = ep_name.rfind('-'); pos != std::string::npos)
+    return EPNameToDisplayName(ep_name.substr(0, pos)) + " " +
+           ep_name.substr(pos + 1);
+
   return ep_name;
-}
-
-inline bool IsEPFromGGML(EP ep) {
-  switch (ep) {
-    case EP::kIHVMetal:
-    case EP::kIHVVulkan:
-    case EP::kIHVCUDA:
-    case EP::kIHVROCm:
-      return true;
-    default:
-      return false;
-  }
-}
-
-inline bool IsEPFromGGML(const std::string& ep_name) {
-  return IsEPFromGGML(NameToEP(ep_name));
 }
 
 inline bool IsValidEP(EP ep) { return ep != EP::kUnknown; }
@@ -126,18 +119,14 @@ inline std::string GetEPDependencySubdirPath(EP ep) {
       return "IHV/OrtGenAI-RyzenAI";
     case EP::kIHVWindowsML:
       return "IHV/WindowsML";
-    case EP::kIHVMetal:
-      return "IHV/GGML";
-    case EP::kIHVVulkan:
-      return "IHV/GGML";
-    case EP::kIHVCUDA:
-      return "IHV/GGML";
-    case EP::kIHVROCm:
+    case EP::kIHVLlamaCpp:
       return "IHV/GGML";
     case EP::kIHVNativeQNN:
       return "IHV/NativeQNN";
     case EP::kIHVMLX:
       return "IHV/MLX";
+    case EP::kIHVDiffusers:
+      return "IHV/Diffusers";
     default:
       return "";
   }
@@ -161,19 +150,14 @@ inline std::string GetEPEmbeddedLibraryName(EP ep) {
       return "IHV/OrtGenAI-RyzenAI/IHV_OrtGenAI_RyzenAI.dll";
     case EP::kIHVWindowsML:
       return "IHV/WindowsML/IHV_WindowsML.dll";
-    case EP::kIHVMetal:
+    case EP::kIHVLlamaCpp:
 #if TARGET_OS_IOS
       return "IHV_GGML_EPs.framework/IHV_GGML_EPs";
+#elif defined(__APPLE__)
+      return "libIHV_GGML_EPs.dylib";
 #else
-      return "libIHV_GGML_EPs.dylib";
-#endif
-    case EP::kIHVVulkan:
-#if __APPLE__
-      return "libIHV_GGML_EPs.dylib";
-#endif
-    case EP::kIHVCUDA:
-    case EP::kIHVROCm:
       return "IHV/GGML/IHV_GGML_EPs.dll";
+#endif
     case EP::kIHVNativeQNN:
       return "IHV/NativeQNN/IHV_NativeQNN.dll";
     case EP::kIHVMLX:
@@ -181,6 +165,12 @@ inline std::string GetEPEmbeddedLibraryName(EP ep) {
       return "IHV_MLX.framework/IHV_MLX";
 #else
       return "libIHV_MLX.dylib";
+#endif
+    case EP::kIHVDiffusers:
+#if defined(_WIN32)
+      return "IHV/Diffusers/IHV_Diffusers.dll";
+#else
+      return "libIHV_Diffusers.dylib";
 #endif
     default:
       return "";

@@ -22,7 +22,7 @@ limitations under the License.
 #include "../base_inference.h"
 #include "Genie/GenieCommon.h"
 #include "Genie/GenieDialog.h"
-#include "Llm/llama_config.h"
+#include "Llm/llm_config.h"
 #include "QNN/GenAiTransformer/QnnGenAiTransformerCommon.h"
 #include "QNN/QnnInterface.h"
 
@@ -69,21 +69,14 @@ class LlmInference : public BaseInference {
   std::vector<std::string> npu_bins_;
 
   std::map<std::string, HMODULE> genie_extra_modules_;
- 
+
   GenieDialog_Handle_t dialogHandle{nullptr};
 
-  std::string formConfigStringLlama3_SDX_Elite(
-      const nlohmann::json& model_config, const std::string& device_type_,
-      const std::string& model_folder_, const std::string& model_path_,
-      const std::vector<std::string>& npu_bins_);
-  std::string formConfigStringPhi3_5_SDX_Elite(
-      const nlohmann::json& model_config, const std::string& device_type_,
-      const std::string& model_folder_, const std::string& model_path_,
-      const std::vector<std::string>& npu_bins_);
-  std::string formConfigStringPhi4_SDX_Elite(
-      const nlohmann::json& model_config, const std::string& device_type_,
-      const std::string& model_folder_, const std::string& model_path_,
-      const std::vector<std::string>& npu_bins_);
+  std::string npu_bin_pattern_;
+
+  // True when the scenario is an agentic, multi-turn conversation (read from
+  // the EP settings). Used to lift the dialog context-size cap for agentic runs.
+  bool is_agentic_{false};
 };
 }  // namespace infer
 }  // namespace IHV

@@ -125,7 +125,7 @@ For each submission cycle, the working group will pass through the following mil
 
 **Benchmark publication date** – The date when the new release of MLPerf Client is released to the public alongside source code. New versions will be posted to the MLPerf Client public GitHub repo and promoted via the MLCommons website and beyond.
 
-The v2.0 submission will follow the timeline shared in the "Client v1.6 release timeline" tab shared in this document: [Final: Public MLCommons Overview Calendar 2026](https://docs.google.com/spreadsheets/d/11k_7m1N4z8D95ynsRE0jwtPuBpqjILhP-bbKSSQ8rSQ/edit?usp=sharing)
+The v2.0 submission will follow the timeline shared in the "Client v2.0 release timeline" tab shared in this document: [Final: Public MLCommons Overview Calendar 2026](https://docs.google.com/spreadsheets/d/11k_7m1N4z8D95ynsRE0jwtPuBpqjILhP-bbKSSQ8rSQ/edit?usp=sharing)
 
 ### 3.2. Submission assets needed
 

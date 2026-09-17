@@ -1,0 +1,57 @@
+{
+  "SystemConfig": {
+    "Comment": "WindowsML AMD GPU EP - phi4reason hip test",
+    "TempPath": "",
+    "EPDependenciesConfigPath": "",
+    "CacheLocalFiles": false
+  },
+  "Scenarios": [
+    {
+      "Name": "phi4reason",
+      "Models": [
+        {
+          "ModelName": "phi4reason",
+          "ModelDisplayName": "Phi4reason hip test model",
+          "FilePath":         "file://D:/a-2/M/phi4reason/model.onnx",
+          "DataFilePath":     "file://D:/a-2/M/phi4reason/model.onnx.data",
+          "TokenizerPath":    "file://D:/a-2/M/phi4reason/tokenizer.json",
+          "GenaiConfig":      "file://D:/a-2/M/phi4reason/genai_config.json",
+          "TokenizerConfig":  "file://D:/a-2/M/phi4reason/tokenizer_config.json"
+        }
+      ],
+      "InputFilePath": {
+        "base": [
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/phi4/reasoning/content_generation/greedy-prompt_cot.39329.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/phi4/reasoning/content_generation/greedy-prompt_t0.677207.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/phi4/reasoning/creative_writing/greedy-prompt_niv.123362.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/phi4/reasoning/creative_writing/greedy-prompt_niv.77134.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/phi4/reasoning/structured_text/data_csv2json.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/phi4/reasoning/structured_text/events_ics2xml.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/phi4/reasoning/code_analysis/command_parser_cpp_2k.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/phi4/reasoning/code_analysis/performance_counter_group_cpp_2k.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/phi4/reasoning/intermediate4k/booksum_4k.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/phi4/reasoning/intermediate4k/downloader_cpp_4k.json"
+        ],
+        "extended": [
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/phi4/reasoning/substantial8k/booksum_8k.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/phi4/reasoning/substantial8k/gov_report_train_infrastructure.json"
+        ]
+      },
+      "AssetsPath": [],
+      "ResultsVerificationFile": "",
+      "DataVerificationFile": "",
+      "Iterations": 3,
+      "Delay": 0,
+      "ExecutionProviders": [
+        {
+          "Name": "WindowsML",
+          "Config": {
+            "device_type": "GPU",
+            "device_vendor": "AMD",
+            "device_ep": "AMDGPUExecutionProvider"
+          }
+        }
+      ]
+    }
+  ]
+}

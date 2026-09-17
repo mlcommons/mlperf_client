@@ -158,6 +158,42 @@ void LogInstalledWinMLEPVersions(cil::Logger& logger_cb) {
   }
 }
 
+// Load the vendor runtime an EP plugin expects to find beside itself.
+//
+// The process narrows the loader to LOAD_LIBRARY_SEARCH_DEFAULT_DIRS (see
+// cil::AddLibraryPath), which stops searching the loading module's own folder.
+// The AMD GPU plugin reaches for its backends by bare name, so under that
+// search order CreateEpFactories dies with "LoadDynamicLibrary(): failed to
+// load library" and ORT reports no AMD GPU device. AddDllDirectory does not
+// help here; the modules have to already be resident. Loading each by full path
+// with LOAD_WITH_ALTERED_SEARCH_PATH does that and lets their own dependencies
+// resolve out of the package folder.
+//
+// Only the modules the plugin actually asks for by name are listed. Pulling in
+// the whole folder also works but faults inside hip-compiler.dll, which is a
+// build-time tool that is not meant to be loaded into a host process.
+static void PreloadVendorRuntime(const std::wstring& library_path,
+                                 cil::Logger& logger) {
+  static constexpr const wchar_t* kAmdGpuBackends[] = {
+      L"hipgpu.dll", L"directx-backend.dll", L"hip-backend.dll",
+      L"migraphx-backend.dll"};
+
+  std::error_code ec;
+  const fs::path dir = fs::path(library_path).parent_path();
+  if (dir.empty() || !fs::exists(dir, ec)) return;
+
+  for (const wchar_t* name : kAmdGpuBackends) {
+    const fs::path module_path = dir / name;
+    if (!fs::exists(module_path, ec)) continue;
+    if (!::LoadLibraryExW(module_path.wstring().c_str(), nullptr,
+                          LOAD_WITH_ALTERED_SEARCH_PATH)) {
+      logger(cil::LogLevel::kWarning,
+             "Failed to preload EP dependency " + module_path.string() +
+                 " (GetLastError=" + std::to_string(::GetLastError()) + ")");
+    }
+  }
+}
+
 // Outcome of the one-shot WinML runtime-activation + EP-registration phase;
 // the caller switches on it for a specific diagnostic.
 enum class EpInitOutcome {
@@ -169,8 +205,9 @@ enum class EpInitOutcome {
 static std::once_flag g_epRegistrationFlag;
 static EpInitOutcome g_epInitOutcome = EpInitOutcome::kActivationFailed;
 
-static EpInitOutcome EnsureAndRegisterEPs(Ort::Env& env, cil::Logger& logger) {
-  std::call_once(g_epRegistrationFlag, [&env, &logger]() {
+static EpInitOutcome EnsureAndRegisterEPs(Ort::Env& env, cil::Logger& logger,
+                                          const std::string& requested_ep) {
+  std::call_once(g_epRegistrationFlag, [&env, &logger, &requested_ep]() {
     // Self-contained WinML: the runtime is bundled and activated via RegFree
     // WinRT — deliberately no MddBootstrap / WindowsAppRuntimeInstall.exe /
     // containment workaround (those are WASDK framework APIs).
@@ -253,6 +290,28 @@ static EpInitOutcome EnsureAndRegisterEPs(Ort::Env& env, cil::Logger& logger) {
                  " path='" + ConvertWideToUtf8(pth) + "'");
     }
 
+    // Registration order matters: some vendor EPs poison each other once
+    // loaded into the same process. Registering VitisAI first makes every
+    // subsequent TryRegister on the AMD GPU package (both
+    // AMDGPUExecutionProvider and MIGraphXExecutionProvider) return false for
+    // the lifetime of the process, while the reverse order registers all of
+    // them. Put the EP this scenario actually asked for at the front so it
+    // never loses that race.
+    std::vector<winml::ExecutionProvider> ordered(all_providers.begin(),
+                                                  all_providers.end());
+    if (!requested_ep.empty()) {
+      const std::string wanted = LowerCase(requested_ep);
+      std::stable_partition(
+          ordered.begin(), ordered.end(),
+          [&](const winml::ExecutionProvider& p) {
+            return LowerCase(ConvertWideToUtf8(get_safe_name(p))).rfind(wanted,
+                                                                       0) == 0;
+          });
+      logger(cil::LogLevel::kInfo,
+             "Registering '" + requested_ep + "' first to avoid vendor EP "
+             "registration conflicts.");
+    }
+
     // Single registration loop: EnsureReady → TryRegister → capture path →
     // register library with the temp OrtEnv, all on the same provider
     // object. `found_ready_ep` is driven by the *actual* TryRegister result
@@ -260,7 +319,7 @@ static EpInitOutcome EnsureAndRegisterEPs(Ort::Env& env, cil::Logger& logger) {
     // registered inline because `ReadyState()` / `LibraryPath()` are not
     // guaranteed stable across separate `FindAllProviders()` snapshots.
     bool found_ready_ep = false;
-    for (auto const& p : all_providers) {
+    for (auto const& p : ordered) {
       std::wstring nm = get_safe_name(p);
       const std::string nm_utf8 = ConvertWideToUtf8(nm);
 #if !MLPERF_WINDOWSML_ENABLE_MIGRAPHX
@@ -296,34 +355,69 @@ static EpInitOutcome EnsureAndRegisterEPs(Ort::Env& env, cil::Logger& logger) {
                std::string("TryRegister for EP '") + nm_utf8 + "' returned " +
                    (try_register_ok ? "true" : "false") +
                    " state=" + ready_state_str(p.ReadyState()));
-        if (!try_register_ok) continue;
-
-        // EP is registered system-wide. Now make it available to the temp
-        // OrtEnv so device enumeration via GetEpDevices() works for this
-        // constructor's scope. This step is best-effort — failure here does
-        // NOT invalidate the EP for other parts of the runtime.
+        // A false TryRegister is not fatal. It only means WinML declined to
+        // register the EP into its own global state — the AMD GPU package hits
+        // this whenever the AMD NPU package has been touched in the same
+        // process. The plugin itself is fine: once the provider is Ready its
+        // LibraryPath loads cleanly into ORT and reports its devices. So fall
+        // through to registering the library directly with the OrtEnv, which
+        // is all device enumeration below actually needs.
         std::wstring path = get_safe_path(p);
         if (nm.empty() || path.empty()) {
-          logger(cil::LogLevel::kWarning,
-                 std::string("EP registered but name/path empty after "
-                             "TryRegister: name='") +
-                     nm_utf8 + "' path='" + ConvertWideToUtf8(path) + "'");
-          found_ready_ep = true;  // TryRegister succeeded — still counts.
+          if (try_register_ok) {
+            logger(cil::LogLevel::kWarning,
+                   std::string("EP registered but name/path empty after "
+                               "TryRegister: name='") +
+                       nm_utf8 + "' path='" + ConvertWideToUtf8(path) + "'");
+            found_ready_ep = true;  // TryRegister succeeded — still counts.
+          }
           continue;
         }
+        bool library_registered = try_register_ok;
         try {
           const std::string utf8_path = ConvertWideToUtf8(path);
+          // A successful TryRegister puts the EP's package into the process
+          // package graph, which is what normally makes the plugin's siblings
+          // loadable. Without it we have to stage them ourselves.
+          if (!try_register_ok) PreloadVendorRuntime(path, logger);
           logger(cil::LogLevel::kInfo, "Registering EP library with OrtEnv: " +
                                            nm_utf8 + " at " + utf8_path);
           env.RegisterExecutionProviderLibrary(nm_utf8.c_str(), path);
+          library_registered = true;
+
+          // The AMD GPU package declares one plugin under two provider names
+          // and models reference either, so register the alias too. ORT keys
+          // registrations by name, not by file, and is happy to serve the same
+          // library twice. Without this, a model whose genai_config.json asks
+          // for MIGraphXExecutionProvider is rejected by ORT with "execution
+          // provider is not supported in this build".
+          static const std::map<std::string, std::string> kAmdGpuAliases = {
+              {"AMDGPUExecutionProvider", "MIGraphXExecutionProvider"},
+              {"MIGraphXExecutionProvider", "AMDGPUExecutionProvider"}};
+          if (auto alias = kAmdGpuAliases.find(nm_utf8);
+              alias != kAmdGpuAliases.end()) {
+            try {
+              env.RegisterExecutionProviderLibrary(alias->second.c_str(), path);
+              logger(cil::LogLevel::kInfo,
+                     "Also registered the same library as " + alias->second);
+            } catch (const std::exception& e) {
+              logger(cil::LogLevel::kInfo,
+                     "Alias registration for " + alias->second +
+                         " skipped: " + e.what());
+            }
+          }
         } catch (const std::exception& e) {
-          logger(cil::LogLevel::kWarning,
+          // "already registered" means TryRegister got there first, which is
+          // still a success; any other failure only matters when TryRegister
+          // had already declined.
+          logger(try_register_ok ? cil::LogLevel::kWarning
+                                 : cil::LogLevel::kError,
                  std::string(
                      "RegisterExecutionProviderLibrary failed (best effort) "
                      "for '") +
                      nm_utf8 + "': " + e.what());
         }
-        found_ready_ep = true;
+        if (library_registered) found_ready_ep = true;
       } catch (const std::exception& e) {
         logger(cil::LogLevel::kWarning,
                std::string("EP registration failed for '") + nm_utf8 +
@@ -394,7 +488,7 @@ BaseInference::BaseInference(
   if (ep_name_.find("WindowsML") != std::string::npos) {
     Ort::Env env(ORT_LOGGING_LEVEL_ERROR, "OGA");
 
-    switch (EnsureAndRegisterEPs(env, logger_)) {
+    switch (EnsureAndRegisterEPs(env, logger_, ep_settings_.GetDeviceEP())) {
       case EpInitOutcome::kSuccess:
         logger_(LogLevel::kInfo, "Execution Providers are ready.");
         break;
@@ -572,9 +666,16 @@ void BaseInference::DetectWindowsMLDevices(
       {"NvTensorRTRTXExecutionProvider", "NvTensorRtRtx"},
       {"DmlExecutionProvider", "DirectML"}};
 
+  // The AMD GPU EP has no alias: its catalog name is what scenarios request,
+  // and it reports real OrtEpDevices, so it needs no entry in the
+  // "registered but reports no device" fallback below.
   static const std::set<std::string> supported_eps = {
-      "CPU",     "DirectML", "OpenVINO",     "QNN",
-      "VitisAI", "RyzenAI",  "NvTensorRtRtx"};
+      "CPU",     "DirectML", "OpenVINO",      "QNN",
+      "VitisAI", "RyzenAI",  "NvTensorRtRtx", "AMDGPUExecutionProvider",
+#if MLPERF_WINDOWSML_ENABLE_MIGRAPHX
+      "MIGraphXExecutionProvider",
+#endif
+  };
 
   std::vector<Ort::ConstEpDevice> ep_devices = env.GetEpDevices();
 
@@ -872,6 +973,16 @@ void BaseInference::AssignModelForDevices() {
               } else if (option.contains("NvTensorRtRtx")) {
                 available_providers.insert("NvTensorRtRtx");
                 execution_providers.insert("NvTensorRtRtx");
+              } else if (option.contains("AMDGPUExecutionProvider") ||
+                         option.contains("MIGraphXExecutionProvider")) {
+                // The AMD GPU package publishes one plugin under two catalog
+                // names, and models in the wild use either. Claim both so the
+                // model matches whichever name the device was enumerated with.
+                for (const char* ep :
+                     {"AMDGPUExecutionProvider", "MIGraphXExecutionProvider"}) {
+                  available_providers.insert(ep);
+                  execution_providers.insert(ep);
+                }
               }
             }
           }

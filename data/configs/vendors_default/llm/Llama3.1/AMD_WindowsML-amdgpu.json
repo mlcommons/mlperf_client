@@ -1,0 +1,55 @@
+{
+  "SystemConfig": {
+    "Comment": "WindowsML AMD GPU EP - Llama3.1 hip test",
+    "TempPath": "",
+    "EPDependenciesConfigPath": "",
+    "CacheLocalFiles": false
+  },
+  "Scenarios": [
+    {
+      "Name": "Llama3",
+      "Models": [
+        {
+          "ModelName": "llama3.1",
+          "ModelDisplayName": "Llama3.1 hip test model",
+          "FilePath":         "file://D:/a-2/M/Llama3.1/model.onnx",
+          "DataFilePath":     "file://D:/a-2/M/Llama3.1/model.onnx.data",
+          "TokenizerPath":    "file://D:/a-2/M/Llama3.1/tokenizer.json",
+          "GenaiConfig":      "file://D:/a-2/M/Llama3.1/genai_config.json",
+          "TokenizerConfig":  "file://D:/a-2/M/Llama3.1/tokenizer_config.json",
+          "SpecialTokensMap": "file://D:/a-2/M/Llama3.1/special_tokens_map.json"
+        }
+      ],
+      "InputFilePath": {
+        "base": [
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/llama3/8b-instruct/content_generation/greedy-prompt_cot.39329.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/llama3/8b-instruct/content_generation/greedy-prompt_t0.677207.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/llama3/8b-instruct/creative_writing/greedy-prompt_niv.123362.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/llama3/8b-instruct/creative_writing/greedy-prompt_niv.77134.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/llama3/8b-instruct/structured_text/data_csv2json.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/llama3/8b-instruct/structured_text/events_ics2xml.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/llama3/8b-instruct/code_analysis/command_parser_cpp_2k.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/llama3/8b-instruct/code_analysis/performance_counter_group_cpp_2k.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/llama3/8b-instruct/intermediate4k/booksum_4k.json",
+          "https://client.mlcommons-storage.org/deps/2.0/scenario_files/llm/prompts/llama3/8b-instruct/intermediate4k/downloader_cpp_4k.json"
+        ],
+        "extended": []
+      },
+      "AssetsPath": [],
+      "ResultsVerificationFile": "",
+      "DataVerificationFile": "",
+      "Iterations": 3,
+      "Delay": 0,
+      "ExecutionProviders": [
+        {
+          "Name": "WindowsML",
+          "Config": {
+            "device_type": "GPU",
+            "device_vendor": "AMD",
+            "device_ep": "AMDGPUExecutionProvider"
+          }
+        }
+      ]
+    }
+  ]
+}

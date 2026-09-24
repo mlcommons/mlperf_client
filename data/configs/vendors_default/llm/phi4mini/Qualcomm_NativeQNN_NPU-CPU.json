@@ -13,7 +13,7 @@
           "FilePath": "https://client.mlcommons-storage.org/deps/2.0/scenario_files/models/phi4/mini-instruct/NativeQNN/Hybrid/Phi-4-mini-instruct-qti/phi4_mini_cpu.bin",
           "DataFilePath": "https://client.mlcommons-storage.org/deps/2.0/scenario_files/models/phi4/mini-instruct/NativeQNN/Hybrid/Phi-4-mini-instruct-qti/phi4mini_npu_hybrid.zip",
           "TokenizerPath": "https://client.mlcommons-storage.org/deps/2.0/scenario_files/models/phi4/mini-instruct/NativeQNN/tokenizer.zip",
-          "NativeQNNConfigPath": "https://client.mlcommons-storage.org/deps/2.0/scenario_files/models/phi4/mini-instruct/NativeQNN/Hybrid/Phi-4-mini-instruct-qti/native_qnn_config_npu_cpu.json",
+          "NativeQNNConfigPath": "https://client.mlcommons-storage.org/deps/2.0.1/scenario_files/models/phi4/mini-instruct/NativeQNN/Hybrid/Phi-4-mini-instruct-qti/native_qnn_config_npu_cpu.json",
           "HtpBackendExtConfigPath": "https://client.mlcommons-storage.org/deps/2.0/scenario_files/models/phi4/mini-instruct/NativeQNN/Hybrid/Phi-4-mini-instruct-qti/htp_backend_ext_config_npu_cpu.json"
         }
       ],

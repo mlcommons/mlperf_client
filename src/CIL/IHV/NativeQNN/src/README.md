@@ -1,4 +1,6 @@
 ## Usage
+Pinned Qualcomm AI Runtime: `2.46.0.260424`.
+
 QAIRT GENAI and its implementation in MLPerf require the cpu file generated from running instructions mentioned in [<code><b><path/to/mlperf_client_dev/tools/IHV/NativeQNN/cpu_model_generation/README.md></b></code>](../../../../../tools/IHV/NativeQNN/cpu_model_generation/README.md) 
 and npu bin file generated from running instructions mentioned in [<code><b><path/to/mlperf_client_dev/tools/IHV/NativeQNN/npu_model_generation/README.md></b></code>](../../../../../tools/IHV/NativeQNN/npu_model_generation/README.md)
 

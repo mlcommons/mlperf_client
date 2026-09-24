@@ -26,9 +26,9 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# clang-tidy runs on native builds. Cross toolchains don't have it
-# wired up, so skip it only when truly cross-compiling (target
-# processor differs from host).
+# clang-tidy runs on native builds (including native aarch64). Cross
+# toolchains don't have it wired up, so skip it only when truly
+# cross-compiling (target processor differs from host).
 if("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "${CMAKE_HOST_SYSTEM_PROCESSOR}")
     find_program(CLANG_TIDY_EXE NAMES "clang-tidy" REQUIRED)
     set(CLANG_TIDY_COMMAND "${CLANG_TIDY_EXE}" "-checks=-*,modernize-*")
@@ -46,7 +46,7 @@ elseif(WIN32)
 	if("${CMAKE_SIZEOF_VOID_P}" STREQUAL "8")
 		set(PLATFORM "Windows")
 	else()
-		message(FATAL_ERROR "This project requires Windows x64.")
+		message(FATAL_ERROR "This project requires 64-bit Windows (x64 or ARM64).")
 	endif()
 elseif(UNIX AND NOT APPLE)  # Linux
 	set(PLATFORM "Linux")
@@ -163,9 +163,9 @@ if(WIN32)
 		option(MLPERF_IHV_NATIVE_QNN "Enable IHV Native QNN EP" ON)
         set(MLPERF_IHV_ORT_GENAI OFF)
         set(MLPERF_IHV_ORT_GENAI_RYZENAI OFF)
-        option(MLPERF_IHV_GGML_CUDA "Enable IHV GGML CUDA EP" OFF)
+        option(MLPERF_IHV_GGML_CUDA "Enable IHV GGML CUDA EP" ON)
         set(MLPERF_IHV_GGML_ROCM OFF)
-        set(MLPERF_IHV_DIFFUSERS_NVIDIA OFF)
+        option(MLPERF_IHV_DIFFUSERS_NVIDIA "Enable NVIDIA / CUDA Diffusers sub-EP" ON)
         set(MLPERF_IHV_DIFFUSERS_AMD OFF)
 	endif()
     set(MLPERF_IHV_DIFFUSERS_APPLE OFF)
@@ -225,6 +225,21 @@ endif()
 endif()
 
 if(MLPERF_IHV_GGML_CUDA)
+# CMake 4.0's FindCUDAToolkit knows the Windows x64 lib suffix but not
+# lib/arm64. Seed cudart for a Windows ARM64 target so the top-level probe does
+# not disable CUDA before the GGML sub-build can select the ARM64 libraries.
+if(WIN32 AND (CMAKE_GENERATOR_PLATFORM MATCHES "ARM64" OR
+              CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64|arm64|aarch64"))
+    set(_mlperf_cuda_root "")
+    if(DEFINED CUDAToolkit_ROOT AND CUDAToolkit_ROOT)
+        file(TO_CMAKE_PATH "${CUDAToolkit_ROOT}" _mlperf_cuda_root)
+    elseif(DEFINED ENV{CUDA_PATH} AND NOT "$ENV{CUDA_PATH}" STREQUAL "")
+        file(TO_CMAKE_PATH "$ENV{CUDA_PATH}" _mlperf_cuda_root)
+    endif()
+    if(_mlperf_cuda_root AND EXISTS "${_mlperf_cuda_root}/lib/arm64/cudart.lib")
+        set(CUDA_CUDART "${_mlperf_cuda_root}/lib/arm64/cudart.lib")
+    endif()
+endif()
 find_package(CUDAToolkit)
 
 if (NOT CUDAToolkit_FOUND)
@@ -258,6 +273,13 @@ else()
 endif()
 
 option(MLPERF_BUILD_GUI "Build the GUI target" OFF)
+if(WIN32)
+    option(MLPERF_USE_LOCAL_IHV_LIBRARIES
+        "Generate vendor configs that load locally built IHV libraries instead of resolving them through EP dependencies"
+        OFF)
+else()
+    set(MLPERF_USE_LOCAL_IHV_LIBRARIES OFF)
+endif()
 option(MLPERF_IHV_DIFFUSERS_INSTALL_PYTHON "Download embedded Python and install packages for Diffusers EP (dev only)" ON)
 include(CMakeDependentOption)
 cmake_dependent_option(MLPERF_IHV_DIFFUSERS_BUILD_STANDALONE

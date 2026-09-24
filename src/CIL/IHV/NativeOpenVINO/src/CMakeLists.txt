@@ -153,9 +153,9 @@ if(WIN32)
 else() # Linux
   list(APPEND TBB_EXTRA_DEPS "tbb")
   list(APPEND TBB_EXTRA_DEPS_RELEASE "libtbb.so.12")
-  list(APPEND OPENVINO_EXTRA_DEPS_RELEASE libopenvino.so.2630)
-  list(APPEND OPENVINO_EXTRA_DEPS_RELEASE libopenvino_genai.so.2630)
-  list(APPEND OPENVINO_EXTRA_DEPS_RELEASE libopenvino_ir_frontend.so.2630)
+  list(APPEND OPENVINO_EXTRA_DEPS_RELEASE libopenvino.so.2640)
+  list(APPEND OPENVINO_EXTRA_DEPS_RELEASE libopenvino_genai.so.2640)
+  list(APPEND OPENVINO_EXTRA_DEPS_RELEASE libopenvino_ir_frontend.so.2640)
 endif()
 list(APPEND TBB_EXTRA_DEPS "tbbmalloc")
 

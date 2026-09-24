@@ -5,9 +5,9 @@ Format: Comma (,), UTF-8 encoding, quoted fields observed: Yes
 Grain: One row per sale transaction
 Columns:
 NAME	TYPE	NOTES
-SUPPLIER	string	Some rows have “Default” or “STR_SUPPLIES”
+SUPPLIER	string	Some rows have â€œDefaultâ€ or â€œSTR_SUPPLIESâ€
 ITEM CODE	string	May include single spaces (e.g., "ITEM A ")
-ITEM TYPE	string	Categories like “Beverage”, “Food”, etc.
+ITEM TYPE	string	Categories like â€œBeverageâ€, â€œFoodâ€, etc.
 RETAIL SALES	float	Units sold to retail customers
 WAREHOUSE TRANSFER	float	Units transferred between warehouses
 YEAR	integer	Four-digit year of sale
@@ -24,7 +24,7 @@ Recommended scripts:
 02_channel_mix.py: Category-level channel shares; row-level persona label (retail_led, warehouse_led, transfer_heavy, balanced)
 03_supplier_concentration.py: Aggregate total_units by SUPPLIER; top 10 suppliers; top1/top5 share of total
 04_anomalies.py: Warehouse spike rule, inactive rows, negative quantities, duplicate keys
-Next action: Run 01_profile_csv.py to gain insights into the dataset’s overall structure and distribution.
+Next action: Run 01_profile_csv.py to gain insights into the datasetâ€™s overall structure and distribution.
 
 ```
 {

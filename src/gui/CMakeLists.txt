@@ -124,6 +124,19 @@ if (WIN32)
     add_custom_command(TARGET GUI POST_BUILD
         COMMAND ${WINDEPLOYQT_EXECUTABLE} --release --no-translations $<TARGET_FILE:GUI>)
 
+    if(CMAKE_GENERATOR_PLATFORM MATCHES "ARM64"
+       AND CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "AMD64|amd64|x86_64")
+        # The host windeployqt is executable on the x64 build machine, but it
+        # stages x64 files. Replace every staged Qt DLL/plugin with the matching
+        # file from the ARM64 target Qt package and remove host-only helpers.
+        add_custom_command(TARGET GUI POST_BUILD
+            COMMAND ${CMAKE_COMMAND}
+                -DMLPERF_QT_TARGET_DIR=${QT6_INSTALL_PREFIX}
+                -DMLPERF_QT_DEPLOY_DIR=$<TARGET_FILE_DIR:GUI>
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/deploy-qt-target-runtime.cmake
+            COMMENT "Replacing host Qt deployment with ARM64 target runtimes")
+    endif()
+
     set(EP_DEPENDENCIES_DEST_DIR $<TARGET_FILE_DIR:GUI>/deps/IHV)
 
 else()

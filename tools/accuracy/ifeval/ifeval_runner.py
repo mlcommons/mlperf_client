@@ -100,7 +100,7 @@ def run_benchmark(config_path: str, verbose: bool = False,
 def main():
     parser = argparse.ArgumentParser(description="IFEval benchmark runner with retry support")
     parser.add_argument("-c", "--config", type=str, required=True,
-                        help="IFEval config file (e.g. ifeval-NVIDIA_llamacpp-CUDA_GPU.json)")
+                        help="IFEval config file (see README.md, Config Fields)")
     parser.add_argument("-r", "--run-config", type=str,
                         help="Path to a vendor default config (overrides RunConfigPath in the config)")
     parser.add_argument("-p", "--program", type=str,

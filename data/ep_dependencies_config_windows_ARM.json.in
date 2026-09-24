@@ -23,7 +23,27 @@
         { "Name": "DirectML.dll",                              "Path": "@MLPERF_WINML_PREFIX@/DirectML.dll" },
         { "Name": "Microsoft.Windows.AI.MachineLearning.dll",  "Path": "@MLPERF_WINML_PREFIX@/Microsoft.Windows.AI.MachineLearning.dll" },
         { "Name": "onnxruntime.dll",                           "Path": "@MLPERF_WINML_PREFIX@/onnxruntime.dll" },
-        { "Name": "onnxruntime-genai.dll",                     "Path": "@MLPERF_WINML_PREFIX@/onnxruntime-genai.dll" }
+        { "Name": "onnxruntime-genai.dll",                     "Path": "@MLPERF_WINML_PREFIX@/onnxruntime-genai.dll" },
+        {
+          "Name": "tensorrtrtx/onnxruntime-genai-cuda.dll",
+          "Path": "@MLPERF_WINML_PREFIX@/tensorrtrtx/onnxruntime-genai-cuda.dll",
+          "Condition": { "device_ep": "NvTensorRtRtx" }
+        }
+      ]
+    },
+    {
+      "Name": "llama-cpp",
+      "Files": [
+        { "Name": "cudart64_13.dll",   "Path": "@MLPERF_CUDA_PREFIX@/cudart64_13.dll",   "Condition": { "backend": "CUDA" } },
+        { "Name": "cublas64_13.dll",   "Path": "@MLPERF_CUDA_PREFIX@/cublas64_13.dll",   "Condition": { "backend": "CUDA" } },
+        { "Name": "cublasLt64_13.dll", "Path": "@MLPERF_CUDA_PREFIX@/cublasLt64_13.dll", "Condition": { "backend": "CUDA" } },
+        { "Name": "libomp140.aarch64.dll", "Path": "@MLPERF_CUDA_PREFIX@/libomp140.aarch64.dll", "Condition": { "backend": "CUDA" } }
+      ]
+    },
+    {
+      "Name": "Diffusers",
+      "Files": [
+        @MLPERF_DIFFUSERS_FILES_JSON@
       ]
     }
   ]

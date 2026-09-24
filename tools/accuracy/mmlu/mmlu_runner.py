@@ -1,5 +1,4 @@
 import argparse
-import glob
 import json
 import shutil
 import subprocess
@@ -16,17 +15,10 @@ from mlperf_common import delete_cont_config, find_latest_run_id, make_cont_conf
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 BENCHMARK_SCRIPT = os.path.join(SCRIPT_DIR, "run_mmlu_benchmark.py")
-EXECUTION_CONFIGS_DIR = os.path.join(SCRIPT_DIR, "execution_configs")
 OUTPUT_MMLU_DIR = os.path.join(SCRIPT_DIR, "output", "mmlu")
 OUTPUT_MMLU_REPORT_DIR = os.path.join(SCRIPT_DIR, "output")
 OUTPUT_MMLU_LOG = os.path.join(SCRIPT_DIR, "mmlu.log")
 MAX_RETRIES = 3
-
-def find_configs(config_dir: str) -> list[str]:
-    """Return all .json files in the given directory, sorted. Excludes *_cont.json files."""
-    configs = sorted(glob.glob(os.path.join(config_dir, "*.json")))
-    configs = [c for c in configs if not c.endswith("_cont.json")]
-    return configs
 
 def get_latest_run_id() -> int | None:
     """Find the highest integer-named subfolder under output/mmlu/."""
@@ -151,8 +143,8 @@ def run_benchmark(config_path: str, verbose: bool = False, bench_type: str = "mm
 
 def main():
     parser = argparse.ArgumentParser(description="MMLU benchmark runner with retry support")
-    parser.add_argument("-c", "--config", type=str, nargs="+",
-                        help="One or more config files to run (instead of scanning execution_configs/)")
+    parser.add_argument("-c", "--config", type=str, nargs="+", required=True,
+                        help="One or more config files to run")
     parser.add_argument("-r", "--run-config", type=str,
                         help="Path to a vendor default config (overrides RunConfigPath in each config)")
     parser.add_argument("-p", "--program", type=str,
@@ -175,14 +167,7 @@ def main():
     if args.program:
         args.program = os.path.abspath(args.program)
 
-    if args.config:
-        all_configs = [os.path.abspath(c) for c in args.config]
-    else:
-        all_configs = find_configs(EXECUTION_CONFIGS_DIR)
-
-    if not all_configs:
-        print("No matching config files found.")
-        sys.exit(1)
+    all_configs = [os.path.abspath(c) for c in args.config]
 
     print(f"Found {len(all_configs)} config(s).")
     for cfg in all_configs:

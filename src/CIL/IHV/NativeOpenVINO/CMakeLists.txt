@@ -11,14 +11,14 @@ set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(OPENVINO_INSTALL_DIR "" CACHE PATH "Path to the OpenVINO installation directory")
 
 if(NOT OPENVINO_INSTALL_DIR)
-    message(STATUS "OPENVINO_INSTALL_DIR is not set. Using 2026.3.0.0 OpenVINO GenAI")
+    message(STATUS "OPENVINO_INSTALL_DIR is not set. Using 2026.4.0.0 OpenVINO GenAI")
 
     include(FetchContent)
 
     if(WIN32)
-        set(OPENVINO_GENAI_URL "https://storage.openvinotoolkit.org/repositories/openvino_genai/packages/2026.3/windows/openvino_genai_windows_2026.3.0.0_x86_64.zip")
+        set(OPENVINO_GENAI_URL "https://storage.openvinotoolkit.org/repositories/openvino_genai/packages/2026.4/windows/openvino_genai_windows_2026.4.0.0_x86_64.zip")
     else() # Linux
-        set(OPENVINO_GENAI_URL "https://storage.openvinotoolkit.org/repositories/openvino_genai/packages/2026.3/linux/openvino_genai_ubuntu24_2026.3.0.0_x86_64.tar.gz")
+        set(OPENVINO_GENAI_URL "https://storage.openvinotoolkit.org/repositories/openvino_genai/packages/2026.4/linux/openvino_genai_ubuntu24_2026.4.0.0_x86_64.tar.gz")
     endif()
 	
     # Download and unpack the ZIP file

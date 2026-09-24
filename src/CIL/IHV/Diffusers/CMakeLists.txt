@@ -29,6 +29,12 @@ else()
     set(DIFFUSERS_PLATFORM_ARGS "")
 endif()
 
+set(DIFFUSERS_GENERATOR_INSTANCE_ARGS "")
+if(CMAKE_GENERATOR_INSTANCE AND
+   CMAKE_GENERATOR_PLATFORM MATCHES "ARM64")
+    list(APPEND DIFFUSERS_GENERATOR_INSTANCE_ARGS -DCMAKE_GENERATOR_INSTANCE=${CMAKE_GENERATOR_INSTANCE})
+endif()
+
 # INSTALL_DIR is intentionally omitted: ExternalProject would otherwise
 # try to mkdir it at outer configure time, which can't expand $<CONFIG>
 # in IHV_DIFFUSERS_INSTALL_DIR. The install path is supplied only via
@@ -43,6 +49,7 @@ ExternalProject_Add(ihv_diffusers
     COMMAND ${CMAKE_COMMAND} -B ${IHV_DIFFUSERS_BINARY_DIR} -S ${IHV_DIFFUSERS_SOURCE_DIR}
         -G "${CMAKE_GENERATOR}"
         ${DIFFUSERS_PLATFORM_ARGS}
+        ${DIFFUSERS_GENERATOR_INSTANCE_ARGS}
         -DCMAKE_CXX_STANDARD=20
         -DENV_PATH=${ENV_PATH}
         -DCMAKE_INSTALL_PREFIX=${IHV_DIFFUSERS_INSTALL_DIR}

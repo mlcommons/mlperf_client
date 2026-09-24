@@ -99,27 +99,9 @@ The report now includes both views:
 - `StrictAccuracy` / `LooseAccuracy`: score over the full canonical IFEval dataset
 - `ResponseCoverageAttempted` / `ResponseCoverageTotal`: how many prompts produced any response, again over the source run(s) and over the full set
 
-## Chat Framing Rules
+## Chat Framing
 
-The current harness knows about these model families:
-
-- `Llama3`
-- `Phi3.5`
-
-The prompt builder applies different wrappers based on `Scenarios[0].Name` in the MLPerf run config.
-
-Current behavior:
-
-- `Llama3` prompts are wrapped in the Llama 3.1 instruct template.
-- `Phi3.5` prompts are wrapped in the Phi 3.5 chat template from the official model card.
-- If a model family is not recognized, prompts are left as raw text.
-
-Current EOS handling:
-
-- Llama 3.1 uses `eos_token_id = 128009`.
-- Phi 3.5 uses `eos_token_id = 32000`.
-
-If you need a different model family, add a branch in `ifeval_mlperf_input.py` and point it at the template used by that model.
+There are no per-model branches in the harness. Chat templating is driven by the `PromptFormat` config field: `auto` applies the model's own chat template through the tokenizer, `raw` passes the prompt text through unchanged, and `app` delegates templating to the MLPerf client. See `PromptFormat` and `EnableThinking` under [Config Fields](#config-fields).
 
 ## Repository Layout
 
@@ -219,7 +201,7 @@ Examples of things that may change by backend:
 - EOS token id
 - context length and vocabulary size
 
-The IFEval runner itself only needs a valid MLPerf config and a model family name it knows how to wrap.
+The IFEval runner itself only needs a valid MLPerf config; chat templating follows `PromptFormat`.
 
 ## Config Fields
 

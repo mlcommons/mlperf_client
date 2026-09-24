@@ -32,7 +32,8 @@ include(ExternalProject)
 set(LLAMA_CPP_SOURCE_DIR ${CMAKE_BINARY_DIR}/_deps/llama_cpp)
 ExternalProject_Add(llama_cpp_download
     GIT_REPOSITORY https://github.com/ggerganov/llama.cpp.git
-    GIT_TAG        b9782
+    GIT_TAG        b10751
+    GIT_CONFIG     core.longpaths=true
     SOURCE_DIR     ${LLAMA_CPP_SOURCE_DIR}
     CONFIGURE_COMMAND ""
     BUILD_COMMAND ""
@@ -45,9 +46,82 @@ if(WIN32 AND (CMAKE_GENERATOR_PLATFORM MATCHES "ARM64" OR CMAKE_SYSTEM_PROCESSOR
 endif()
 set(_GGML_ARM_TOOLCHAIN ${LLAMA_CPP_SOURCE_DIR}/cmake/arm64-windows-llvm.cmake)
 set(_GGML_HOST_TOOLCHAIN ${LLAMA_CPP_SOURCE_DIR}/cmake/x64-windows-llvm.cmake)
+set(_ggml_clang_hints "")
+if(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "ARM64|arm64|aarch64")
+    set(_ggml_llvm_arch_hints ARM64 x64)
+else()
+    set(_ggml_llvm_arch_hints x64 ARM64)
+endif()
+if(CMAKE_GENERATOR_INSTANCE)
+    foreach(_llvm_arch IN LISTS _ggml_llvm_arch_hints)
+        list(APPEND _ggml_clang_hints
+            "${CMAKE_GENERATOR_INSTANCE}/VC/Tools/Llvm/${_llvm_arch}/bin")
+    endforeach()
+    list(APPEND _ggml_clang_hints
+        "${CMAKE_GENERATOR_INSTANCE}/VC/Tools/Llvm/bin")
+endif()
+if(DEFINED ENV{VCINSTALLDIR} AND NOT "$ENV{VCINSTALLDIR}" STREQUAL "")
+    file(TO_CMAKE_PATH "$ENV{VCINSTALLDIR}" _ggml_vc_dir)
+    list(APPEND _ggml_clang_hints
+        "${_ggml_vc_dir}/Tools/Llvm/ARM64/bin"
+        "${_ggml_vc_dir}/Tools/Llvm/x64/bin"
+        "${_ggml_vc_dir}/Tools/Llvm/bin")
+endif()
+if(DEFINED ENV{ProgramFiles} AND NOT "$ENV{ProgramFiles}" STREQUAL "")
+    file(TO_CMAKE_PATH "$ENV{ProgramFiles}" _ggml_program_files)
+    foreach(_vs_edition Enterprise Professional Community BuildTools)
+        foreach(_llvm_arch IN LISTS _ggml_llvm_arch_hints)
+            list(APPEND _ggml_clang_hints
+                "${_ggml_program_files}/Microsoft Visual Studio/2022/${_vs_edition}/VC/Tools/Llvm/${_llvm_arch}/bin")
+        endforeach()
+        list(APPEND _ggml_clang_hints
+            "${_ggml_program_files}/Microsoft Visual Studio/2022/${_vs_edition}/VC/Tools/Llvm/bin")
+    endforeach()
+endif()
+find_program(_GGML_CLANGXX NAMES clang++ clang++.exe
+    HINTS ${_ggml_clang_hints}
+    NO_CMAKE_FIND_ROOT_PATH)
+set(GGML_NINJA_EXECUTABLE "" CACHE FILEPATH
+    "Explicit host-native Ninja executable (use for offline builds)")
 
 macro(ggml_ensure_ninja OUT_VAR)
-    find_program(_GGML_NINJA NAMES ninja ninja-build ninja.exe)
+    # Never accept an x64 Ninja from PATH on a native ARM64 host. Bootstrap a
+    # pinned native executable so the build does not silently run under
+    # emulation. Cross-build hosts retain their existing native Ninja lookup.
+    if(GGML_NINJA_EXECUTABLE)
+        if(NOT EXISTS "${GGML_NINJA_EXECUTABLE}")
+            message(FATAL_ERROR "GGML_NINJA_EXECUTABLE does not exist: ${GGML_NINJA_EXECUTABLE}")
+        endif()
+        set(_GGML_NINJA "${GGML_NINJA_EXECUTABLE}")
+    elseif(WIN32 AND CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "ARM64|arm64|aarch64")
+        set(_NINJA_VERSION "1.12.1")
+        set(_NINJA_ASSET "ninja-winarm64.zip")
+        set(_NINJA_SHA256 "79C96A50E0DEAFEC212CFA85AA57C6B74003F52D9D1673DDCD1EAB1C958C5900")
+        set(_NINJA_BOOTSTRAP_DIR "${CMAKE_BINARY_DIR}/.ninja-bootstrap/${_NINJA_VERSION}-arm64")
+        set(_NINJA_ZIP "${_NINJA_BOOTSTRAP_DIR}/${_NINJA_ASSET}")
+        set(_NINJA_EXE "${_NINJA_BOOTSTRAP_DIR}/ninja.exe")
+        file(MAKE_DIRECTORY "${_NINJA_BOOTSTRAP_DIR}")
+        if(NOT EXISTS "${_NINJA_EXE}")
+            file(DOWNLOAD
+                "https://github.com/ninja-build/ninja/releases/download/v${_NINJA_VERSION}/${_NINJA_ASSET}"
+                "${_NINJA_ZIP}"
+                EXPECTED_HASH "SHA256=${_NINJA_SHA256}"
+                SHOW_PROGRESS)
+            execute_process(
+                COMMAND ${CMAKE_COMMAND} -E tar xf "${_NINJA_ZIP}"
+                WORKING_DIRECTORY "${_NINJA_BOOTSTRAP_DIR}"
+                RESULT_VARIABLE _ninja_extract_result)
+            if(NOT _ninja_extract_result EQUAL 0)
+                message(FATAL_ERROR "Failed to extract native Windows ARM64 Ninja ${_NINJA_VERSION}.")
+            endif()
+        endif()
+        if(NOT EXISTS "${_NINJA_EXE}")
+            message(FATAL_ERROR "Failed to bootstrap native Windows ARM64 Ninja ${_NINJA_VERSION}.")
+        endif()
+        set(_GGML_NINJA "${_NINJA_EXE}")
+    else()
+        find_program(_GGML_NINJA NAMES ninja ninja-build ninja.exe)
+    endif()
     if(NOT _GGML_NINJA)
         if(WIN32)
             set(_NINJA_BOOTSTRAP_DIR "${CMAKE_BINARY_DIR}/.ninja-bootstrap")
@@ -161,23 +235,100 @@ function(add_llama_cpp_ep_library library_name binary_dir install_dir)
     endif()
 
     set(_gen_args -G "${CMAKE_GENERATOR}")
+    if(_GGML_WIN_ARM AND CMAKE_GENERATOR_PLATFORM)
+        list(APPEND _gen_args -A ${CMAKE_GENERATOR_PLATFORM})
+    endif()
+    if(WIN32 AND CMAKE_GENERATOR_INSTANCE)
+        list(APPEND _gen_args -DCMAKE_GENERATOR_INSTANCE=${CMAKE_GENERATOR_INSTANCE})
+    endif()
+    if(WIN32 AND NOT _GGML_WIN_ARM
+       AND "${library_name}" STREQUAL "llama_cpp_CUDA"
+       AND CMAKE_CUDA_COMPILER)
+        get_filename_component(_cuda_compiler_bin "${CMAKE_CUDA_COMPILER}" DIRECTORY)
+        get_filename_component(_cuda_toolkit_root "${_cuda_compiler_bin}" DIRECTORY)
+        list(APPEND _gen_args -T "cuda=${_cuda_toolkit_root}")
+    endif()
     set(_cfg_args -DCMAKE_BUILD_TYPE=$<CONFIG>)
     set(_build_cfg --config $<CONFIG>)
     set(_env_prefix "")
-    if(_GGML_WIN_ARM)
+    if(_GGML_WIN_ARM AND "${library_name}" STREQUAL "llama_cpp_CUDA"
+       AND CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "AMD64|amd64|x86_64")
         ggml_ensure_ninja(_ninja_exe)
-        get_filename_component(_ninja_dir "${_ninja_exe}" DIRECTORY)
-        set(_gen_args -G "Ninja" -DCMAKE_MAKE_PROGRAM=${_ninja_exe})
-        set(_cfg_args -DCMAKE_BUILD_TYPE=$<CONFIG> -DCMAKE_TOOLCHAIN_FILE=${_GGML_ARM_TOOLCHAIN} -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF)
-        set(_build_cfg "")
-        set(_env_prefix ${CMAKE_COMMAND} -E env "--modify" "PATH=path_list_prepend:${_ninja_dir}")
-        if(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "AMD64|x86_64")
-            list(APPEND _env_prefix --unset=LIB --unset=INCLUDE --unset=LIBPATH)
+        set(_cuda_ninja_wrapper "${binary_dir}/run_arm64_cuda_ninja.cmd")
+        set(_vs_dev_cmd "")
+        set(_vs_install_candidates "${CMAKE_GENERATOR_INSTANCE}")
+        if(DEFINED ENV{ProgramFiles} AND NOT "$ENV{ProgramFiles}" STREQUAL "")
+            foreach(_vs_edition Enterprise Professional Community BuildTools)
+                list(APPEND _vs_install_candidates
+                    "$ENV{ProgramFiles}/Microsoft Visual Studio/2022/${_vs_edition}")
+            endforeach()
         endif()
-        find_program(_GGML_CLANGXX NAMES clang++ NO_CMAKE_FIND_ROOT_PATH)
+        foreach(_vs_install IN LISTS _vs_install_candidates)
+            if(_vs_install AND EXISTS "${_vs_install}/Common7/Tools/VsDevCmd.bat")
+                set(_vs_dev_cmd "${_vs_install}/Common7/Tools/VsDevCmd.bat")
+                break()
+            endif()
+        endforeach()
+        if(NOT EXISTS "${_vs_dev_cmd}")
+            message(FATAL_ERROR "VsDevCmd.bat not found. It is required for Windows ARM64 GGML CUDA Ninja builds.")
+        endif()
+        file(TO_NATIVE_PATH "${_vs_dev_cmd}" _vs_dev_cmd_native)
+        file(WRITE "${_cuda_ninja_wrapper}" "@echo off\r\ncall \"${_vs_dev_cmd_native}\" -arch=arm64 -host_arch=x64 || exit /b 1\r\n%*\r\n")
+
+        set(_cuda_ninja_toolchain "${binary_dir}/arm64_cuda_ninja_toolchain.cmake")
+        file(WRITE "${_cuda_ninja_toolchain}"
+            "set(CMAKE_SYSTEM_NAME Windows)\n"
+            "set(CMAKE_SYSTEM_PROCESSOR ARM64)\n"
+            "set(CMAKE_C_COMPILER_TARGET arm64-pc-windows-msvc)\n"
+            "set(CMAKE_CXX_COMPILER_TARGET arm64-pc-windows-msvc)\n")
+
+        set(_gen_args -G "Ninja" -DCMAKE_MAKE_PROGRAM=${_ninja_exe})
+        set(_cfg_args -DCMAKE_BUILD_TYPE=$<CONFIG> -DCMAKE_TOOLCHAIN_FILE=${_cuda_ninja_toolchain})
+        set(_build_cfg "")
+        set(_env_prefix "${_cuda_ninja_wrapper}" ${CMAKE_COMMAND} -E env)
+        if(DEFINED CUDAToolkit_ROOT AND CUDAToolkit_ROOT)
+            file(TO_CMAKE_PATH "${CUDAToolkit_ROOT}" _CUDA_TOOLKIT_ROOT_CMAKE)
+            list(APPEND _env_prefix
+                "CUDA_PATH=${_CUDA_TOOLKIT_ROOT_CMAKE}"
+                "CudaToolkitDir=${_CUDA_TOOLKIT_ROOT_CMAKE}"
+                "CudaToolkitLibDir=${_CUDA_TOOLKIT_ROOT_CMAKE}/lib/arm64"
+                "CudaToolkitTargetBinDir=${_CUDA_TOOLKIT_ROOT_CMAKE}/bin/arm64")
+            # Versioned CUDA_PATH_V<maj>_<min> from the selected toolkit.
+            set(_cuda_env_ver "")
+            if(EXISTS "${_CUDA_TOOLKIT_ROOT_CMAKE}/version.json")
+                file(READ "${_CUDA_TOOLKIT_ROOT_CMAKE}/version.json" _cuda_ver_json)
+                string(JSON _cuda_env_ver ERROR_VARIABLE _cuda_ver_error
+                    GET "${_cuda_ver_json}" cuda version)
+            endif()
+            if(NOT _cuda_env_ver MATCHES "^[0-9]+\\.[0-9]+")
+                string(REGEX MATCH "v([0-9]+\\.[0-9]+)/?$" _cuda_root_ver "${_CUDA_TOOLKIT_ROOT_CMAKE}")
+                set(_cuda_env_ver "${CMAKE_MATCH_1}")
+            endif()
+            if(_cuda_env_ver MATCHES "^([0-9]+)\\.([0-9]+)")
+                list(APPEND _env_prefix
+                    "CUDA_PATH_V${CMAKE_MATCH_1}_${CMAKE_MATCH_2}=${_CUDA_TOOLKIT_ROOT_CMAKE}")
+            endif()
+        endif()
         if(_GGML_CLANGXX)
             get_filename_component(_clang_dir "${_GGML_CLANGXX}" DIRECTORY)
             list(APPEND _env_prefix "--modify" "PATH=path_list_prepend:${_clang_dir}")
+        endif()
+    elseif(_GGML_WIN_ARM AND "${library_name}" STREQUAL "llama_cpp_CUDA"
+           AND CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "ARM64|arm64|aarch64")
+        # Native Windows ARM64 keeps llama.cpp's supported clang/Ninja
+        # toolchain. Only nvcc's host compilation is handed to the parent
+        # ARM64 MSVC compiler below.
+        ggml_ensure_ninja(_ninja_exe)
+        get_filename_component(_ninja_dir "${_ninja_exe}" DIRECTORY)
+        set(_gen_args -G "Ninja" -DCMAKE_MAKE_PROGRAM=${_ninja_exe})
+        set(_cfg_args -DCMAKE_BUILD_TYPE=$<CONFIG> -DCMAKE_TOOLCHAIN_FILE=${_GGML_ARM_TOOLCHAIN})
+        set(_build_cfg "")
+        set(_env_prefix ${CMAKE_COMMAND} -E env "--modify" "PATH=path_list_prepend:${_ninja_dir}")
+        if(_GGML_CLANGXX)
+            get_filename_component(_clang_dir "${_GGML_CLANGXX}" DIRECTORY)
+            list(APPEND _env_prefix "--modify" "PATH=path_list_prepend:${_clang_dir}")
+        else()
+            message(FATAL_ERROR "A native ARM64 clang++ is required for the Windows ARM64 GGML CUDA build.")
         endif()
     elseif(CMAKE_TOOLCHAIN_FILE)
         # Linux cross-compile: forward the cross toolchain to the EP sub-build
@@ -249,9 +400,80 @@ endif()
 # Add GGML_CUDA if GGML_CUDA is set
 if(GGML_CUDA)
     set(_cuda_host_args "")
+    set(_cuda_extra_flags "")
     set(_cuda_cache_init_args "")
     if(_GGML_WIN_ARM)
-        set(_cuda_host_args -DCMAKE_CUDA_HOST_COMPILER=clang++)
+        set(_cuda_extra_flags " -target-dir arm64 -allow-unsupported-compiler")
+        # Both native-host and cross builds use the explicit -gencode list
+        # generated below. Disable CMake's implicit/default architecture so
+        # the emitted CUDA code is identical between the two build paths.
+        list(APPEND _cuda_host_args -DCMAKE_CUDA_ARCHITECTURES=OFF)
+        if(DEFINED CUDAToolkit_ROOT AND CUDAToolkit_ROOT)
+            file(TO_CMAKE_PATH "${CUDAToolkit_ROOT}" _CUDA_TOOLKIT_ROOT_CMAKE)
+        elseif(CMAKE_CUDA_COMPILER)
+            # The outer GGML EP forwards its resolved compiler. Prefer the
+            # matching toolkit over an unrelated CUDA_PATH on the build host.
+            get_filename_component(_CUDA_COMPILER_BIN_DIR "${CMAKE_CUDA_COMPILER}" DIRECTORY)
+            get_filename_component(_CUDA_TOOLKIT_ROOT_CMAKE "${_CUDA_COMPILER_BIN_DIR}" DIRECTORY)
+        elseif(DEFINED ENV{CUDA_PATH} AND NOT "$ENV{CUDA_PATH}" STREQUAL "")
+            file(TO_CMAKE_PATH "$ENV{CUDA_PATH}" _CUDA_TOOLKIT_ROOT_CMAKE)
+        endif()
+        if(_CUDA_TOOLKIT_ROOT_CMAKE)
+            set(_cuda_arm64_lib "${_CUDA_TOOLKIT_ROOT_CMAKE}/lib/arm64")
+            list(APPEND _cuda_host_args
+                -DCUDAToolkit_ROOT=${_CUDA_TOOLKIT_ROOT_CMAKE}
+                -DCMAKE_CUDA_COMPILER=${_CUDA_TOOLKIT_ROOT_CMAKE}/bin/nvcc.exe
+                -DCUDA_CUDART=${_cuda_arm64_lib}/cudart.lib
+                -DCUDA_cudart_LIBRARY=${_cuda_arm64_lib}/cudart.lib
+                -DCUDA_cudart_static_LIBRARY=${_cuda_arm64_lib}/cudart_static.lib
+                -DCUDA_cuda_driver_LIBRARY=${_cuda_arm64_lib}/cuda.lib
+                -DCUDA_cublas_LIBRARY=${_cuda_arm64_lib}/cublas.lib
+                -DCUDA_cublasLt_LIBRARY=${_cuda_arm64_lib}/cublasLt.lib
+            )
+            if(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "AMD64|amd64|x86_64")
+                if(NOT _GGML_CLANGXX)
+                    message(FATAL_ERROR "clang++ was not found for the x64-to-ARM64 GGML CUDA cross-build.")
+                endif()
+                get_filename_component(_clang_dir "${_GGML_CLANGXX}" DIRECTORY)
+                list(APPEND _cuda_host_args
+                    "-DCMAKE_C_COMPILER=${_clang_dir}/clang-cl.exe"
+                    "-DCMAKE_CXX_COMPILER=${_clang_dir}/clang-cl.exe"
+                    -DCMAKE_C_COMPILER_TARGET=arm64-pc-windows-msvc
+                    -DCMAKE_CXX_COMPILER_TARGET=arm64-pc-windows-msvc)
+            else()
+                # The EP sources use clang, but nvcc's host pass requires the
+                # native ARM64 MSVC compiler selected by the parent project.
+                list(APPEND _cuda_host_args
+                    "-DCMAKE_CUDA_HOST_COMPILER=${CMAKE_C_COMPILER}")
+            endif()
+        else()
+            message(FATAL_ERROR
+                "GGML CUDA on Windows ARM64 requires CUDAToolkit_ROOT, "
+                "CMAKE_CUDA_COMPILER, or CUDA_PATH to select lib/arm64.")
+        endif()
+        if(DEFINED MLPERF_GGML_CUDA_ARCHS AND NOT MLPERF_GGML_CUDA_ARCHS STREQUAL "")
+            set(_mlperf_cuda_archs "${MLPERF_GGML_CUDA_ARCHS}")
+            string(REPLACE "|" ";" _mlperf_cuda_archs "${_mlperf_cuda_archs}")
+            foreach(_arch IN LISTS _mlperf_cuda_archs)
+                if(_arch MATCHES "^(.+)-real$")
+                    string(APPEND _cuda_extra_flags
+                        " -gencode=arch=compute_${CMAKE_MATCH_1},code=sm_${CMAKE_MATCH_1}")
+                elseif(_arch MATCHES "^(.+)-virtual$")
+                    string(APPEND _cuda_extra_flags
+                        " -gencode=arch=compute_${CMAKE_MATCH_1},code=compute_${CMAKE_MATCH_1}")
+                else()
+                    string(APPEND _cuda_extra_flags
+                        " -gencode=arch=compute_${_arch},code=sm_${_arch}"
+                        " -gencode=arch=compute_${_arch},code=compute_${_arch}")
+                endif()
+            endforeach()
+            message(STATUS "MLPerf GGML CUDA architectures (Windows ARM64 gencode): ${_mlperf_cuda_archs}")
+        else()
+            message(FATAL_ERROR "MLPERF_GGML_CUDA_ARCHS must not be empty for Windows ARM64 CUDA builds.")
+        endif()
+    elseif(CMAKE_TOOLCHAIN_FILE)
+        # Linux cross: nvcc host compiler = the cross g++.
+        set(_cuda_host_args -DCMAKE_CUDA_HOST_COMPILER=${CMAKE_CXX_COMPILER})
     endif()
     # Pin nvcc to the toolkit the top-level resolved (forwarded as CMAKE_CUDA_COMPILER).
     # Only for non-VS generators (Ninja/Make), where nvcc is found via PATH and a shadowing
@@ -267,7 +489,7 @@ if(GGML_CUDA)
     # nested ExternalProject configure commands. The (otherwise unused)
     # -DMLPERF_GGML_CUDA_ARCHS keeps the arch list in the configure command so
     # changing it re-triggers the sub-build configure (the -C path alone would not).
-    if(DEFINED MLPERF_GGML_CUDA_ARCHS AND NOT MLPERF_GGML_CUDA_ARCHS STREQUAL "")
+    if(NOT _GGML_WIN_ARM AND DEFINED MLPERF_GGML_CUDA_ARCHS AND NOT MLPERF_GGML_CUDA_ARCHS STREQUAL "")
         set(_mlperf_cuda_archs "${MLPERF_GGML_CUDA_ARCHS}")
         string(REPLACE "|" ";" _mlperf_cuda_archs "${_mlperf_cuda_archs}")
         set(_cuda_cache_init "${CMAKE_BINARY_DIR}/llama_cpp_CUDA-cache-init.cmake")
@@ -276,7 +498,9 @@ if(GGML_CUDA)
         list(APPEND _cuda_cache_init_args -C "${_cuda_cache_init}" "-DMLPERF_GGML_CUDA_ARCHS=${MLPERF_GGML_CUDA_ARCHS}")
         message(STATUS "MLPerf GGML CUDA architectures cache init: ${_mlperf_cuda_archs}")
     endif()
-    add_llama_cpp_ep_library(llama_cpp_CUDA ${EP_LIBRARY_BINARY_DIR_CUDA} ${EP_LIBRARY_INSTALL_DIR_CUDA} -DGGML_VULKAN=OFF -DGGML_CUDA=ON -DGGML_METAL=OFF -DGGML_HIP=OFF -DGGML_NATIVE=OFF ${_cuda_cache_init_args} "-DCMAKE_CUDA_FLAGS=--threads=0" ${_cuda_host_args})
+    # Keep explicit llama.cpp feature settings identical between native
+    # Windows ARM64 builds and x64-to-ARM64 cross builds.
+    add_llama_cpp_ep_library(llama_cpp_CUDA ${EP_LIBRARY_BINARY_DIR_CUDA} ${EP_LIBRARY_INSTALL_DIR_CUDA} -DGGML_VULKAN=OFF -DGGML_CUDA=ON -DGGML_METAL=OFF -DGGML_HIP=OFF -DGGML_NATIVE=OFF -DGGML_OPENMP=ON ${_cuda_cache_init_args} "-DCMAKE_CUDA_FLAGS=--threads=0${_cuda_extra_flags}" ${_cuda_host_args})
 endif()
 
 # Add GGML_Metal if GGML_METAL is set

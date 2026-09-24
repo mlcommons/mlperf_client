@@ -1,8 +1,7 @@
 """
-Run IFEval via MLPerf + model-specific chat framing, then score with the vendored instruction_following_eval package.
+Run IFEval via MLPerf, then score with the vendored instruction_following_eval package.
 
-Llama 3.1 prompts are rewritten to the same instruct chat framing as ``data/llama3/greedy-prompt_*.json``.
-Phi 3.5 prompts are rewritten to the official ChatML-like format from the model card.
+Chat templating is controlled by the PromptFormat config field (auto / raw / app); see README.md.
 
 Resumable layouts (see IFEvalGroupBy in JSON config):
 
@@ -22,11 +21,7 @@ Failed MLPerf jobs are logged, a stub results.json is written, and the run conti
 IFEval passes skip_if_results_match_prompt_count so jobs with stub or failed-but-complete Output lists are not re-run.
 
 From the repository root:
-  python tools/accuracy/ifeval/run_ifeval_benchmark.py -c tools/accuracy/ifeval/ifeval-NVIDIA_llamacpp-CUDA_GPU.json
-  python tools/accuracy/ifeval/run_ifeval_benchmark.py -c tools/accuracy/ifeval/ifeval-NVIDIA_WindowsML-NvTensorRtRtx_GPU.json
-  python tools/accuracy/ifeval/run_ifeval_benchmark.py -c tools/accuracy/ifeval/ifeval-NVIDIA_llamacpp-CUDA_GPU_phi3.5.json
-  python tools/accuracy/ifeval/run_ifeval_benchmark.py -c tools/accuracy/ifeval/ifeval-NVIDIA_ORTGenAI-DML_GPU_phi3.5.json
-  python tools/accuracy/ifeval/run_ifeval_benchmark.py -c tools/accuracy/ifeval/ifeval-NVIDIA_WindowsML-NvTensorRtRtx_GPU_phi3.5.json
+  python tools/accuracy/ifeval/run_ifeval_benchmark.py -c <ifeval-config.json>
 """
 
 from __future__ import annotations
@@ -143,7 +138,7 @@ def group_dir_hash(sort_key: tuple) -> str:
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="IFEval benchmark via MLPerf (resumable per prompt)")
-    p.add_argument("-c", "--config", required=True, help="JSON config (e.g. ifeval-NVIDIA_llamacpp-CUDA_GPU.json)")
+    p.add_argument("-c", "--config", required=True, help="JSON config (see README.md, Config Fields)")
     p.add_argument(
         "--instruction-following-eval-dir",
         required=True,

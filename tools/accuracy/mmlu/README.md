@@ -311,7 +311,7 @@ python tools/accuracy/mmlu/mmlu_runner.py -c <config1.json> [config2.json ...] [
 
 | Argument | Description |
 |----------|-------------|
-| `-c, --config` | One or more config files to run (if omitted, scans `execution_configs/`) |
+| `-c, --config` | One or more config files to run (required) |
 | `-r, --run-config` | Path to a vendor default config (forwarded to each run) |
 | `-p, --program` | Path to `mlperf-windows.exe` (forwarded to each run) |
 | `-t, --type` | Benchmark type: `mmlu` (default) or `tinymmlu` |

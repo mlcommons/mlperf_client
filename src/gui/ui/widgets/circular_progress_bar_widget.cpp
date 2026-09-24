@@ -1,6 +1,7 @@
 #include "circular_progress_bar_widget.h"
 
-#include <QPropertyAnimation>
+#include <QEvent>
+#include <QtMath>
 
 CircularProgressBar::CircularProgressBar(int diameter, QWidget *parent)
     : QWidget(parent),
@@ -19,13 +20,14 @@ CircularProgressBar::CircularProgressBar(int diameter, QWidget *parent)
       m_gradient_rotation_angle(0) {
   setup_ui();
 
-  m_gradient_animation =
-      new QPropertyAnimation(this, "GradientRotationAngle", this);
-  m_gradient_animation->setStartValue(0);
-  m_gradient_animation->setEndValue(360);
-  m_gradient_animation->setDuration(4000);
-  m_gradient_animation->setLoopCount(-1);
-  m_gradient_animation->start();
+  // Limit decorative painting to approximately 15 Hz.
+  m_animation_timer = new QTimer(this);
+  m_animation_timer->setTimerType(Qt::PreciseTimer);
+  m_animation_timer->setInterval(67);
+  connect(m_animation_timer, &QTimer::timeout, this, [this]() {
+    SetGradientRotationAngle((m_rotation_clock.nsecsElapsed() % 4000000000LL) *
+                             (360.0 / 4000000000.0));
+  });
 }
 
 void CircularProgressBar::setup_ui() {
@@ -39,22 +41,41 @@ void CircularProgressBar::setup_ui() {
 void CircularProgressBar::connect_signals() {}
 
 void CircularProgressBar::paintEvent(QPaintEvent *event) {
+  const qreal dpr = devicePixelRatioF();
+  const QSize pixels(qCeil(this->width() * dpr), qCeil(this->height() * dpr));
+  if (m_cache_dirty || m_ring_cache.size() != pixels ||
+      m_ring_cache.devicePixelRatio() != dpr)
+    rebuildCaches();
+
+  QPainter painter(this);
+  painter.setRenderHint(QPainter::SmoothPixmapTransform);
+  painter.save();
+  painter.translate(this->width() / 2.0, this->height() / 2.0);
+  painter.rotate(m_gradient_rotation_angle);
+  painter.drawPixmap(QPointF(-this->width() / 2.0, -this->height() / 2.0),
+                     m_ring_cache);
+  painter.restore();
+  painter.drawPixmap(0, 0, m_content_cache);
+}
+
+void CircularProgressBar::rebuildCaches() {
+  const qreal dpr = devicePixelRatioF();
+  const QSize pixels(qCeil(this->width() * dpr), qCeil(this->height() * dpr));
+  m_ring_cache = QPixmap(pixels);
+  m_ring_cache.setDevicePixelRatio(dpr);
+  m_ring_cache.fill(Qt::transparent);
+  m_content_cache = QPixmap(pixels);
+  m_content_cache.setDevicePixelRatio(dpr);
+  m_content_cache.fill(Qt::transparent);
   auto width = this->width() - m_thickness;
   auto height = this->height() - m_thickness;
   auto margin = m_thickness / 2;
-
-  QPainter painter(this);
+  QPainter painter(&m_ring_cache);
   painter.setRenderHint(QPainter::Antialiasing);
-  // Draw the outer Rectangle of the widget without the border
-  auto rect = QRect(0, 0, this->width(), this->height());
-  painter.setPen(Qt::NoPen);
-  painter.setBrush(Qt::transparent);
-  painter.drawRect(rect);
   // Draw the arc of the progress bar
   auto pen = QPen(Qt::white, m_thickness);
   pen.setCapStyle(Qt::RoundCap);
-  QConicalGradient gradient(margin + width / 2, margin + height / 2,
-                            90 - m_gradient_rotation_angle);
+  QConicalGradient gradient(margin + width / 2, margin + height / 2, 90);
   auto start_color = m_arc_color;
   start_color.setAlpha(30);
   gradient.setColorAt(0.0, start_color);
@@ -65,17 +86,15 @@ void CircularProgressBar::paintEvent(QPaintEvent *event) {
   pen.setBrush(gradient);
   painter.setPen(pen);
   painter.drawArc(margin, margin, width, height, 0, 360 * 16);
+  painter.end();
+  painter.begin(&m_content_cache);
+  painter.setFont(font());
+  painter.setRenderHint(QPainter::Antialiasing);
   auto inner_radius = width / 2 - m_thickness - 8;
   // Draw the inner circle
   if (m_add_inner_circle) {
     painter.setPen(Qt::NoPen);
-    // Define the QLinearGradient
-    QLinearGradient linear_gradient(
-        QPointF(width / 2 + margin, margin),
-        QPointF(width / 2 + margin, height / 2 + margin));
-    linear_gradient.setColorAt(0.0, m_inner_background_color);
-    linear_gradient.setColorAt(1.0, m_inner_background_color);
-    painter.setBrush(linear_gradient);
+    painter.setBrush(m_inner_background_color);
     painter.drawEllipse(QPoint(width / 2 + margin, height / 2 + margin),
                         inner_radius, inner_radius);
   }
@@ -111,15 +130,25 @@ void CircularProgressBar::paintEvent(QPaintEvent *event) {
     painter.drawPixmap(icon_center_x - icon.width() / 2,
                        icon_center_y - icon.height() * 0.66, icon);
   }
-  // done
+  m_cache_dirty = false;
 }
 
 void CircularProgressBar::showEvent(QShowEvent *event) {
   QWidget::showEvent(event);
-  m_gradient_animation->start();
+  m_rotation_clock.start();
+  m_animation_timer->start();
 }
 
 void CircularProgressBar::hideEvent(QHideEvent *event) {
   QWidget::hideEvent(event);
-  m_gradient_animation->stop();
+  m_animation_timer->stop();
+}
+
+void CircularProgressBar::changeEvent(QEvent *event) {
+  if (event->type() == QEvent::FontChange ||
+      event->type() == QEvent::StyleChange) {
+    m_cache_dirty = true;
+    update();
+  }
+  QWidget::changeEvent(event);
 }

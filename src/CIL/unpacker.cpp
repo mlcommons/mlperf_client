@@ -689,7 +689,7 @@ GetAssetMemoryMapping() {
   ADD_ASSET_MAP_ENTRY(kImageIO, imageio_dll);
 
 #elif __linux__ // _WIN32
-   ADD_ASSET_MAP_ENTRY(kEPDependenciesConfig, ep_dependencies_config_linux_x64_json);
+  ADD_ASSET_MAP_ENTRY(kEPDependenciesConfig, ep_dependencies_config_linux_x64_json);
 
 #if WITH_IHV_NATIVE_OPENVINO
   ADD_ASSET_MAP_ENTRY(kNativeOpenVINO, libIHV_NativeOpenVINO_so);

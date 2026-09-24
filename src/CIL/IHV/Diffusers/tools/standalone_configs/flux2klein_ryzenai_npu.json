@@ -17,7 +17,7 @@
       "__is_dynamic__": "false"
     }
   },
-  "InputFilePath": "../../../../../../data/prompts/flux_2_klein_4b/test/flux_2_klein_prompts.json",
+  "InputFilePath": "../../../../../../data/prompts/flux_2_klein_4b/flux_2_klein_prompts.json",
   "Iterations": 1,
   "WarmUp": 1,
   "SaveImages": true

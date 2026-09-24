@@ -49,18 +49,46 @@ option(MLPERF_IHV_DIFFUSERS_INSTALL_PYTHON "Download embedded Python and install
 # --- Download embedded Python (always needed for headers/pybind11 linking) ---
 include("${CMAKE_CURRENT_SOURCE_DIR}/python.cmake")
 
-# Find Python3 BEFORE pybind11 so pybind11 doesn't pick up a system Python.
-find_package(Python3 COMPONENTS Interpreter Development.Embed REQUIRED)
-message(STATUS "Python3 found: ${Python3_EXECUTABLE} (${Python3_VERSION})")
-message(STATUS "Python3 include: ${Python3_INCLUDE_DIRS}")
-message(STATUS "Python3 libraries: ${Python3_LIBRARIES}")
+# An x64 build host cannot execute the target ARM64 interpreter.  For that
+# cross-build, consume the PBS headers and import library directly; normal
+# native builds retain CMake's complete Interpreter/Embed discovery.
+if(WIN32 AND (CMAKE_GENERATOR_PLATFORM MATCHES "^[Aa][Rr][Mm]64$" OR
+              CMAKE_SYSTEM_PROCESSOR MATCHES "^(ARM64|arm64|aarch64)$")
+         AND CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "AMD64|amd64|x86_64")
+    set(MLPERF_DIFFUSERS_CROSS_ARM64 ON)
+    # PBS_VERSION comes from python.cmake -- the single source for the pin.
+    set(Python3_VERSION "${PBS_VERSION}")
+    string(REGEX MATCH "^([0-9]+)\\.([0-9]+)" _pbs_ver_mm "${PBS_VERSION}")
+    set(Python3_VERSION_MAJOR "${CMAKE_MATCH_1}")
+    set(Python3_VERSION_MINOR "${CMAKE_MATCH_2}")
+    set(Python3_INCLUDE_DIRS "${PBS_PYTHON_ROOT}/Include")
+    set(Python3_LIBRARIES
+        "${PBS_PYTHON_ROOT}/libs/python${Python3_VERSION_MAJOR}${Python3_VERSION_MINOR}.lib")
+    if(NOT EXISTS "${Python3_LIBRARIES}")
+        message(FATAL_ERROR "ARM64 Python import library not found: ${Python3_LIBRARIES}")
+    endif()
+    message(STATUS "Cross-compiling with ARM64 Python ${Python3_VERSION}")
+    message(STATUS "Python3 include: ${Python3_INCLUDE_DIRS}")
+    message(STATUS "Python3 libraries: ${Python3_LIBRARIES}")
+else()
+    # Find Python3 BEFORE pybind11 so pybind11 doesn't pick up a system Python.
+    find_package(Python3 COMPONENTS Interpreter Development.Embed REQUIRED)
+    message(STATUS "Python3 found: ${Python3_EXECUTABLE} (${Python3_VERSION})")
+    message(STATUS "Python3 include: ${Python3_INCLUDE_DIRS}")
+    message(STATUS "Python3 libraries: ${Python3_LIBRARIES}")
 
-set(PYTHON_EXECUTABLE   "${Python3_EXECUTABLE}" CACHE FILEPATH "" FORCE)
-set(Python_EXECUTABLE   "${Python3_EXECUTABLE}" CACHE FILEPATH "" FORCE)
-set(pybind11_PYTHON_VERSION "${Python3_VERSION}" CACHE STRING "" FORCE)
+    set(PYTHON_EXECUTABLE   "${Python3_EXECUTABLE}" CACHE FILEPATH "" FORCE)
+    set(Python_EXECUTABLE   "${Python3_EXECUTABLE}" CACHE FILEPATH "" FORCE)
+    set(pybind11_PYTHON_VERSION "${Python3_VERSION}" CACHE STRING "" FORCE)
+endif()
 
 # --- pybind11 ---
 include(FetchContent)
+if(MLPERF_DIFFUSERS_CROSS_ARM64)
+    # We consume pybind11 as headers only in this cross-build.  Its normal
+    # configure path tries to execute a target-architecture interpreter.
+    set(PYBIND11_NOPYTHON ON CACHE BOOL "Disable host Python discovery" FORCE)
+endif()
 FetchContent_Declare(
     pybind11
     GIT_REPOSITORY https://github.com/pybind/pybind11.git
@@ -123,9 +151,11 @@ if(MLPERF_IHV_DIFFUSERS_NVIDIA AND NOT WIN32 AND NOT (UNIX AND NOT APPLE))
         "MLPERF_IHV_DIFFUSERS_NVIDIA is enabled but this is not a "
         "Windows / Linux build. CUDA torch wheels target those platforms.")
 endif()
-if(MLPERF_IHV_DIFFUSERS_AMD AND NOT WIN32)
+if(MLPERF_IHV_DIFFUSERS_AMD AND (NOT WIN32 OR
+        CMAKE_GENERATOR_PLATFORM MATCHES "ARM64" OR
+        CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64|arm64|aarch64"))
     message(FATAL_ERROR
-        "MLPERF_IHV_DIFFUSERS_AMD is enabled but this is not a Windows build. "
+        "MLPERF_IHV_DIFFUSERS_AMD is enabled but this is not a Windows x64 build. "
         "RyzenAI ONNX Diffusers is Windows x64 only.")
 endif()
 
@@ -175,6 +205,8 @@ target_include_directories(Diffusers
     PRIVATE
     "${CMAKE_CURRENT_BINARY_DIR}/generated"
     "${CMAKE_CURRENT_SOURCE_DIR}/../../.."
+    $<$<BOOL:${MLPERF_DIFFUSERS_CROSS_ARM64}>:${pybind11_SOURCE_DIR}/include>
+    $<$<BOOL:${MLPERF_DIFFUSERS_CROSS_ARM64}>:${Python3_INCLUDE_DIRS}>
 )
 set_target_properties(Diffusers PROPERTIES CXX_CLANG_TIDY "${CLANG_TIDY_COMMAND}")
 target_link_libraries(Diffusers
@@ -182,7 +214,8 @@ target_link_libraries(Diffusers
     nlohmann_json::nlohmann_json
     nlohmann_json_schema_validator::validator
     common_cil
-    pybind11::embed
+    $<$<NOT:$<BOOL:${MLPERF_DIFFUSERS_CROSS_ARM64}>>:pybind11::embed>
+    $<$<BOOL:${MLPERF_DIFFUSERS_CROSS_ARM64}>:${Python3_LIBRARIES}>
 )
 
 # Fix libpython install name from python-build-standalone on macOS.
@@ -309,11 +342,11 @@ elseif(APPLE AND MLPERF_IHV_DIFFUSERS_INSTALL_PYTHON)
 endif()
 
 # --- Install: pip packages ---
-if(WIN32)
-    set(REQUIREMENTS_FILE "${CMAKE_CURRENT_SOURCE_DIR}/assets/requirements-nvidia.txt")
-elseif(APPLE)
+# Windows resolves its per-vendor/per-arch requirements inside
+# install_python_deps.py; only the Apple pip driver below reads this path.
+if(APPLE)
     set(REQUIREMENTS_FILE "${CMAKE_CURRENT_SOURCE_DIR}/assets/requirements-apple.txt")
-else()
+elseif(NOT WIN32)
     message(FATAL_ERROR "IHV Diffusers: no requirements file for this platform.")
 endif()
 

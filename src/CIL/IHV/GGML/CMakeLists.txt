@@ -90,22 +90,45 @@ if(WIN32 AND CMAKE_GENERATOR_PLATFORM)
     set(GGML_PLATFORM_ARGS "-A" "${CMAKE_GENERATOR_PLATFORM}")
 endif()
 
+set(GGML_GENERATOR_INSTANCE_ARGS "")
+if(WIN32 AND CMAKE_GENERATOR_INSTANCE)
+    list(APPEND GGML_GENERATOR_INSTANCE_ARGS -DCMAKE_GENERATOR_INSTANCE=${CMAKE_GENERATOR_INSTANCE})
+endif()
+
 # Forward the resolved CUDA compiler so the EP sub-builds use the same toolkit
 # the top-level detected (and not a stray nvcc earlier on PATH).
 set(GGML_CUDA_COMPILER_ARG "")
-if(MLPERF_IHV_GGML_CUDA AND CUDAToolkit_NVCC_EXECUTABLE)
-    set(GGML_CUDA_COMPILER_ARG "-DCMAKE_CUDA_COMPILER=${CUDAToolkit_NVCC_EXECUTABLE}")
+if(MLPERF_IHV_GGML_CUDA)
+    if(CUDAToolkit_NVCC_EXECUTABLE)
+        set(GGML_CUDA_COMPILER_ARG "-DCMAKE_CUDA_COMPILER=${CUDAToolkit_NVCC_EXECUTABLE}")
+    elseif(CMAKE_CUDA_COMPILER)
+        set(GGML_CUDA_COMPILER_ARG "-DCMAKE_CUDA_COMPILER=${CMAKE_CUDA_COMPILER}")
+    endif()
 endif()
 
 # CUDA architectures for the llama.cpp CUDA EP. Use a pipe-separated list so
-# the value survives nested ExternalProject command generation.
-set(MLPERF_GGML_CUDA_ARCHS "75-virtual|80-virtual|86-real|89-real|120a-real|121a-real"
+# the value survives nested ExternalProject command generation. Windows ARM64
+# uses explicit -gencode flags and defaults to the architectures supported by
+# the validated CUDA 13.4 Windows-on-Arm toolkit.
+if(WIN32 AND (CMAKE_GENERATOR_PLATFORM MATCHES "ARM64" OR
+              CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64|arm64|aarch64"))
+    set(_mlperf_ggml_cuda_archs_default "89-real|120a-real|121a-real")
+else()
+    set(_mlperf_ggml_cuda_archs_default "75-virtual|80-virtual|86-real|89-real|120a-real|121a-real")
+endif()
+set(MLPERF_GGML_CUDA_ARCHS "${_mlperf_ggml_cuda_archs_default}"
     CACHE STRING "GGML CUDA architectures ('|'-separated; 'native' = local GPU)")
 
 # Forward the cross toolchain so the GGML EP sub-build targets the cross arch.
 set(GGML_TOOLCHAIN_ARG "")
 if(CMAKE_TOOLCHAIN_FILE)
     set(GGML_TOOLCHAIN_ARG "-DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}")
+endif()
+
+set(GGML_NINJA_EXECUTABLE_ARG "")
+if(GGML_NINJA_EXECUTABLE)
+    set(GGML_NINJA_EXECUTABLE_ARG
+        "-DGGML_NINJA_EXECUTABLE:FILEPATH=${GGML_NINJA_EXECUTABLE}")
 endif()
 
 ExternalProject_Add(ihv_ggml
@@ -118,7 +141,9 @@ ExternalProject_Add(ihv_ggml
     COMMAND ${CMAKE_COMMAND} -B ${IHV_GGML_BINARY_DIR} -S ${IHV_GGML_SOURCE_DIR}
         -G "${CMAKE_GENERATOR}"
         ${GGML_PLATFORM_ARGS}
+        ${GGML_GENERATOR_INSTANCE_ARGS}
         ${GGML_TOOLCHAIN_ARG}
+        ${GGML_NINJA_EXECUTABLE_ARG}
         -DCMAKE_INSTALL_PREFIX=${IHV_GGML_INSTALL_DIR}
         -DCMAKE_CXX_STANDARD=20
         -DENV_PATH=${ENV_PATH}

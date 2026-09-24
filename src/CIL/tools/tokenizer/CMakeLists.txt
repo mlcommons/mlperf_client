@@ -54,6 +54,7 @@ FetchContent_Declare(
     ort_extensions
     GIT_REPOSITORY https://github.com/microsoft/onnxruntime-extensions.git
     GIT_TAG        e094cc816679d0b2b5fe2b4fd7f73e5b1844b425
+    GIT_CONFIG     core.longpaths=true
 )
 FetchContent_MakeAvailable(ort_extensions)
 

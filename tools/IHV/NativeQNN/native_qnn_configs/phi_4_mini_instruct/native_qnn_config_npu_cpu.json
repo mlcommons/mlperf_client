@@ -17,7 +17,7 @@
             "spill-fill-bufsize": 0,
             "use-mmap": false,
             "mmap-budget": 0,
-            "poll": true,
+            "poll": false,
             "cpu-mask": "0xe0",
             "kv-dim": 128,
             "enable-graph-switching": false

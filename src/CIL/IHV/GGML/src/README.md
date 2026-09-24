@@ -140,3 +140,71 @@ build/bin/llama-quantize "./models/Llama-2-7b-F16.gguf" Q4_0
   ]
 }
 ```
+# 3. Windows ARM64 CUDA build
+
+Both the native-host and the x64-to-ARM64 cross-compiled Windows ARM64 CUDA
+paths are supported; the top-level configure examples are in
+`README_BUILD.md` (Windows ARM64 Build).
+
+Pinned inputs: llama.cpp `b10751` (GIT_TAG in this CMakeLists); Ninja
+bootstrap `1.12.1` for native ARM64 (SHA-256
+`79C96A50E0DEAFEC212CFA85AA57C6B74003F52D9D1673DDCD1EAB1C958C5900`), `1.11.1`
+fallback on other hosts.
+
+## 3.1 Ninja bootstrap
+
+Ninja does not have to be installed separately. Unless an explicit override is
+provided, a native ARM64 GGML CUDA build bootstraps the native ARM64 Ninja
+1.12.1 archive instead of accepting a possibly emulated x64 executable from
+`PATH`. The x64 cross-build retains the existing host-Ninja lookup and pinned
+1.11.1 fallback.
+
+For a fully offline source build, pre-download the pinned native archive and
+pass the extracted ARM64 `ninja.exe` as `-DGGML_NINJA_EXECUTABLE=<path>`.
+Supplying this override makes the caller responsible for matching Ninja to the
+build host architecture.
+
+## 3.2 Native nested toolchain
+
+On a native ARM64 host the top-level project uses the Visual Studio ARM64
+generator. Its nested llama.cpp CUDA build uses llama.cpp's
+`arm64-windows-llvm` toolchain with native ARM64 clang and the pinned native
+Ninja. CUDA's host pass alone uses the parent project's native ARM64 MSVC
+compiler.
+
+## 3.3 Native and cross-build llama.cpp parity
+
+The native-host and cross-compiled Windows ARM64 CUDA paths explicitly use the
+same llama.cpp feature and CUDA code-generation settings:
+
+```text
+GGML_NATIVE=OFF
+GGML_OPENMP=ON
+GGML_CUDA=ON
+GGML_VULKAN=OFF
+GGML_METAL=OFF
+GGML_HIP=OFF
+CMAKE_CUDA_ARCHITECTURES=OFF
+CUDA gencode: sm_89, sm_120a, sm_121a
+```
+
+`CMAKE_CUDA_ARCHITECTURES` is disabled because the build supplies the complete
+`-gencode` list explicitly. This prevents a native build from adding a
+toolkit-default architecture that is absent from a cross-build. Override the
+pipe-separated `MLPERF_GGML_CUDA_ARCHS` cache value to change this list; both
+native and cross-build paths derive their `-gencode` flags from that value.
+
+OpenMP is required for the validated llama.cpp performance. A distributable
+build must place the target-architecture OpenMP runtime required by
+`llama_cpp_CUDA.dll` alongside that DLL. The x64-to-ARM64 build links the ARM64
+LLVM OpenMP import library and therefore requires `libomp140.aarch64.dll`.
+The native build also compiles llama.cpp with clang, but the exact imported
+LLVM OpenMP runtime name still depends on the selected LLVM/Visual Studio
+toolchain and must be checked before packaging.
+
+The remaining differences are required toolchain mechanics: the cross-build
+uses x64 Ninja, x64 `clang-cl` targeting ARM64, `VsDevCmd`, and explicit ARM64
+CUDA library paths; the native nested build uses native ARM64 Ninja/clang and
+native ARM64 MSVC for nvcc's host pass. Consequently, their host CPU code and
+OpenMP runtime need not be bit-for-bit identical even though both produce
+Release ARM64 binaries with the same explicit settings above.

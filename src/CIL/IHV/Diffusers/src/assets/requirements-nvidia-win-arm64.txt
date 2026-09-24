@@ -1,0 +1,19 @@
+# Diffusers EP -- NVIDIA / CUDA (Windows ARM64).
+# Architecture-specific torch, TensorRT RTX, and bitsandbytes wheels are
+# installed separately by install_python_deps.py.
+diffusers==0.40.0
+transformers==5.16.1
+accelerate==1.14.0
+safetensors==0.8.0
+optimum-quanto==0.2.7
+torchao==0.18.0
+sentencepiece==0.2.2
+protobuf==7.36.0
+huggingface_hub==1.29.0
+Pillow==12.3.0
+numpy==2.5.2
+pyinstaller==6.22.2
+nvidia-modelopt==0.46.0
+
+--extra-index-url https://pypi.nvidia.com
+--extra-index-url https://pypi.ngc.nvidia.com

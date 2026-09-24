@@ -23,7 +23,6 @@ Logs/
 /build.*
 /build_release.*
 clang-tidy-output.txt
-mlperf-public-patch.diff
 *.spec
 !src/CIL/IHV/Diffusers/tools/standalone.spec
 src/CIL/IHV/Diffusers/tools/dist/

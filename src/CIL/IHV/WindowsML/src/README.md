@@ -7,7 +7,7 @@ Loads ONNX models on the self-contained WindowsML stack, dispatching to a certif
 Version pins (top of [`CMakeLists.txt`](CMakeLists.txt)) — bump and delete `build/IHV/WindowsML/` to refresh:
 
 ```cmake
-set(MML_OGA_VERSION                 "0.14.1")    # OGA / genai (FetchContent from nuget.org)
+set(MML_OGA_VERSION                 "0.14.1")    # OGA / genai (FetchContent from nuget.org); x64 — ARM64 pins 0.15.2, see "Windows ARM64" below
 set(MML_WINML_VERSION               "2.4.66-preview") # Microsoft.Windows.AI.MachineLearning (self-contained WinML runtime, PackageReference)
 set(MML_CPPWINRT_VERSION            "2.0.240111.5") # Microsoft.Windows.CppWinRT (WinRT projection, PackageReference)
 set(MLPERF_WINDOWSML_CUDART_VERSION "12.6.77")   # cudart64_12.dll (NVIDIA redist server)
@@ -47,6 +47,14 @@ For offline / local-dev work, override with `-DMLPERF_WINML_PREFIX=file://IHV/Wi
 ```
 
 The dep-manager evaluates the condition against each scenario's `ExecutionProviders[].Config` at `Initialize` time. Non-NV machines never download these.
+
+## Windows ARM64
+
+`MML_OGA_VERSION` is selected per target architecture in [`CMakeLists.txt`](CMakeLists.txt): `0.14.1` on x64, `0.15.2` on ARM64 (the first OGA release shipping win-arm64 binaries, including `onnxruntime-genai-cuda.dll`). The WinML runtime pin (`MML_WINML_VERSION`) is shared between both architectures.
+
+The ARM64 template ([`data/ep_dependencies_config_windows_ARM.json.in`](../../../../../data/ep_dependencies_config_windows_ARM.json.in)) lists one conditional NV file, `tensorrtrtx/onnxruntime-genai-cuda.dll`, gated on `device_ep: NvTensorRtRtx` like x64. `cudart64_12.dll` is not part of the ARM64 set — it is a dependency of the x64 OGA 0.14.x build only; the ARM64 CUDA runtime DLLs are delivered through the `llama-cpp` CUDA group instead.
+
+The hosted ARM64 runtime set pairs the shared `2.4.66-preview` WinML DLLs with the OGA `0.15.2` genai DLLs under the ARM `MLPERF_WINML_PREFIX` default (see `src/CIL/CMakeLists.txt`); the genai DLLs come from the WinML-flavor OGA NuGet package's `win-arm64` runtimes. When either pin is bumped, upload a new versioned prefix directory rather than overwriting the existing one, so previously published builds keep resolving their original files.
 
 ## Runtime activation
 

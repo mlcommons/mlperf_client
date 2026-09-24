@@ -87,6 +87,12 @@ function(cil_add_tool_external_project NAME)
         list(APPEND _args -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE})
     endif()
 
+    set(_generator_instance_args "")
+    if(CMAKE_GENERATOR_INSTANCE AND
+       CMAKE_GENERATOR_PLATFORM MATCHES "ARM64")
+        list(APPEND _generator_instance_args -DCMAKE_GENERATOR_INSTANCE=${CMAKE_GENERATOR_INSTANCE})
+    endif()
+
     if(APPLE)
         list(APPEND _args
             -DCMAKE_SYSTEM_NAME=${CMAKE_SYSTEM_NAME}
@@ -105,7 +111,7 @@ function(cil_add_tool_external_project NAME)
     ExternalProject_Add(${NAME}
         SOURCE_DIR  ${_src}
         BINARY_DIR  ${_build}
-        CONFIGURE_COMMAND ${CMAKE_COMMAND} -G "${CMAKE_GENERATOR}" ${TOOLS_PLATFORM_ARGS}
+        CONFIGURE_COMMAND ${CMAKE_COMMAND} -G "${CMAKE_GENERATOR}" ${TOOLS_PLATFORM_ARGS} ${_generator_instance_args}
             -S ${_src}
             -B ${_build}
             ${_args}
@@ -388,7 +394,33 @@ set(OUTPUT_RESULTS_SCHEMA_JSON "${CMAKE_SOURCE_DIR}/data/OutputResultsSchema.jso
 set(DATA_VERIFICATION_JSON "${CMAKE_SOURCE_DIR}/data/data_verification.json")
 set(DATA_VERIFICATION_SCHEMA_JSON "${CMAKE_SOURCE_DIR}/data/DataVerificationSchema.json")
 
-set(VENDORS_DEFAULT_CONFIGS_DIR "${CMAKE_SOURCE_DIR}/data/configs/vendors_default")
+set(VENDORS_DEFAULT_SOURCE_CONFIGS_DIR "${CMAKE_SOURCE_DIR}/data/configs/vendors_default")
+set(VENDORS_DEFAULT_CONFIGS_DIR "${VENDORS_DEFAULT_SOURCE_CONFIGS_DIR}")
+
+if(MLPERF_USE_LOCAL_IHV_LIBRARIES)
+    # Keep checked-in configs in their normal online-resolution form. Offline
+    # builds get a generated overlay whose LibraryPath values point at the IHV
+    # tree copied beside the executable.
+    set(VENDORS_DEFAULT_CONFIGS_DIR
+        "${CMAKE_BINARY_DIR}/data/configs/vendors_default")
+    execute_process(
+        COMMAND ${CMAKE_COMMAND}
+            -DSOURCE_DIR=${VENDORS_DEFAULT_SOURCE_CONFIGS_DIR}
+            -DDEST_DIR=${VENDORS_DEFAULT_CONFIGS_DIR}
+            -DENABLE_GGML=${MLPERF_IHV_GGML}
+            -DENABLE_WINDOWSML=${MLPERF_IHV_WINDOWSML}
+            -DENABLE_DIFFUSERS=${MLPERF_IHV_DIFFUSERS}
+            -DENABLE_NATIVE_QNN=${MLPERF_IHV_NATIVE_QNN}
+            -DENABLE_ORT_GENAI=${MLPERF_IHV_ORT_GENAI}
+            -DENABLE_ORT_GENAI_RYZENAI=${MLPERF_IHV_ORT_GENAI_RYZENAI}
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/prepare_local_vendors_default.cmake"
+        RESULT_VARIABLE PREPARE_LOCAL_CONFIGS_RESULT)
+    if(NOT PREPARE_LOCAL_CONFIGS_RESULT EQUAL 0)
+        message(FATAL_ERROR "Failed to prepare local-IHV vendor configs")
+    endif()
+    message(STATUS
+        "Local-IHV vendor configs: ${VENDORS_DEFAULT_CONFIGS_DIR}")
+endif()
 
 file(GLOB_RECURSE VENDORS_ALL_CONFIGS CONFIGURE_DEPENDS "${VENDORS_DEFAULT_CONFIGS_DIR}/*.json")
 set(CONFIG_VERIFICATION_FILES "")
@@ -480,12 +512,17 @@ if(WIN32)
     # with -DMLPERF_WINML_PREFIX=file://IHV/WindowsML so the dep manager uses
     # the IHV's own POST_BUILD staging dir instead.
     if(NOT DEFINED MLPERF_WINML_PREFIX)
-        set(MLPERF_WINML_PREFIX
-            "https://client.mlcommons-storage.org/deps/2.0/binaries/WindowsML/${_arch_dir}")
+        if(_arch_dir STREQUAL "ARM")
+            set(MLPERF_WINML_PREFIX
+                "https://client.mlcommons-storage.org/deps/2.0.1/binaries/WindowsML/ARM")
+        else()
+            set(MLPERF_WINML_PREFIX
+                "https://client.mlcommons-storage.org/deps/2.0/binaries/WindowsML/${_arch_dir}")
+        endif()
     endif()
     if(NOT DEFINED MLPERF_NATIVE_OPENVINO_PREFIX)
         set(MLPERF_NATIVE_OPENVINO_PREFIX
-            "https://client.mlcommons-storage.org/deps/2.0/binaries/NativeOpenVINO/Windows")
+            "https://client.mlcommons-storage.org/deps/2.0.1/binaries/NativeOpenVINO/Windows")
     endif()
     if(NOT DEFINED MLPERF_ORTGENAI_PREFIX)
         set(MLPERF_ORTGENAI_PREFIX
@@ -501,7 +538,7 @@ if(WIN32)
     endif()
     if(NOT DEFINED MLPERF_CUDA_PREFIX)
         set(MLPERF_CUDA_PREFIX
-            "https://client.mlcommons-storage.org/deps/2.0/binaries/GGML/CUDA/Windows/x64")
+            "https://client.mlcommons-storage.org/deps/2.0.1/binaries/GGML/CUDA/Windows/${_arch_dir}")
     endif()
     if(NOT DEFINED MLPERF_ROCM_PREFIX)
         set(MLPERF_ROCM_PREFIX
@@ -512,8 +549,13 @@ if(WIN32)
             "https://client.mlcommons-storage.org/deps/2.0/binaries/NativeQNN/${_arch_dir}")
     endif()
     if(NOT DEFINED MLPERF_DIFFUSERS_PREFIX)
-        set(MLPERF_DIFFUSERS_PREFIX
-            "https://client.mlcommons-storage.org/deps/2.0/binaries/Diffusers/Windows/x64")
+        if(_arch_dir STREQUAL "ARM")
+            set(MLPERF_DIFFUSERS_PREFIX
+                "https://client.mlcommons-storage.org/deps/2.0.1/binaries/Diffusers/Windows/ARM")
+        else()
+            set(MLPERF_DIFFUSERS_PREFIX
+                "https://client.mlcommons-storage.org/deps/2.0/binaries/Diffusers/Windows/${_arch_dir}")
+        endif()
     endif()
 elseif(APPLE AND NOT IOS)
     if(NOT DEFINED MLPERF_MLX_PREFIX)
@@ -531,7 +573,7 @@ elseif(APPLE AND NOT IOS)
 elseif(UNIX AND NOT APPLE)
     if(NOT DEFINED MLPERF_NATIVE_OPENVINO_PREFIX)
         set(MLPERF_NATIVE_OPENVINO_PREFIX
-            "https://client.mlcommons-storage.org/deps/2.0/binaries/NativeOpenVINO/Linux")
+            "https://client.mlcommons-storage.org/deps/2.0.1/binaries/NativeOpenVINO/Linux")
     endif()
     # Default to the in-repo build deps. Override with -DMLPERF_ONNXRT_PREFIX=...
     # and -DMLPERF_ORTGENAI_PREFIX=... to point elsewhere.
@@ -691,7 +733,6 @@ else()
 endif()
 
 include(deps_packer/pack_as_binary.cmake)
-set (IHV_FILES_TO_PUBLISH "")
 
 set(ASSETS_LIST 
 	${LOG4CXXCONFIG_XML}

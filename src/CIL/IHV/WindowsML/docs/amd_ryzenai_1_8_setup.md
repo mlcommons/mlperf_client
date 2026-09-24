@@ -83,11 +83,10 @@ python -m pip install -r tools/accuracy/ifeval/requirements-ifeval.txt
 python -m pip install -r tools/accuracy/mmlu/requirements-mmlu.txt
 ```
 
-Create a benchmark config per harness (see `tools/accuracy/ifeval/README.md` and
-`tools/accuracy/mmlu/README.md` for the config format) with `RunConfigPath`
-pointing at the RyzenAI vendor config for the target model, e.g.
-`data/configs/vendors_default/llm/extended/qwen3/AMD_OrtGenAI-RyzenAI_NPU-GPU.json`.
-Then run from the repo root:
+Write an accuracy config per model and provider with `RunConfigPath` pointing at
+one of the vendor defaults listed above and `RunID: null`, so each invocation
+creates a new resumable output folder. See `tools/accuracy/ifeval/README.md` and
+`tools/accuracy/mmlu/README.md` for the config fields. Run from the repo root:
 
 ```powershell
 python tools/accuracy/ifeval/run_ifeval_benchmark.py -c <ifeval-config.json>

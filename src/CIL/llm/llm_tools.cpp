@@ -6,9 +6,11 @@
 #include <array>
 #include <cctype>
 #include <chrono>
+#include <cstddef>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <regex>
@@ -18,6 +20,10 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+
+#ifdef _WIN32
+#include <Windows.h>
+#endif
 
 #include "json_schema.h"
 
@@ -241,26 +247,131 @@ struct ShellResult {
   std::string output;  // combined stdout+stderr (commands append " 2>&1")
 };
 
+#ifdef _WIN32
+struct ShellHandle {
+  explicit ShellHandle(HANDLE handle = INVALID_HANDLE_VALUE) : value(handle) {}
+  ShellHandle(const ShellHandle&) = delete;
+  ShellHandle& operator=(const ShellHandle&) = delete;
+  ShellHandle(ShellHandle&&) = delete;
+  ShellHandle& operator=(ShellHandle&&) = delete;
+  HANDLE value;
+  ~ShellHandle() {
+    if (value && value != INVALID_HANDLE_VALUE) CloseHandle(value);
+  }
+};
+#endif
+
 // Runs a fully-formed shell command, capturing its combined output. Returns
-// nullopt only if the pipe could not be opened.
+// nullopt on launch, capture, or wait failure.
 std::optional<ShellResult> RunShell(const std::string& full_cmd) {
   std::array<char, 256> buffer;
 #ifdef _WIN32
-  FILE* pipe = _popen(full_cmd.c_str(), "r");
-#else
-  FILE* pipe = popen(full_cmd.c_str(), "r");
-#endif
-  if (!pipe) return std::nullopt;
+  // _popen can create a console when called by the GUI. Redirect all standard
+  // handles explicitly and launch the shell without a console for both fronts.
+  SECURITY_ATTRIBUTES security{sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE};
+  ShellHandle read;
+  ShellHandle write;
+  ShellHandle input;
+  if (!CreatePipe(&read.value, &write.value, &security, 0) ||
+      !SetHandleInformation(read.value, HANDLE_FLAG_INHERIT, 0))
+    return std::nullopt;
+  input.value =
+      CreateFileW(L"NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                  &security, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+  if (input.value == INVALID_HANDLE_VALUE) return std::nullopt;
 
+  // Restrict inheritance to these handles, not unrelated IPC/logging handles.
+  STARTUPINFOEXA startup{};
+  startup.StartupInfo.cb = sizeof(startup);
+  startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
+  startup.StartupInfo.wShowWindow = SW_HIDE;
+  SIZE_T attribute_size = 0;
+  InitializeProcThreadAttributeList(nullptr, 1, 0, &attribute_size);
+  // operator new supplies suitably aligned storage for the opaque structure.
+  std::vector<std::byte> attributes(attribute_size);
+  startup.lpAttributeList = static_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(
+      static_cast<void*>(attributes.data()));
+  if (!InitializeProcThreadAttributeList(startup.lpAttributeList, 1, 0,
+                                         &attribute_size))
+    return std::nullopt;
+  const auto delete_attributes = [](LPPROC_THREAD_ATTRIBUTE_LIST list) {
+    DeleteProcThreadAttributeList(list);
+  };
+  const std::unique_ptr<_PROC_THREAD_ATTRIBUTE_LIST,
+                        decltype(delete_attributes)>
+      attribute_list(startup.lpAttributeList, delete_attributes);
+  // The attribute list borrows this array until CreateProcess returns.
+  std::array<HANDLE, 2> inherited{input.value, write.value};
+  if (!UpdateProcThreadAttribute(
+          startup.lpAttributeList, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+          inherited.data(), inherited.size() * sizeof(HANDLE), nullptr,
+          nullptr))
+    return std::nullopt;
+  startup.StartupInfo.hStdInput = inherited[0];
+  startup.StartupInfo.hStdOutput = inherited[1];
+  startup.StartupInfo.hStdError = inherited[1];
+  // Resolve the system shell explicitly, independent of the working directory.
+  std::array<char, MAX_PATH> system_dir{};
+  if (const auto length =
+          GetSystemDirectoryA(system_dir.data(), system_dir.size());
+      !length || length >= system_dir.size())
+    return std::nullopt;
+  const std::string shell = std::string(system_dir.data()) + "\\cmd.exe";
+  std::string command = "\"" + shell + "\" /D /S /C \"" + full_cmd + "\"";
+  PROCESS_INFORMATION process{};
+  if (!CreateProcessA(shell.c_str(), command.data(), nullptr, nullptr, TRUE,
+                      CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT, nullptr,
+                      nullptr, &startup.StartupInfo, &process))
+    return std::nullopt;
+  ShellHandle child{process.hProcess};
+  ShellHandle thread{process.hThread};
+  CloseHandle(write.value);
+  write.value = INVALID_HANDLE_VALUE;
+
+  // Drain the pipe before waiting: a child may write more than a pipe buffer.
+  // Read handles directly so there is no second CRT stream/descriptor owner.
   std::string output;
-  while (fgets(buffer.data(), static_cast<int>(buffer.size()), pipe) !=
+  bool read_failed = false;
+  bool text_eof = false;
+  const auto read_chunk = [&](DWORD& bytes_read) {
+    if (ReadFile(read.value, buffer.data(), static_cast<DWORD>(buffer.size()),
+                 &bytes_read, nullptr))
+      return bytes_read != 0;
+    read_failed = GetLastError() != ERROR_BROKEN_PIPE;
+    return false;
+  };
+  DWORD bytes_read = 0;
+  while (read_chunk(bytes_read)) {
+    for (DWORD i = 0; i < bytes_read; ++i) {
+      const char ch = buffer[i];
+      // Preserve Windows CRT text-mode CRLF and Ctrl-Z handling, including
+      // CRLF pairs split across reads. Keep draining after text EOF.
+      if (ch == '\x1a') text_eof = true;
+      if (text_eof) continue;
+      if (ch == '\n' && !output.empty() && output.back() == '\r')
+        output.back() = '\n';
+      else
+        output += ch;
+    }
+  }
+  CloseHandle(read.value);
+  read.value = INVALID_HANDLE_VALUE;
+  if (WaitForSingleObject(child.value, INFINITE) != WAIT_OBJECT_0)
+    return std::nullopt;
+  DWORD exit_code = 0;
+  if (read_failed || !GetExitCodeProcess(child.value, &exit_code))
+    return std::nullopt;
+  auto rc = static_cast<int>(exit_code);
+#else
+  std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(full_cmd.c_str(), "r"),
+                                                &pclose);
+  if (!pipe) return std::nullopt;
+  std::string output;
+  while (fgets(buffer.data(), static_cast<int>(buffer.size()), pipe.get()) !=
          nullptr) {
     output += buffer.data();
   }
-#ifdef _WIN32
-  int rc = _pclose(pipe);
-#else
-  int rc = pclose(pipe);
+  const int rc = pclose(pipe.release());
 #endif
   return ShellResult{rc, std::move(output)};
 }

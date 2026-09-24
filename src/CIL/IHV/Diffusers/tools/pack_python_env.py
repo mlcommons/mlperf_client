@@ -21,8 +21,6 @@ PBS_RELEASE = "20260510"
 PBS_BASE = ("https://github.com/astral-sh/python-build-standalone/"
             "releases/download")
 
-CUDA_INDEX = "https://download.pytorch.org/whl/cu130"
-
 THIS_DIR = Path(__file__).resolve().parent
 ASSETS_DIR = THIS_DIR.parent / "src" / "assets"
 INSTALL_DEPS_SCRIPT = THIS_DIR / "install_python_deps.py"
@@ -51,8 +49,6 @@ PLATFORM_MAP = {
         "triple": "x86_64-pc-windows-msvc",
         "python_bin": "python/python.exe",
         "vendor": "nvidia",
-        "torch_index": CUDA_INDEX,
-        "extra_pre_install": ["bitsandbytes"],
         "exclude_file_names": ("python.exe", "pythonw.exe", "python3.exe"),
         "exclude_file_patterns": _COMMON_EXCLUDE_FILE_PATTERNS,
         "exclude_dir_names": _COMMON_EXCLUDE_DIR_NAMES + ("Scripts",),
@@ -60,12 +56,22 @@ PLATFORM_MAP = {
         # *.lib outside site-packages = compile-only import libs.
         "exclude_lib_outside_site_packages": True,
     },
+    # Must run on a native Windows ARM64 host: install_python_deps.py selects
+    # the win-arm64 lock from the interpreter's own architecture.
+    "windows_arm64": {
+        "triple": "aarch64-pc-windows-msvc",
+        "python_bin": "python/python.exe",
+        "vendor": "nvidia",
+        "exclude_file_names": ("python.exe", "pythonw.exe", "python3.exe"),
+        "exclude_file_patterns": _COMMON_EXCLUDE_FILE_PATTERNS,
+        "exclude_dir_names": _COMMON_EXCLUDE_DIR_NAMES + ("Scripts",),
+        "exclude_top_level_dirs": ("include",),
+        "exclude_lib_outside_site_packages": True,
+    },
     "macos_arm64": {
         "triple": "aarch64-apple-darwin",
         "python_bin": "python/bin/python3",
         "vendor": "apple",
-        "torch_index": "",
-        "extra_pre_install": [],
         "exclude_file_names": ("python3", f"python{_PY_MINOR}", "pythonw"),
         "exclude_file_patterns": _COMMON_EXCLUDE_FILE_PATTERNS,
         "exclude_dir_names": _COMMON_EXCLUDE_DIR_NAMES,
@@ -109,7 +115,7 @@ def extract(archive, dest_dir):
 
 def install_packages(python_bin, vendor):
     """Delegate to install_python_deps.py — single source of truth for
-    the install order (torch pin, torch_tensorrt --no-deps, etc.)."""
+    the install order and platform-specific exact pins."""
     subprocess.run([python_bin, "-I", "-m", "pip", "install", "--upgrade",
                     "pip", "--no-warn-script-location"], check=True)
     subprocess.run([python_bin, "-I", str(INSTALL_DEPS_SCRIPT),

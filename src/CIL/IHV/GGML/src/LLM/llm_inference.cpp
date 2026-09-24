@@ -91,7 +91,9 @@ void LLMInference::Init(const nlohmann::json& model_config) {
   llama_model_params model_params = llama_model_default_params();
   model_params.n_gpu_layers = 0;
   model_params.main_gpu = 0;
-  model_params.use_mmap = ep_settings_.GetNoMmap().value_or(false);
+  model_params.load_mode = ep_settings_.GetNoMmap().value_or(false)
+                               ? LLAMA_LOAD_MODE_NONE
+                               : LLAMA_LOAD_MODE_AUTO;
   if (ep_settings_.GetNoMmap().value_or(false))
     logger_(LogLevel::kInfo, "Not using mmap!");
   model_ = llama_model_load_from_file(model_path_.c_str(), model_params);

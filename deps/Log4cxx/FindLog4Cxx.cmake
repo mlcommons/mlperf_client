@@ -21,12 +21,7 @@ elseif(APPLE)
     endif()
 
 elseif(LINUX)
-    set(LOG4CXX_ROOT_DIR "${CMAKE_CURRENT_LIST_DIR}/Linux")
-    if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm" OR CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
-        set(LOG4CXX_ROOT_DIR "${LOG4CXX_ROOT_DIR}/ARM")
-    else()
-        set(LOG4CXX_ROOT_DIR "${LOG4CXX_ROOT_DIR}/x64")
-    endif()
+    set(LOG4CXX_ROOT_DIR "${CMAKE_CURRENT_LIST_DIR}/Linux/x64")
 
 else()
     message(FATAL_ERROR "Unsupported platform.")

@@ -100,10 +100,10 @@ Typical usage of the tool would look like this:
 **Run the benchmark using a specific configuration file:**
 
 ```bash
-.\mlperf-windows.exe -c NVIDIA_ORTGenAI-DML_GPU.json
+.\mlperf-windows.exe -c NVIDIA_WindowsML-NvTensorRtRtx_GPU.json
 ```
 
-This command runs the benchmark using `NVIDIA_ORTGenAI-DML_GPU.json` as the configuration file.
+This command runs the benchmark using `NVIDIA_WindowsML-NvTensorRtRtx_GPU.json` as the configuration file.
 
 ### Arguments Behavior Summary
 
@@ -325,8 +325,8 @@ official [ONNX Runtime Documentation](https://onnxruntime.ai/docs/execution-prov
 | WindowsML(✅ **Active**)                   | device_type                          | string                 | True         |                       | ["GPU", "NPU"]                                              |                                                                                   |
 |                                            | device_id                             | integer                | False        | 0                     |                                                             |                                                                                  |
 |                                            | device_vendor                         | string                 | False        |                       | ["Intel", "AMD", "NVIDIA"]                                  |                                                                                  |
-|                                            | device_ep                             | string                | False        |                      | ["OpenVINO", "DirectML", "QNN", "VitisAI"]                    |                                                                                  |
-| NativeQNN(✅ **Active**)                  | device_type                           | string                 | True         |                       | ["NPU_CPU"]                                                 |                                                                                   |
+|                                            | device_ep                             | string                | False        |                      | ["OpenVINO", "DirectML", "QNN", "RyzenAI", "NvTensorRtRtx"]  |                                                                                  |
+| NativeQNN(✅ **Active**)                  | device_type                           | string                 | True         |                       | ["NPU", "NPU_CPU"]                                          |                                                                                   |
 | OrtGenAI-RyzenAI(✅ **Active**)           | device_type                           | string                 | True         |                       | ["NPU and GPU", "NPU"]                                             |                                                                                   |
 | MLX(✅ **Active**)                        | device_type                           | string                 | True         |                       | ["GPU"]                                                     |                                                                                   |
 | llama-cpp(✅ **Active**)                  | backend                               | string                 | True         |                       | ["Metal", "CUDA"]                                          | From [llama-cpp](https://github.com/ggml-org/llama.cpp)                           |
@@ -334,6 +334,14 @@ official [ONNX Runtime Documentation](https://onnxruntime.ai/docs/execution-prov
 |                                            | gpu_layers                            | integer                | True         |                       | >= 0                                                        |                                                                                  |
 |                                            | fa                                   | integer                | False         | 0                      | CUDA only                                                 |                                                                                   |
 |                                            | no_mmap                              | integer                | False         | 0                       | CUDA only                                                |                                                                                   |
+| Diffusers(🚧 **Experimental**)            | backend                               | string                 | True         |                       | ["CUDA", "MPS", "RYZENAI"]                                  | Image generation only (txt2img)                                                   |
+|                                            | device_type                           | string                 | False        | GPU                   | ["GPU", "NPU"]                                              |                                                                                  |
+|                                            | device_id                             | integer                | False        | 0                     | >= 0                                                        |                                                                                  |
+|                                            | device_vendor                         | string                 | False        |                       | ["NVIDIA", "APPLE", "AMD"]                                  |                                                                                  |
+|                                            | gpu_mode                              | string                 | False        |                       | ["direct", "cpu_offload"]                                   |                                                                                  |
+|                                            | quantization                          | string                 | False        |                       | ["fp8", "nvfp4"]                                            |                                                                                  |
+|                                            | components                            | object                 | False        |                       |                                                             | Per-component weight file overrides                                              |
+|                                            | optimizations                         | array                  | False        |                       | [{"type": "fp8"}, {"type": "tensorrt_rtx"}]                 |                                                                                  |
 
 ### Status Definitions
 
@@ -359,15 +367,16 @@ official [ONNX Runtime Documentation](https://onnxruntime.ai/docs/execution-prov
 
 ## Supported Platforms by Execution Provider
 
-| Execution Provider | Windows x64 | Windows ARM | Linux x64 | macOS | iOS
-|--------------------|-------------|-------------|-------|-----|----------|
-| NativeOpenVINO     | ✅          | ❌         | ✅    | ❌    | ❌   |
-| WindowsML          | ✅          | ✅         | ❌    | ❌    | ❌   |
-| NativeQNN          | ❌          | ✅         | ❌    | ❌    | ❌   |
-| OrtGenAI-RyzenAI   | ✅          | ❌         | ❌    | ❌    | ❌   |
-| MLX                | ❌          | ❌         | ❌    | ✅    | ✅   |
-| llama-cpp (Metal)  | ❌          | ❌         | ❌    | ✅    | ✅   |
-| llama-cpp (CUDA)   | ✅          | ❌         | ❌    | ❌    | ❌   |
+| Execution Provider | Windows x64 | Windows ARM | Linux x64 | macOS | iOS |
+|--------------------|-------------|-------------|-----------|-------|-----|
+| NativeOpenVINO     | ✅          | ❌          | ✅        | ❌    | ❌  |
+| WindowsML          | ✅          | ✅          | ❌        | ❌    | ❌  |
+| NativeQNN          | ❌          | ✅          | ❌        | ❌    | ❌  |
+| OrtGenAI-RyzenAI   | ✅          | ❌          | ❌        | ❌    | ❌  |
+| MLX                | ❌          | ❌          | ❌        | ✅    | ✅  |
+| llama-cpp (Metal)  | ❌          | ❌          | ❌        | ✅    | ✅  |
+| llama-cpp (CUDA)   | ✅          | ✅          | ❌        | ❌    | ❌  |
+| Diffusers          | ✅          | ✅          | ❌        | ✅    | ❌  |
 
 _____________________________________________
 _____________________________________________

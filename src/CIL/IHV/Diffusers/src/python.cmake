@@ -7,7 +7,10 @@ set(PBS_VERSION "3.13.13")
 set(PBS_TAG "20260510")
 
 if(WIN32)
-    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+    if(CMAKE_GENERATOR_PLATFORM MATCHES "^[Aa][Rr][Mm]64$" OR
+       CMAKE_SYSTEM_PROCESSOR MATCHES "^(ARM64|arm64|aarch64)$")
+        set(PBS_TRIPLET "aarch64-pc-windows-msvc")
+    elseif(CMAKE_SIZEOF_VOID_P EQUAL 8)
         set(PBS_TRIPLET "x86_64-pc-windows-msvc")
     else()
         set(PBS_TRIPLET "i686-pc-windows-msvc")
@@ -26,7 +29,9 @@ set(PBS_FILENAME "cpython-${PBS_VERSION}+${PBS_TAG}-${PBS_TRIPLET}-install_only.
 set(PBS_URL "https://github.com/astral-sh/python-build-standalone/releases/download/${PBS_TAG}/${PBS_FILENAME}")
 set(PBS_DOWNLOAD_DIR "${CMAKE_BINARY_DIR}/_python_standalone")
 set(PBS_ARCHIVE "${PBS_DOWNLOAD_DIR}/${PBS_FILENAME}")
-set(PBS_EXTRACT_DIR "${PBS_DOWNLOAD_DIR}/extracted")
+# Include the target triplet so a build cache can never reuse an interpreter
+# extracted for another Windows architecture.
+set(PBS_EXTRACT_DIR "${PBS_DOWNLOAD_DIR}/extracted/${PBS_TRIPLET}")
 set(PBS_PYTHON_DIR "${PBS_EXTRACT_DIR}/python")
 
 if(NOT EXISTS "${PBS_PYTHON_DIR}")

@@ -78,7 +78,12 @@ add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../../common" common_cil)
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../../common/directml" common_directml_cil)
 
 # Centralized version pins. Bump here, then nuke build/IHV/WindowsML to force re-install.
-set(MML_OGA_VERSION    "0.14.1")
+if(CMAKE_GENERATOR_PLATFORM MATCHES "ARM64" OR
+   CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64|arm64|aarch64")
+  set(MML_OGA_VERSION "0.15.2")
+else()
+  set(MML_OGA_VERSION "0.14.1")
+endif()
 set(MML_WINML_VERSION  "2.4.66-preview")
 set(MML_OGA_URL   "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntimeGenAI.WinML/${MML_OGA_VERSION}")
 

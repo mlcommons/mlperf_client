@@ -1,0 +1,21 @@
+# Diffusers EP -- NVIDIA / CUDA (Windows x64 checkpoint environment).
+#
+# Exact direct and transitive versions are enforced by
+# constraints-nvidia-win-x64.txt. Torch, torchvision, Torch-TensorRT-RTX,
+# TensorRT-RTX, and bitsandbytes are installed separately by
+# install_python_deps.py.
+diffusers
+transformers
+accelerate
+safetensors
+optimum-quanto
+torchao
+sentencepiece
+protobuf
+huggingface_hub
+Pillow
+numpy
+pyinstaller
+nvidia-modelopt
+
+--extra-index-url https://pypi.nvidia.com

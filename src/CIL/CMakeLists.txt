@@ -507,18 +507,12 @@ set(EP_DEPENDENCIES_CONFIG_SCHEMA_JSON
 # selected template actually references; unused variables don't affect
 # `configure_file(... @ONLY)`.
 if(WIN32)
-    # WindowsML: universal DLLs + NV-only extras share one folder, versioned
-    # by the MML_WINML_VERSION pin. For offline / local-dev work, override
-    # with -DMLPERF_WINML_PREFIX=file://IHV/WindowsML so the dep manager uses
-    # the IHV's own POST_BUILD staging dir instead.
+    # WindowsML: universal DLLs + NV-only extras share one folder. Default to
+    # the IHV POST_BUILD staging dir (OGA/ORT from NuGet) so the dep manager
+    # matches the pinned OGA version. The MLCommons HTTP payload can lag that
+    # pin; override with -DMLPERF_WINML_PREFIX=<url> to use it instead.
     if(NOT DEFINED MLPERF_WINML_PREFIX)
-        if(_arch_dir STREQUAL "ARM")
-            set(MLPERF_WINML_PREFIX
-                "https://client.mlcommons-storage.org/deps/2.0.1/binaries/WindowsML/ARM")
-        else()
-            set(MLPERF_WINML_PREFIX
-                "https://client.mlcommons-storage.org/deps/2.0/binaries/WindowsML/${_arch_dir}")
-        endif()
+        set(MLPERF_WINML_PREFIX "file://IHV/WindowsML")
     endif()
     if(NOT DEFINED MLPERF_NATIVE_OPENVINO_PREFIX)
         set(MLPERF_NATIVE_OPENVINO_PREFIX

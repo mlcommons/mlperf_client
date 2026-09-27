@@ -82,7 +82,7 @@ if(CMAKE_GENERATOR_PLATFORM MATCHES "ARM64" OR
    CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64|arm64|aarch64")
   set(MML_OGA_VERSION "0.15.2")
 else()
-  set(MML_OGA_VERSION "0.14.1")
+  set(MML_OGA_VERSION "0.16.0")
 endif()
 set(MML_WINML_VERSION  "2.4.66-preview")
 set(MML_OGA_URL   "https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntimeGenAI.WinML/${MML_OGA_VERSION}")
